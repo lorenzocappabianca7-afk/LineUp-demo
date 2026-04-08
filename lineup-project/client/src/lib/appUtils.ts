@@ -34,6 +34,13 @@ export interface VenueOption {
   discount?: string;
 }
 
+/** Dati passati da Scopri AI → creazione evento (salta categoria/sottocategoria/luoghi nel wizard). */
+export type ScopriToCreatePrefill = {
+  venues: VenueOption[];
+  categoryKey: string;
+  subcategoryLabel: string;
+};
+
 export interface ParsedEvent {
   id: number;
   activity: string;

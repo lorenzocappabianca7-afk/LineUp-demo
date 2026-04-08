@@ -2,22 +2,22 @@ import { useState } from "react";
 import { CalendarPlus, X, Sparkles } from "lucide-react";
 import AppCreateEvent from "@/pages/AppCreateEvent";
 import AppScopri from "@/pages/AppScopri";
-import { type VenueOption } from "@/lib/appUtils";
+import type { ScopriToCreatePrefill } from "@/lib/appUtils";
 
 export default function AppHome() {
   const [showCreate, setShowCreate] = useState(false);
   const [showScopri, setShowScopri] = useState(false);
-  const [prefilledVenues, setPrefilledVenues] = useState<VenueOption[] | undefined>(undefined);
+  const [scopriPrefill, setScopriPrefill] = useState<ScopriToCreatePrefill | null>(null);
 
-  const handleCreateFromScopri = (venues: VenueOption[]) => {
-    setPrefilledVenues(venues);
+  const handleCreateFromScopri = (prefill: ScopriToCreatePrefill) => {
+    setScopriPrefill(prefill);
     setShowScopri(false);
     setShowCreate(true);
   };
 
   const handleCloseCreate = () => {
     setShowCreate(false);
-    setPrefilledVenues(undefined);
+    setScopriPrefill(null);
   };
 
   return (
@@ -35,7 +35,7 @@ export default function AppHome() {
         <div className="flex justify-end pr-6">
           <button
             data-testid="button-pianifica"
-            onClick={() => { setPrefilledVenues(undefined); setShowCreate(true); }}
+            onClick={() => { setScopriPrefill(null); setShowCreate(true); }}
             className="blob-fluid-button flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform duration-500 ease-out shadow-xl"
             style={{
               width: "210px",
@@ -84,9 +84,12 @@ export default function AppHome() {
             <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100 shrink-0">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Nuovo evento</h2>
-                {prefilledVenues?.length ? (
+                {scopriPrefill?.venues?.length ? (
                   <p className="text-xs text-[#4A9BD9] font-semibold mt-0.5">
-                    {prefilledVenues[0].name}{prefilledVenues.length > 1 ? ` +${prefilledVenues.length - 1}` : ""}
+                    {scopriPrefill.subcategoryLabel}
+                    {" · "}
+                    {scopriPrefill.venues[0].name}
+                    {scopriPrefill.venues.length > 1 ? ` +${scopriPrefill.venues.length - 1}` : ""}
                   </p>
                 ) : null}
               </div>
@@ -99,7 +102,7 @@ export default function AppHome() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto min-h-0 no-scrollbar">
-              <AppCreateEvent onClose={handleCloseCreate} prefilledVenues={prefilledVenues} />
+              <AppCreateEvent onClose={handleCloseCreate} fromScopri={scopriPrefill ?? undefined} />
             </div>
           </div>
         </div>

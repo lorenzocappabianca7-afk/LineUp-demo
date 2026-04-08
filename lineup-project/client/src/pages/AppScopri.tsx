@@ -8,7 +8,7 @@ import {
   UtensilsCrossed, Coffee, ShoppingBag, PartyPopper,
   Activity, ExternalLink, CalendarPlus, CheckCircle2
 } from "lucide-react";
-import { VENUES_BY_ACTIVITY, type VenueOption } from "@/lib/appUtils";
+import { VENUES_BY_ACTIVITY, type VenueOption, type ScopriToCreatePrefill } from "@/lib/appUtils";
 
 interface AiVenue {
   name: string;
@@ -199,7 +199,10 @@ function buildReason(answers: Record<string, string>, v: VenueOption): string {
 /* ─── Component ─── */
 type Phase = "macro" | "sub" | "loading-questions" | "day-calendar" | "question" | "zone-map" | "price" | "preferences" | "loading-venues" | "results";
 
-export default function AppScopri({ embedded = false, onCreateEvent }: { embedded?: boolean; onCreateEvent?: (venues: VenueOption[]) => void }) {
+export default function AppScopri({ embedded = false, onCreateEvent }: {
+  embedded?: boolean;
+  onCreateEvent?: (prefill: ScopriToCreatePrefill) => void;
+}) {
   const [phase, setPhase] = useState<Phase>("macro");
   const [macro, setMacro] = useState<string | null>(null);
   const [sub, setSub] = useState<SubItem | null>(null);
@@ -1275,7 +1278,14 @@ export default function AppScopri({ embedded = false, onCreateEvent }: { embedde
           <div className="px-4 pb-5">
             <button
               data-testid="button-create-event-from-selected"
-              onClick={() => onCreateEvent(selectedResultVenues)}
+              onClick={() => {
+                if (!macro || !sub) return;
+                onCreateEvent({
+                  venues: selectedResultVenues,
+                  categoryKey: macro,
+                  subcategoryLabel: sub.label,
+                });
+              }}
               className="w-full py-3 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 active:opacity-80 transition-opacity"
               style={{ background: "linear-gradient(135deg, #1a1a1a, #333)" }}
             >

@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import {
   CONTACTS, GROUPS, ACTIVITIES, VENUES_BY_ACTIVITY,
-  getCurrentUser, getAvatarColor, getInitials, getMyContacts, type VenueOption
+  getCurrentUser, getAvatarColor, getInitials, getMyContacts, type VenueOption, type ScopriToCreatePrefill
 } from "@/lib/appUtils";
 
 
@@ -24,10 +24,12 @@ const TIME_WINDOWS: Array<{ key: string; label: string; Icon: any }> = [
 
 interface AppCreateEventProps {
   onClose: () => void;
-  prefilledVenues?: VenueOption[];
+  /** Se presente, il wizard salta scelta di categoria, sottocategoria e luoghi (già definiti in Scopri AI). */
+  fromScopri?: ScopriToCreatePrefill;
 }
 
-export default function AppCreateEvent({ onClose, prefilledVenues }: AppCreateEventProps) {
+export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventProps) {
+  const fromScopriFlow = Boolean(fromScopri && fromScopri.venues.length > 0);
   const [step, setStep] = useState(0);
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
@@ -35,10 +37,14 @@ export default function AppCreateEvent({ onClose, prefilledVenues }: AppCreateEv
   const [selectedTimeWindows, setSelectedTimeWindows] = useState<string[]>([]);
   const [dayTimeIdx, setDayTimeIdx] = useState<Record<string, number>>({});
   const [selectedDayTimes, setSelectedDayTimes] = useState<Record<string, string[]>>({});
-  const [selectedVenues, setSelectedVenues] = useState<VenueOption[]>(prefilledVenues?.length ? prefilledVenues : []);
+  const [selectedVenues, setSelectedVenues] = useState<VenueOption[]>(() => fromScopri?.venues ?? []);
   const [isDirectPlan, setIsDirectPlan] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(() =>
+    fromScopri ? fromScopri.categoryKey : null,
+  );
+  const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>(() =>
+    fromScopri ? [fromScopri.subcategoryLabel] : [],
+  );
   const [venueSearch, setVenueSearch] = useState("");
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customSubcategory, setCustomSubcategory] = useState("");
@@ -161,6 +167,8 @@ export default function AppCreateEvent({ onClose, prefilledVenues }: AppCreateEv
     { key: "svago",   label: "Svago",   Icon: Gamepad2,         cols: 2, radius: "10px 28px 28px 10px" },
   ] as const;
 
+  const catLabelForBanner = CATEGORIES.find(c => c.key === selectedCategory)?.label ?? "";
+
   const SUBCATEGORIES: Record<string, string[]> = {
     cibo:    [
       "Aperitivo", "Cena", "Colazione", "Pranzo", "Spuntino", "Brunch",
@@ -212,6 +220,12 @@ export default function AppCreateEvent({ onClose, prefilledVenues }: AppCreateEv
 
   if (step === 0) return (
     <div className="flex flex-col h-full">
+      {fromScopriFlow && (
+        <p className="text-xs text-[#4A9BD9] font-semibold px-6 pt-3 leading-relaxed">
+          {selectedSubcategories.join(", ")} · {selectedVenues.length}{" "}
+          {selectedVenues.length === 1 ? "luogo già scelto" : "luoghi già scelti"} con Scopri AI. Indica chi vuoi invitare.
+        </p>
+      )}
       <div className="px-6 pt-3 pb-2 shrink-0">
         <div className="relative">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -309,7 +323,7 @@ export default function AppCreateEvent({ onClose, prefilledVenues }: AppCreateEv
       <div className="px-6 py-4 shrink-0 border-t border-gray-100">
         <button
           data-testid="button-step-0-next"
-          onClick={() => setStep(1)}
+          onClick={() => setStep(fromScopriFlow ? 2 : 1)}
           disabled={!canProceed0}
           className="w-full py-3.5 rounded-xl font-semibold text-white bg-black transition-opacity disabled:opacity-40"
         >
@@ -560,7 +574,7 @@ export default function AppCreateEvent({ onClose, prefilledVenues }: AppCreateEv
 
         <div className="px-6 py-4 shrink-0 border-t border-gray-100 flex gap-3">
           <button
-            onClick={() => { setSelectedDates([]); setSelectedTimeWindows([]); setSelectedDayTimes({}); setDayTimeIdx({}); setStep(1); }}
+            onClick={() => { setSelectedDates([]); setSelectedTimeWindows([]); setSelectedDayTimes({}); setDayTimeIdx({}); setStep(fromScopriFlow ? 0 : 1); }}
             className="px-5 py-3.5 rounded-xl font-semibold text-gray-600 bg-gray-100"
           >
             Indietro
@@ -767,92 +781,19 @@ export default function AppCreateEvent({ onClose, prefilledVenues }: AppCreateEv
     );
   }
 
-  // Step 5: Dove
-  if (step === 5 && !done) return (
-    <div className="flex flex-col h-full">
-      <div className="px-6 pt-4 pb-2 flex-1 overflow-y-auto no-scrollbar space-y-3">
-        {/* Banner */}
-        <div
-          className="rounded-xl p-3 mb-1 flex items-center gap-3"
-          style={{ background: "linear-gradient(135deg, #EBF5FB, #D6EAF8)" }}
-        >
-          <div className="w-9 h-9 rounded-full bg-[#4A9BD9]/20 flex items-center justify-center shrink-0">
-            <MapPin size={16} className="text-[#4A9BD9]" />
-          </div>
-          <div>
-            <p className="text-xs font-bold text-[#4A9BD9]">
-              {selectedSubcategories.length > 0 ? selectedSubcategories.join(" / ") : "Dove"} · {groupLabel}
-            </p>
-            <p className="text-xs text-gray-500">
-              {selectedDates.slice(0, 2).join(" · ")}{selectedDates.length > 2 ? ` +${selectedDates.length - 2}` : ""}
-            </p>
-          </div>
-        </div>
-
-        {/* Ricerca */}
-        <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            data-testid="input-venue-search"
-            type="text"
-            placeholder="Cerca un posto..."
-            value={venueSearch}
-            onChange={e => setVenueSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-gray-100 text-sm text-gray-900 placeholder-gray-400 outline-none focus:ring-2 focus:ring-[#4A9BD9]/30"
-          />
-        </div>
-
-        {activityVenues.length === 0 && (
-          <p className="text-sm text-gray-400 text-center py-6">Nessun posto trovato</p>
-        )}
-
-        {activityVenues.map((venue) => {
-          const isVenueSelected = selectedVenues.some(v => v.name === venue.name);
-          return (
-          <button
-            key={venue.name}
-            data-testid={`venue-${venue.name}`}
-            onClick={() => toggleVenue(venue)}
-            className={`w-full p-4 rounded-2xl border-2 text-left transition-all ${
-              isVenueSelected
-                ? "border-[#4A9BD9] bg-[#EBF5FB]"
-                : "border-gray-100 bg-white"
-            }`}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex-1">
-                <div className="flex items-center gap-1.5">
-                  <p className="font-semibold text-gray-900">{venue.name}</p>
-                  {isVenueSelected && (
-                    <CheckCircle2 size={14} className="text-[#4A9BD9]" />
-                  )}
-                </div>
-                <div className="flex items-center gap-3 mt-1">
-                  <span className="flex items-center gap-0.5 text-xs text-amber-500 font-semibold">
-                    <Star size={10} fill="currentColor" />
-                    {venue.rating}
-                  </span>
-                  <span className="flex items-center gap-0.5 text-xs text-gray-400">
-                    <MapPin size={10} />
-                    {venue.distance}
-                  </span>
-                </div>
-              </div>
-              {venue.discount && (
-                <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg shrink-0">
-                  <Tag size={10} />
-                  {venue.discount}
-                </span>
-              )}
-            </div>
-          </button>
-          );
-        })}
-      </div>
-
+  // Step 5: Dove (wizard normale) oppure riepilogo luoghi da Scopri AI
+  if (step === 5 && !done) {
+    const createFooter = (
       <div className="px-6 py-4 shrink-0 border-t border-gray-100 flex gap-3">
-          <button
-          onClick={() => { setSelectedVenues([]); setVenueSearch(""); setStep(selectedDates.length > 0 ? 4 : 3); }}
+        <button
+          type="button"
+          onClick={() => {
+            if (!fromScopriFlow) {
+              setSelectedVenues([]);
+              setVenueSearch("");
+            }
+            setStep(selectedDates.length > 0 ? 4 : 3);
+          }}
           className="px-5 py-3.5 rounded-xl font-semibold text-gray-600 bg-gray-100"
         >
           Indietro
@@ -869,6 +810,7 @@ export default function AppCreateEvent({ onClose, prefilledVenues }: AppCreateEv
           </label>
           <button
             data-testid="button-create-confirm"
+            type="button"
             onClick={() => createEvent()}
             disabled={!canProceed5}
             className={`w-full py-3.5 rounded-xl font-semibold text-white disabled:opacity-40 ${isPending ? "pointer-events-none" : "active:opacity-80 transition-opacity"}`}
@@ -878,8 +820,144 @@ export default function AppCreateEvent({ onClose, prefilledVenues }: AppCreateEv
           </button>
         </div>
       </div>
-    </div>
-  );
+    );
+
+    const banner = (
+      <div
+        className="rounded-xl p-3 mb-1 flex items-center gap-3"
+        style={{ background: "linear-gradient(135deg, #EBF5FB, #D6EAF8)" }}
+      >
+        <div className="w-9 h-9 rounded-full bg-[#4A9BD9]/20 flex items-center justify-center shrink-0">
+          <MapPin size={16} className="text-[#4A9BD9]" />
+        </div>
+        <div>
+          <p className="text-xs font-bold text-[#4A9BD9]">
+            {selectedSubcategories.length > 0 ? selectedSubcategories.join(" / ") : "Dove"} · {catLabelForBanner} · {groupLabel}
+          </p>
+          <p className="text-xs text-gray-500">
+            {selectedDates.slice(0, 2).join(" · ")}{selectedDates.length > 2 ? ` +${selectedDates.length - 2}` : ""}
+          </p>
+        </div>
+      </div>
+    );
+
+    if (fromScopriFlow) {
+      return (
+        <div className="flex flex-col h-full">
+          <div className="px-6 pt-4 pb-2 flex-1 overflow-y-auto no-scrollbar space-y-3">
+            {banner}
+            <p className="text-sm text-gray-500">
+              Categoria e luoghi arrivano da Scopri AI. Puoi tornare indietro per modificare date e orari.
+            </p>
+            {selectedVenues.map((venue) => (
+              <div
+                key={venue.name}
+                data-testid={`venue-scopri-summary-${venue.name}`}
+                className="w-full p-4 rounded-2xl border-2 border-[#4A9BD9]/30 bg-[#EBF5FB]/40 text-left"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-semibold text-gray-900">{venue.name}</p>
+                      <CheckCircle2 size={14} className="text-[#4A9BD9]" />
+                    </div>
+                    <div className="flex items-center gap-3 mt-1">
+                      <span className="flex items-center gap-0.5 text-xs text-amber-500 font-semibold">
+                        <Star size={10} fill="currentColor" />
+                        {venue.rating}
+                      </span>
+                      <span className="flex items-center gap-0.5 text-xs text-gray-400">
+                        <MapPin size={10} />
+                        {venue.distance}
+                      </span>
+                    </div>
+                  </div>
+                  {venue.discount && (
+                    <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg shrink-0">
+                      <Tag size={10} />
+                      {venue.discount}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          {createFooter}
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col h-full">
+        <div className="px-6 pt-4 pb-2 flex-1 overflow-y-auto no-scrollbar space-y-3">
+          {banner}
+
+          {/* Ricerca */}
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              data-testid="input-venue-search"
+              type="text"
+              placeholder="Cerca un posto..."
+              value={venueSearch}
+              onChange={e => setVenueSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-gray-100 text-sm text-gray-900 placeholder-gray-400 outline-none focus:ring-2 focus:ring-[#4A9BD9]/30"
+            />
+          </div>
+
+          {activityVenues.length === 0 && (
+            <p className="text-sm text-gray-400 text-center py-6">Nessun posto trovato</p>
+          )}
+
+          {activityVenues.map((venue) => {
+            const isVenueSelected = selectedVenues.some(v => v.name === venue.name);
+            return (
+            <button
+              key={venue.name}
+              type="button"
+              data-testid={`venue-${venue.name}`}
+              onClick={() => toggleVenue(venue)}
+              className={`w-full p-4 rounded-2xl border-2 text-left transition-all ${
+                isVenueSelected
+                  ? "border-[#4A9BD9] bg-[#EBF5FB]"
+                  : "border-gray-100 bg-white"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className="font-semibold text-gray-900">{venue.name}</p>
+                    {isVenueSelected && (
+                      <CheckCircle2 size={14} className="text-[#4A9BD9]" />
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="flex items-center gap-0.5 text-xs text-amber-500 font-semibold">
+                      <Star size={10} fill="currentColor" />
+                      {venue.rating}
+                    </span>
+                    <span className="flex items-center gap-0.5 text-xs text-gray-400">
+                      <MapPin size={10} />
+                      {venue.distance}
+                    </span>
+                  </div>
+                </div>
+                {venue.discount && (
+                  <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg shrink-0">
+                    <Tag size={10} />
+                    {venue.discount}
+                  </span>
+                )}
+              </div>
+            </button>
+            );
+          })}
+        </div>
+
+        {createFooter}
+      </div>
+    );
+  }
 
   // Success
   if (done) return (
