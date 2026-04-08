@@ -51,7 +51,9 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <ErrorBoundary>
-            <AppRouter />
+            <div className="gpu-smooth">
+              <AppRouter />
+            </div>
           </ErrorBoundary>
           <Toaster />
         </TooltipProvider>

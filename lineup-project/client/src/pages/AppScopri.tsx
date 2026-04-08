@@ -1,4 +1,4 @@
-import { useRef, useState, type MouseEvent, type TouchEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type TouchEvent } from "react";
 import {
   ChevronLeft, Sparkles, MapPin, Star, Tag, RefreshCw,
   Utensils, Landmark, Dumbbell, Ticket,
@@ -218,6 +218,9 @@ export default function AppScopri({ embedded = false, onCreateEvent }: { embedde
   const [drawnPolygon, setDrawnPolygon] = useState<Array<{ x: number; y: number }>>([]);
   const [livePoint, setLivePoint] = useState<{ x: number; y: number } | null>(null);
   const mapDrawRef = useRef<HTMLDivElement | null>(null);
+  const drawFrameRef = useRef<number | null>(null);
+  const pendingPointRef = useRef<{ x: number; y: number } | null>(null);
+  const lastCommittedPointRef = useRef<{ x: number; y: number } | null>(null);
   const [selectedPrice, setSelectedPrice] = useState<string | null>(null);
   const [userRequest, setUserRequest] = useState("");
   const [selectedResultVenues, setSelectedResultVenues] = useState<VenueOption[]>([]);
@@ -240,7 +243,21 @@ export default function AppScopri({ embedded = false, onCreateEvent }: { embedde
     setSelectedPrice(null);
     setUserRequest("");
     setSelectedResultVenues([]);
+    pendingPointRef.current = null;
+    lastCommittedPointRef.current = null;
+    if (drawFrameRef.current !== null) {
+      cancelAnimationFrame(drawFrameRef.current);
+      drawFrameRef.current = null;
+    }
   };
+
+  useEffect(() => {
+    return () => {
+      if (drawFrameRef.current !== null) {
+        cancelAnimationFrame(drawFrameRef.current);
+      }
+    };
+  }, []);
 
   const selectSub = async (s: SubItem) => {
     setSub(s);
@@ -367,18 +384,45 @@ export default function AppScopri({ embedded = false, onCreateEvent }: { embedde
     setIsDrawingArea(true);
     setDrawnPolygon([p]);
     setLivePoint(p);
+    pendingPointRef.current = p;
+    lastCommittedPointRef.current = p;
+  };
+
+  const commitPendingPoint = () => {
+    const pending = pendingPointRef.current;
+    if (!pending) return;
+    const last = lastCommittedPointRef.current;
+    if (last) {
+      const dx = pending.x - last.x;
+      const dy = pending.y - last.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 0.006) return;
+    }
+    setDrawnPolygon((prev) => [...prev, pending]);
+    lastCommittedPointRef.current = pending;
+  };
+
+  const schedulePointCommit = () => {
+    if (drawFrameRef.current !== null) return;
+    drawFrameRef.current = requestAnimationFrame(() => {
+      commitPendingPoint();
+      drawFrameRef.current = null;
+    });
   };
 
   const moveDraw = (ev: MouseEvent<HTMLDivElement>) => {
     if (!isDrawingArea || !isAreaSelectionActive) return;
     const p = getMapPoint(ev);
     if (!p) return;
-    setDrawnPolygon((prev) => [...prev, p]);
+    pendingPointRef.current = p;
+    schedulePointCommit();
     setLivePoint(p);
   };
 
   const endDraw = () => {
     if (!isDrawingArea) return;
+    commitPendingPoint();
+    pendingPointRef.current = null;
     setIsDrawingArea(false);
     setLivePoint(null);
   };
@@ -391,6 +435,8 @@ export default function AppScopri({ embedded = false, onCreateEvent }: { embedde
     setIsDrawingArea(true);
     setDrawnPolygon([p]);
     setLivePoint(p);
+    pendingPointRef.current = p;
+    lastCommittedPointRef.current = p;
   };
 
   const moveDrawTouch = (ev: TouchEvent<HTMLDivElement>) => {
@@ -398,7 +444,8 @@ export default function AppScopri({ embedded = false, onCreateEvent }: { embedde
     ev.preventDefault();
     const p = getTouchMapPoint(ev);
     if (!p) return;
-    setDrawnPolygon((prev) => [...prev, p]);
+    pendingPointRef.current = p;
+    schedulePointCommit();
     setLivePoint(p);
   };
 
