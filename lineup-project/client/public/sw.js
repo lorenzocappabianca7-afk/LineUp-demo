@@ -1,4 +1,5 @@
-const CACHE_NAME = "lineup-v1";
+/** Incrementare dopo ogni rilascio importante (svuota cache SW lato client). */
+const CACHE_NAME = "lineup-v6-scopri-price";
 const STATIC_ASSETS = ["/", "/manifest.json"];
 
 self.addEventListener("install", (event) => {
@@ -19,6 +20,7 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.url.includes("/api/")) return;
+  // Sempre prova la rete prima: evita UI vecchia (es. bundle con opzioni obsolete) quando sei online.
   event.respondWith(
     fetch(event.request).catch(() =>
       caches.match(event.request).then((r) => r || caches.match("/"))
