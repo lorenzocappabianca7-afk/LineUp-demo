@@ -157,13 +157,13 @@ function getPianificaStyleQuestions(): AiQuestion[] {
   ];
 }
 
-/** Fascia prezzo (nessun tier "Gratis": solo € / €€ / €€€ / qualunque). */
-const PRICE_OPTIONS = [
+/** Fasce prezzo Scopri: pagamento (€/€€/€€€) o indifferente. Non includere mai "Gratis". */
+const SCOPRI_PRICE_TIERS: readonly { key: string; label: string }[] = [
   { key: "euro", label: "€" },
   { key: "due-euro", label: "€€" },
   { key: "tre-euro", label: "€€€" },
   { key: "qualsiasi", label: "Qualsiasi" },
-] as const;
+];
 
 /* ─── Result generator ─── */
 function generateResults(
@@ -929,11 +929,14 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
       </div>
       <div className="flex-1 px-4 py-4">
         <div className="grid grid-cols-2 gap-3">
-          {PRICE_OPTIONS.map((opt) => {
+          {SCOPRI_PRICE_TIERS.filter(
+            (opt) => opt.key !== "gratis" && !/^gratis$/i.test(opt.label.trim()),
+          ).map((opt) => {
             const selected = selectedPrice === opt.key;
             return (
               <button
                 key={opt.key}
+                type="button"
                 data-testid={`price-${opt.key}`}
                 onClick={() => setSelectedPrice(opt.key)}
                 className={`min-h-[64px] rounded-2xl border-2 text-sm font-semibold transition-all ${
@@ -953,7 +956,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
           data-testid="button-price-next"
           disabled={!selectedPrice}
           onClick={() => {
-            const priceLabel = PRICE_OPTIONS.find((p) => p.key === selectedPrice)?.label ?? "Qualsiasi";
+            const priceLabel = SCOPRI_PRICE_TIERS.find((p) => p.key === selectedPrice)?.label ?? "Qualsiasi";
             setAnswers((prev) => ({ ...prev, prezzo: priceLabel }));
             setPhase("preferences");
           }}
@@ -992,7 +995,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
           onClick={() => {
             const finalAnswers = {
               ...answers,
-              prezzo: PRICE_OPTIONS.find((p) => p.key === selectedPrice)?.label ?? "Qualsiasi",
+              prezzo: SCOPRI_PRICE_TIERS.find((p) => p.key === selectedPrice)?.label ?? "Qualsiasi",
             };
             setAnswers(finalAnswers);
             runVenueSearch(finalAnswers);
