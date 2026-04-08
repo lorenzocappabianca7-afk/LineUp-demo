@@ -11,7 +11,7 @@ import AppEventDetail from "@/pages/AppEventDetail";
 import AppChatList from "@/pages/AppChatList";
 import AppChatDetail from "@/pages/AppChatDetail";
 import AppProfile from "@/pages/AppProfile";
-import AppScopri from "@/pages/AppScopri";
+import AppScopriRoute from "@/pages/AppScopriRoute";
 import AppImpostazioni from "@/pages/AppImpostazioni";
 import Admin from "@/pages/Admin";
 import Analytics from "@/pages/Analytics";
@@ -29,9 +29,7 @@ function AppRouter() {
           <Switch>
             <Route path="/" component={AppHome} />
             <Route path="/calendar" component={AppCalendar} />
-            <Route path="/scopri">
-              <AppScopri />
-            </Route>
+            <Route path="/scopri" component={AppScopriRoute} />
             <Route path="/impostazioni" component={AppImpostazioni} />
             <Route path="/events/:id/chat" component={AppChatDetail} />
             <Route path="/events/:id" component={AppEventDetail} />

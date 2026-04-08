@@ -1,24 +1,55 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CalendarPlus, X, Sparkles } from "lucide-react";
 import AppCreateEvent from "@/pages/AppCreateEvent";
 import AppScopri from "@/pages/AppScopri";
 import type { ScopriToCreatePrefill } from "@/lib/appUtils";
+import { takePendingScopriCreate } from "@/lib/scopriCreateBridge";
+
+type HomeOverlay =
+  | { kind: "none" }
+  | { kind: "scopri" }
+  | { kind: "create"; prefill: ScopriToCreatePrefill | null };
 
 export default function AppHome() {
-  const [showCreate, setShowCreate] = useState(false);
-  const [showScopri, setShowScopri] = useState(false);
-  const [scopriPrefill, setScopriPrefill] = useState<ScopriToCreatePrefill | null>(null);
+  const [overlay, setOverlay] = useState<HomeOverlay>({ kind: "none" });
+
+  useEffect(() => {
+    const pending = takePendingScopriCreate();
+    if (pending) {
+      setOverlay({ kind: "create", prefill: pending });
+    }
+  }, []);
 
   const handleCreateFromScopri = (prefill: ScopriToCreatePrefill) => {
-    setScopriPrefill(prefill);
-    setShowScopri(false);
-    setShowCreate(true);
+    setOverlay({ kind: "create", prefill });
   };
 
-  const handleCloseCreate = () => {
-    setShowCreate(false);
-    setScopriPrefill(null);
+  const openPianificaBlank = () => {
+    setOverlay({ kind: "create", prefill: null });
   };
+
+  const closeCreate = () => {
+    setOverlay({ kind: "none" });
+  };
+
+  const openScopri = () => {
+    setOverlay({ kind: "scopri" });
+  };
+
+  const closeScopri = () => {
+    setOverlay({ kind: "none" });
+  };
+
+  const showCreate = overlay.kind === "create";
+  const showScopri = overlay.kind === "scopri";
+  const createPrefill = overlay.kind === "create" ? overlay.prefill : null;
+
+  const createEventKey =
+    showCreate && createPrefill?.venues?.length
+      ? `scopri:${createPrefill.categoryKey}:${createPrefill.subcategoryLabel}:${createPrefill.venues.map((v) => v.name).join("|")}`
+      : showCreate
+        ? "create-blank"
+        : "idle";
 
   return (
     <div className="flex flex-col min-h-full bg-gray-50">
@@ -35,7 +66,8 @@ export default function AppHome() {
         <div className="flex justify-end pr-6">
           <button
             data-testid="button-pianifica"
-            onClick={() => { setScopriPrefill(null); setShowCreate(true); }}
+            type="button"
+            onClick={openPianificaBlank}
             className="blob-fluid-button flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform duration-500 ease-out shadow-xl"
             style={{
               width: "210px",
@@ -50,11 +82,12 @@ export default function AppHome() {
           </button>
         </div>
 
-        {/* Blob rosa — in basso a sinistra */}
+        {/* Blob blu — in basso a sinistra */}
         <div className="flex justify-start pl-6">
           <button
             data-testid="button-scopri-ai"
-            onClick={() => setShowScopri(true)}
+            type="button"
+            onClick={openScopri}
             className="blob-fluid-button flex flex-col items-center justify-center gap-2.5 active:scale-95 transition-transform duration-500 ease-out shadow-xl"
             style={{
               width: "190px",
@@ -84,25 +117,30 @@ export default function AppHome() {
             <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100 shrink-0">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Nuovo evento</h2>
-                {scopriPrefill?.venues?.length ? (
+                {createPrefill?.venues?.length ? (
                   <p className="text-xs text-[#4A9BD9] font-semibold mt-0.5">
-                    {scopriPrefill.subcategoryLabel}
+                    {createPrefill.subcategoryLabel}
                     {" · "}
-                    {scopriPrefill.venues[0].name}
-                    {scopriPrefill.venues.length > 1 ? ` +${scopriPrefill.venues.length - 1}` : ""}
+                    {createPrefill.venues[0].name}
+                    {createPrefill.venues.length > 1 ? ` +${createPrefill.venues.length - 1}` : ""}
                   </p>
                 ) : null}
               </div>
               <button
                 data-testid="button-close-create"
-                onClick={handleCloseCreate}
+                type="button"
+                onClick={closeCreate}
                 className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center"
               >
                 <X size={16} className="text-gray-600" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto min-h-0 no-scrollbar">
-              <AppCreateEvent onClose={handleCloseCreate} fromScopri={scopriPrefill ?? undefined} />
+              <AppCreateEvent
+                key={createEventKey}
+                onClose={closeCreate}
+                fromScopri={createPrefill ?? undefined}
+              />
             </div>
           </div>
         </div>
@@ -122,7 +160,8 @@ export default function AppHome() {
               <h2 className="text-lg font-bold text-gray-900">Scopri cosa fare</h2>
               <button
                 data-testid="button-close-scopri"
-                onClick={() => setShowScopri(false)}
+                type="button"
+                onClick={closeScopri}
                 className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center"
               >
                 <X size={16} className="text-gray-600" />

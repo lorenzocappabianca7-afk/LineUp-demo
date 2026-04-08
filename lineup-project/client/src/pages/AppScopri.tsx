@@ -157,12 +157,13 @@ function getPianificaStyleQuestions(): AiQuestion[] {
   ];
 }
 
+/** Fascia prezzo (nessun tier "Gratis": solo € / €€ / €€€ / qualunque). */
 const PRICE_OPTIONS = [
   { key: "euro", label: "€" },
   { key: "due-euro", label: "€€" },
   { key: "tre-euro", label: "€€€" },
   { key: "qualsiasi", label: "Qualsiasi" },
-];
+] as const;
 
 /* ─── Result generator ─── */
 function generateResults(
@@ -174,7 +175,6 @@ function generateResults(
   pool.sort((a, b) => b.rating - a.rating);
   // Soft-filter based on budget (prefer, but don't hard-exclude)
   let preferred = [...pool];
-  if (answers.budget === "gratis") preferred = preferred.filter(v => !v.discount);
   if (answers.budget === "alto") preferred = preferred.filter(v => v.rating >= 4.7);
   // Always return 5: fill from full pool if preferred is short
   const combined = [...preferred, ...pool.filter(v => !preferred.includes(v))];
@@ -223,6 +223,8 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
   const drawFrameRef = useRef<number | null>(null);
   const pendingPointRef = useRef<{ x: number; y: number } | null>(null);
   const lastCommittedPointRef = useRef<{ x: number; y: number } | null>(null);
+  /** Backup se macro/sub in state non fossero disponibili al tap su "Crea evento". */
+  const lastScopriContextRef = useRef<{ macro: string; sub: SubItem } | null>(null);
   const [selectedPrice, setSelectedPrice] = useState<string | null>(null);
   const [userRequest, setUserRequest] = useState("");
   const [selectedResultVenues, setSelectedResultVenues] = useState<VenueOption[]>([]);
@@ -251,6 +253,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
       cancelAnimationFrame(drawFrameRef.current);
       drawFrameRef.current = null;
     }
+    lastScopriContextRef.current = null;
   };
 
   useEffect(() => {
@@ -262,6 +265,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
   }, []);
 
   const selectSub = async (s: SubItem) => {
+    if (macro) lastScopriContextRef.current = { macro, sub: s };
     setSub(s);
     setPhase("loading-questions");
     setAiError(null);
@@ -1278,11 +1282,13 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
             <button
               data-testid="button-create-event-from-selected"
               onClick={() => {
-                if (!macro || !sub) return;
+                const m = macro ?? lastScopriContextRef.current?.macro;
+                const sItem = sub ?? lastScopriContextRef.current?.sub;
+                if (!m || !sItem || !onCreateEvent) return;
                 onCreateEvent({
                   venues: selectedResultVenues,
-                  categoryKey: macro,
-                  subcategoryLabel: sub.label,
+                  categoryKey: m,
+                  subcategoryLabel: sItem.label,
                 });
               }}
               className="w-full py-3 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 active:opacity-80 transition-opacity"
