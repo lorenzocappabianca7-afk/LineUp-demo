@@ -1,0 +1,175 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 220 20% 10%;
+  --primary: 207 60% 55%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 20% 96%;
+  --secondary-foreground: 220 15% 20%;
+  --muted: 210 12% 93%;
+  --muted-foreground: 215 10% 45%;
+  --accent: 207 55% 65%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 215 15% 90%;
+  --input: 215 15% 90%;
+  --ring: 207 60% 55%;
+  --radius: 1rem;
+  --font-sans: 'Plus Jakarta Sans', sans-serif;
+  --font-display: 'Outfit', sans-serif;
+}
+
+.dark {
+  --background: 220 25% 6%;
+  --foreground: 210 15% 98%;
+  --primary: 207 55% 60%;
+  --primary-foreground: 220 25% 6%;
+  --secondary: 220 20% 12%;
+  --secondary-foreground: 210 15% 98%;
+  --muted: 220 18% 14%;
+  --muted-foreground: 210 12% 65%;
+  --accent: 207 50% 65%;
+  --accent-foreground: 210 15% 98%;
+  --destructive: 0 62% 30%;
+  --destructive-foreground: 210 15% 98%;
+  --border: 220 22% 18%;
+  --input: 220 22% 18%;
+  --ring: 207 55% 60%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-background text-foreground antialiased selection:bg-primary/20 selection:text-primary;
+    font-family: var(--font-sans);
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    @apply font-bold tracking-tight;
+  }
+}
+
+@layer utilities {
+  .glass-card {
+    @apply bg-white/80 dark:bg-black/30 backdrop-blur-lg border border-white/30 dark:border-white/10;
+  }
+}
+
+.nav-link-underline {
+  position: relative;
+}
+.nav-link-underline::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: hsl(var(--primary));
+  border-radius: 1px;
+  transition: width 0.3s ease;
+}
+.nav-link-underline:hover::after {
+  width: 100%;
+}
+
+/* ── Range slider custom style ── */
+input[type="range"].time-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #e5e7eb;
+  outline: none;
+  cursor: pointer;
+  touch-action: none;
+}
+input[type="range"].time-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #000;
+  cursor: grab;
+  border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.30);
+}
+input[type="range"].time-slider::-moz-range-thumb {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #000;
+  cursor: grab;
+  border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.30);
+}
+
+@keyframes expandFromPianifica {
+  from {
+    clip-path: inset(21% 17% 55% 33% round 90px);
+  }
+  to {
+    clip-path: inset(0px 0px 0px 0px round 20px);
+  }
+}
+
+@keyframes expandFromScopri {
+  from {
+    clip-path: inset(73% 43% 6% 14% round 77px);
+  }
+  to {
+    clip-path: inset(0px 0px 0px 0px round 20px);
+  }
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-8px); }
+  40%       { transform: translateX(8px); }
+  60%       { transform: translateX(-6px); }
+  80%       { transform: translateX(6px); }
+}
+
+@keyframes blobPulse {
+  0%, 100% {
+    border-radius: 62% 38% 46% 54% / 60% 44% 56% 40%;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    border-radius: 42% 58% 62% 38% / 48% 52% 48% 52%;
+    transform: translate3d(0, -3px, 0) scale(1.012);
+  }
+  66% {
+    border-radius: 54% 46% 38% 62% / 40% 56% 44% 60%;
+    transform: translate3d(0, 2px, 0) scale(0.992);
+  }
+}
+
+.blob-fluid-button {
+  will-change: transform, border-radius;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
