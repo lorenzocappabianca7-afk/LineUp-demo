@@ -158,7 +158,6 @@ function getPianificaStyleQuestions(): AiQuestion[] {
 }
 
 const PRICE_OPTIONS = [
-  { key: "gratis", label: "Gratis" },
   { key: "euro", label: "€" },
   { key: "due-euro", label: "€€" },
   { key: "tre-euro", label: "€€€" },

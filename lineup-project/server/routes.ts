@@ -116,6 +116,91 @@ const TORINO_FALLBACK_VENUES: AiVenue[] = [
   },
 ];
 
+/** Bar, caffè storici, pasticcerie, hub gastronomici — mai piazze/verde generico come "luogo" per mangiare. */
+const TORINO_CIBO_LOCALI_FALLBACK: AiVenue[] = [
+  {
+    name: "Caffè Mulassano",
+    address: "Piazza Castello 15, 10124 Torino",
+    description:
+      "Caffè storico con tramezzini e colazione al banco o al tavolo; nome commerciale di un locale, non un area aperta generica.",
+    rating: 4.7,
+    priceRange: "€€",
+    bookingUrl: "https://www.caffemulassano.com/",
+    websiteUrl: "https://www.caffemulassano.com/",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Caff%C3%A8+Mulassano+Torino",
+  },
+  {
+    name: "Baratti & Milano",
+    address: "Galleria Subalpina 29, 10123 Torino",
+    description: "Pasticceria e caffè storico in galleria: colazione dolce/salata e tavoli al chiuso.",
+    rating: 4.6,
+    priceRange: "€€",
+    bookingUrl: "https://www.baratti-milano.com/",
+    websiteUrl: "https://www.baratti-milano.com/",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Baratti+Milano+Torino",
+  },
+  {
+    name: "Caffè Platti",
+    address: "Corso Vittorio Emanuele II 72, 10121 Torino",
+    description: "Pasticceria di lusso e ristorante storico, adatto a colazione elegante o pranzo.",
+    rating: 4.6,
+    priceRange: "€€€",
+    bookingUrl: "https://www.platti1875.com/",
+    websiteUrl: "https://www.platti1875.com/",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Caff%C3%A8+Platti+Torino",
+  },
+  {
+    name: "Caffè Al Bicerin",
+    address: "Piazza della Consolata 5, 10122 Torino",
+    description: "Caffè dal 1763, famoso per il Bicerin; locale dichiarato con servizio al tavolo.",
+    rating: 4.7,
+    priceRange: "€€",
+    bookingUrl: "https://www.bicerin.it/",
+    websiteUrl: "https://www.bicerin.it/",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Al+Bicerin+Torino",
+  },
+  {
+    name: "Caffè Fiorio",
+    address: "Via Po 8, 10124 Torino",
+    description: "Caffè storico su via Po, tradizione torinese per caffè e dolci.",
+    rating: 4.5,
+    priceRange: "€€",
+    bookingUrl: "https://www.caffefiorio.it/",
+    websiteUrl: "https://www.caffefiorio.it/",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Caff%C3%A8+Fiorio+Torino",
+  },
+  {
+    name: "Caffè San Carlo",
+    address: "Piazza San Carlo 156, 10121 Torino",
+    description: "Caffè-bistrot storico sotto i portici di Piazza San Carlo, colazione e pasti leggeri.",
+    rating: 4.6,
+    priceRange: "€€€",
+    bookingUrl: "https://www.costardibros.it/caffe-san-carlo-torino/",
+    websiteUrl: "https://www.costardibros.it/caffe-san-carlo-torino/",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Caff%C3%A8+San+Carlo+Torino",
+  },
+  {
+    name: "Mercato Centrale Torino",
+    address: "Piazza della Repubblica 25, 10152 Torino",
+    description: "Edificio coperto con banconi e posti a sedere: diversi stand per colazione o pranzo veloce.",
+    rating: 4.4,
+    priceRange: "€€",
+    bookingUrl: "https://www.mercatocentrale.it/torino/",
+    websiteUrl: "https://www.mercatocentrale.it/torino/",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Mercato+Centrale+Torino",
+  },
+  {
+    name: "Gelateria Pepino",
+    address: "Piazza Carignano 8, 10123 Torino",
+    description: "Gelateria storica (anche pinguino) ideale per spuntino dolce nel centro.",
+    rating: 4.5,
+    priceRange: "€",
+    bookingUrl: "https://www.gelateriapepino.com/",
+    websiteUrl: "https://www.gelateriapepino.com/",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Gelateria+Pepino+Torino",
+  },
+];
+
 /** Luoghi da ballo / serata notte a Torino — non bar da aperitivo o cafè musicali. */
 const TORINO_DISCOTECHE_FALLBACK: AiVenue[] = [
   {
@@ -183,6 +268,35 @@ function looksLikePubOrCafeNotDisco(name: string, description: string): boolean 
   return false;
 }
 
+function isSpecificFoodVenueSubcategory(subcategory: string): boolean {
+  const s = String(subcategory).toLowerCase();
+  return (
+    s.includes("colazione") ||
+    s.includes("brunch") ||
+    s.includes("spuntino") ||
+    s.includes("pranzo") ||
+    s.includes("cena") ||
+    s.includes("aperitivo")
+  );
+}
+
+/** Piazze intere, parchi, ecc. non sono luoghi dove "fare colazione" nel senso richiesto dall'utente. */
+function isGenericNonSpecificFoodVenue(name: string, description: string): boolean {
+  const n = name.trim();
+  const t = `${n}\n${description}`.toLowerCase();
+  if (/^piazza\s+/i.test(n)) return true;
+  if (/^piazzetta\s+/i.test(n)) return true;
+  if (/^parco\s+/i.test(n) && !/\b(ristorante|trattoria|bar|bistrot|caff|caf|chiosco|chalet)\b/i.test(t)) return true;
+  if (/^giardini\s+/i.test(n) && !/\b(bar|ristorante|caff|caf|bistrot)\b/i.test(t)) return true;
+  if (/\blungotevere\b/i.test(n.toLowerCase()) && !/\b(bar|ristorante|osteria|bistrot|caff|caf)\b/i.test(t)) return true;
+  if (/\bparco del valentino\b/i.test(t) && !/\b(bar|ristorante|caff|caf|chiosco)\b/i.test(t)) return true;
+  return false;
+}
+
+function filterFoodMustBeSpecificVenue(venues: AiVenue[]): AiVenue[] {
+  return venues.filter((v) => !isGenericNonSpecificFoodVenue(v.name, v.description));
+}
+
 function normalizePriceRange(value: string): string {
   const cleaned = value.trim();
   if (cleaned.includes("€€€")) return "€€€";
@@ -224,12 +338,13 @@ function getFallbackVenuesForSubcategory(subcategory: string): AiVenue[] {
     return [...TORINO_DISCOTECHE_FALLBACK];
   }
 
+  if (isSpecificFoodVenueSubcategory(subcategory)) {
+    return [...TORINO_CIBO_LOCALI_FALLBACK];
+  }
+
   const filtered = TORINO_FALLBACK_VENUES.filter((v) => {
     const name = v.name.toLowerCase();
     const desc = v.description.toLowerCase();
-    if (sub.includes("aperitivo") || sub.includes("cena") || sub.includes("brunch") || sub.includes("colazione")) {
-      return name.includes("mercato") || name.includes("piazza");
-    }
     if (sub.includes("cinema") || sub.includes("museo") || sub.includes("mostra") || sub.includes("teatro")) {
       return name.includes("museo") || name.includes("ogr");
     }
@@ -762,9 +877,20 @@ DISCOTECHE — definizione STRETTA (obbligatoria)
 `
       : "";
 
+    const foodConstraints = isSpecificFoodVenueSubcategory(String(subcategory))
+      ? `
+══════════════════════════════════════════════════════════════════
+CIBO (colazione, brunch, spuntino, pranzo, cena, aperitivo) — locali PRECISI
+══════════════════════════════════════════════════════════════════
+- Suggerisci SOLO esercizi dove si mangia o beve con servizio: bar, caffè storici, pasticceria, bistrot, ristorante, trattoria, gelateria con sedute, mercato COPERTO con banconi (nome del mercato va bene), osteria con cucina.
+- VIETATO proporre: intere piazze (es. "Piazza Vittorio Veneto"), parchi/giardini senza nome di locale interno, lungofiumi generici, "zone" o quartieri, monumenti senza ristorazione, laghi o sagre generiche senza struttura precisa.
+- Il campo "name" deve essere il nome commerciale del locale (es. "Caffè Mulassano"), MAI solo il nome di una piazza o di un parco.
+`
+      : "";
+
     const searchPrompt = `Sei un city concierge locale.
 Trova QUANTE PIU opzioni possibili (minimo 6, massimo 8) di luoghi REALMENTE ESISTENTI e attivi nell'area di TORINO CITTA (non fuori Torino) per "${subcategory}".
-${discoConstraints}
+${discoConstraints}${foodConstraints}
 Vincoli obbligatori:
 - Usa solo posti verificabili online.
 - L'indirizzo deve essere completo e contenere "Torino".
@@ -823,8 +949,10 @@ Dopo la ricerca, rispondi SOLO con un JSON valido (nessun testo fuori dal JSON) 
       const parsedResp = aiVenueResponseSchema.safeParse(parsed);
       const aiCandidates = parsedResp.success ? parsedResp.data.venues : [];
       const discoMode = isDiscotecaSubcategory(String(subcategory));
+      const foodSpecificMode = isSpecificFoodVenueSubcategory(String(subcategory));
       let sanitized = sanitizeAiVenues(aiCandidates);
       if (discoMode) sanitized = filterStrictDiscotecheVenues(sanitized);
+      if (foodSpecificMode) sanitized = filterFoodMustBeSpecificVenue(sanitized);
 
       // Fallback robusto su venue reali di Torino se AI non e affidabile
       const fallback = getFallbackVenuesForSubcategory(subcategory);
@@ -837,7 +965,11 @@ Dopo la ricerca, rispondi SOLO con un JSON valido (nessun testo fuori dal JSON) 
         }
       }
       if (merged.length < 6) {
-        const extraPool = discoMode ? TORINO_DISCOTECHE_FALLBACK : TORINO_FALLBACK_VENUES;
+        const extraPool = discoMode
+          ? TORINO_DISCOTECHE_FALLBACK
+          : foodSpecificMode
+            ? TORINO_CIBO_LOCALI_FALLBACK
+            : TORINO_FALLBACK_VENUES;
         for (const fb of extraPool) {
           if (merged.length >= 8) break;
           if (!merged.some((v) => v.name.toLowerCase() === fb.name.toLowerCase())) {
@@ -846,6 +978,7 @@ Dopo la ricerca, rispondi SOLO con un JSON valido (nessun testo fuori dal JSON) 
         }
       }
       if (discoMode) merged = filterStrictDiscotecheVenues(merged);
+      if (foodSpecificMode) merged = filterFoodMustBeSpecificVenue(merged);
       const candidates = merged.slice(0, 6);
       const verified = await validateVenueLinks(candidates);
 
