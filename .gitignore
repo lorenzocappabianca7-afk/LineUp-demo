@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+
+# Backup archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# Local images/screenshots not related to source code
+Screenshot*.png
+IMG_*.jpg
+Soggetto.png
+
+# Local environments
+*.env
+**/.env
+
+# Local backup folders
+LineUp25/
+lineup.short/
