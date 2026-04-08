@@ -123,7 +123,7 @@ const SUBCATEGORIES: Record<string, SubItem[]> = {
   ],
   eventi: [
     { key: "concerti",   Icon: Music,          label: "Concerti",        activity: "cinema" },
-    { key: "discoteche", Icon: PartyPopper,    label: "Discoteche",      activity: "cinema" },
+    { key: "discoteche", Icon: PartyPopper,    label: "Discoteche",      activity: "discoteche" },
     { key: "festival",   Icon: PartyPopper,    label: "Festival",        activity: "cinema" },
     { key: "fiere",      Icon: Building2,      label: "Fiere",           activity: "gita" },
     { key: "teatro",     Icon: Drama,          label: "Teatro",          activity: "cinema" },

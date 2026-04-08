@@ -245,10 +245,10 @@ export const VENUES_BY_ACTIVITY: Record<string, VenueOption[]> = {
     { name: "Orion Club", rating: 4.5, distance: "3.0 km" },
   ],
   discoteche: [
-    { name: "Goa Club", rating: 4.6, distance: "3.5 km", discount: "Lista ingresso gratis" },
-    { name: "Piper Club", rating: 4.5, distance: "2.0 km" },
-    { name: "Shari Vari Playhouse", rating: 4.4, distance: "1.8 km", discount: "Donna gratis entro mezzanotte" },
-    { name: "Rashomon Club", rating: 4.7, distance: "4.0 km" },
+    { name: "Centralino Club", rating: 4.5, distance: "1.2 km" },
+    { name: "The Beach Murazzi", rating: 4.6, distance: "0.9 km", discount: "Ingresso serale" },
+    { name: "Hiroshima Mon Amour", rating: 4.7, distance: "3.5 km" },
+    { name: "Notorius Club", rating: 4.4, distance: "2.8 km" },
   ],
   teatro: [
     { name: "Teatro Argentina", rating: 4.9, distance: "0.9 km" },

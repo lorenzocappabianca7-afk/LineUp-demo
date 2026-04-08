@@ -116,6 +116,73 @@ const TORINO_FALLBACK_VENUES: AiVenue[] = [
   },
 ];
 
+/** Luoghi da ballo / serata notte a Torino — non bar da aperitivo o cafè musicali. */
+const TORINO_DISCOTECHE_FALLBACK: AiVenue[] = [
+  {
+    name: "Centralino Club",
+    address: "Via delle Rosine 16, 10123 Torino",
+    description:
+      "Discoteca storica nel centro con pista danzante e serate fino a notte fonda; ingresso serale da club.",
+    rating: 4.5,
+    priceRange: "€€",
+    bookingUrl: "https://www.turismotorino.org/it/visita/territorio/torino-metropoli/torino/nightlife-a-torino/centralino-club-torino",
+    websiteUrl: "https://www.turismotorino.org/it/visita/territorio/torino-metropoli/torino/nightlife-a-torino/centralino-club-torino",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Centralino+Club+Torino",
+  },
+  {
+    name: "The Beach Club Torino",
+    address: "Via Murazzi del Po 22, 10124 Torino",
+    description: "Club sui Murazzi con DJ set e serate dance; locale da notturna movida, non un pub diurno.",
+    rating: 4.5,
+    priceRange: "€€",
+    bookingUrl: "https://thebeachmurazzi.it/",
+    websiteUrl: "https://thebeachmurazzi.it/",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=The+Beach+Murazzi+Torino",
+  },
+  {
+    name: "Hiroshima Mon Amour",
+    address: "Via Carlo Bossoli 83, 10135 Torino",
+    description:
+      "Spazio per concerti e notti dedicate a dance/elettronica o DJ; controlla il programma per serate da discoteca.",
+    rating: 4.7,
+    priceRange: "€€",
+    bookingUrl: "https://www.hiroshimamonamour.org/",
+    websiteUrl: "https://www.hiroshimamonamour.org/",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Hiroshima+Mon+Amour+Torino",
+  },
+  {
+    name: "Notorius Club",
+    address: "Via Stradella 10/d, 10155 Torino",
+    description: "Club torinese con serate EDM e house internazionali; ingresso da discoteca, non pub.",
+    rating: 4.4,
+    priceRange: "€€€",
+    bookingUrl: "https://notoriusclub.it/",
+    websiteUrl: "https://notoriusclub.it/",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Notorius+Club+Torino",
+  },
+];
+
+function isDiscotecaSubcategory(subcategory: string): boolean {
+  const s = String(subcategory).toLowerCase();
+  return s.includes("discotec") || s.includes("night club") || s.includes("nightclub");
+}
+
+/** Esclude pub, cafè musicali, birrerie ecc. quando l'utente ha chiesto discoteche. */
+function filterStrictDiscotecheVenues(venues: AiVenue[]): AiVenue[] {
+  return venues.filter((v) => !looksLikePubOrCafeNotDisco(v.name, v.description));
+}
+
+function looksLikePubOrCafeNotDisco(name: string, description: string): boolean {
+  const t = `${name}\n${description}`.toLowerCase();
+  if (/\b(judafire|irish pub|english pub|public house)\b/i.test(t)) return true;
+  if (/\b(birrificio|birreria|osteria|enoteca|trattoria|ristorante|pizzeria|wine bar|gastropub)\b/i.test(t)) return true;
+  if (/\b(pub|bar di quartiere)\b/i.test(t)) return true;
+  if (/music\s*caf|musica\s*caf|music\s*caf[eéè]|musica\s*caf[eéè]/i.test(t)) return true;
+  if (/\bcaffett(e|eria)|\bcaff[eéè]\b|\bcafé\b|\bcafe\b/i.test(name)) return true;
+  if (/\b(cocktail bar|lounge bar|tap room|brew pub)\b/i.test(t)) return true;
+  return false;
+}
+
 function normalizePriceRange(value: string): string {
   const cleaned = value.trim();
   if (cleaned.includes("€€€")) return "€€€";
@@ -152,6 +219,11 @@ function sanitizeAiVenues(rawVenues: unknown[]): AiVenue[] {
 
 function getFallbackVenuesForSubcategory(subcategory: string): AiVenue[] {
   const sub = String(subcategory).toLowerCase();
+
+  if (isDiscotecaSubcategory(subcategory)) {
+    return [...TORINO_DISCOTECHE_FALLBACK];
+  }
+
   const filtered = TORINO_FALLBACK_VENUES.filter((v) => {
     const name = v.name.toLowerCase();
     const desc = v.description.toLowerCase();
@@ -678,9 +750,21 @@ Rispondi SOLO con questo JSON (nessun testo extra):
       ? userRequest.trim()
       : "";
 
+    const discoConstraints = isDiscotecaSubcategory(String(subcategory))
+      ? `
+══════════════════════════════════════════════════════════════════
+DISCOTECHE — definizione STRETTA (obbligatoria)
+══════════════════════════════════════════════════════════════════
+- Includi SOLO discoteche e club da ballo / dance notturni (DJ, pista, ingresso serale da locale notturno).
+- VIETATO: pub, irish pub, birrerie, osterie, enoteche, trattorie, ristoranti, pizzerie, wine bar, cocktail bar solo lounge, caffè, "music café", locali equivalenti a Judafire Music Café o dove la proposta principale è mangiare/bere seduti come in un bar.
+- Se online il locale è descritto soprattutto come cafè, pub o aperitivo, NON inserirlo: non è una discoteca.
+- Ogni descrizione deve lasciare chiaro che il locale è una discoteca/club da ballo, non un semplice bar.
+`
+      : "";
+
     const searchPrompt = `Sei un city concierge locale.
 Trova QUANTE PIU opzioni possibili (minimo 6, massimo 8) di luoghi REALMENTE ESISTENTI e attivi nell'area di TORINO CITTA (non fuori Torino) per "${subcategory}".
-
+${discoConstraints}
 Vincoli obbligatori:
 - Usa solo posti verificabili online.
 - L'indirizzo deve essere completo e contenere "Torino".
@@ -738,12 +822,14 @@ Dopo la ricerca, rispondi SOLO con un JSON valido (nessun testo fuori dal JSON) 
       const parsed = JSON.parse(jsonStr);
       const parsedResp = aiVenueResponseSchema.safeParse(parsed);
       const aiCandidates = parsedResp.success ? parsedResp.data.venues : [];
-      const sanitized = sanitizeAiVenues(aiCandidates);
+      const discoMode = isDiscotecaSubcategory(String(subcategory));
+      let sanitized = sanitizeAiVenues(aiCandidates);
+      if (discoMode) sanitized = filterStrictDiscotecheVenues(sanitized);
 
       // Fallback robusto su venue reali di Torino se AI non e affidabile
       const fallback = getFallbackVenuesForSubcategory(subcategory);
 
-      const merged = [...sanitized];
+      let merged = [...sanitized];
       for (const fb of fallback) {
         if (merged.length >= 8) break;
         if (!merged.some((v) => v.name.toLowerCase() === fb.name.toLowerCase())) {
@@ -751,13 +837,15 @@ Dopo la ricerca, rispondi SOLO con un JSON valido (nessun testo fuori dal JSON) 
         }
       }
       if (merged.length < 6) {
-        for (const fb of TORINO_FALLBACK_VENUES) {
+        const extraPool = discoMode ? TORINO_DISCOTECHE_FALLBACK : TORINO_FALLBACK_VENUES;
+        for (const fb of extraPool) {
           if (merged.length >= 8) break;
           if (!merged.some((v) => v.name.toLowerCase() === fb.name.toLowerCase())) {
             merged.push(fb);
           }
         }
       }
+      if (discoMode) merged = filterStrictDiscotecheVenues(merged);
       const candidates = merged.slice(0, 6);
       const verified = await validateVenueLinks(candidates);
 
