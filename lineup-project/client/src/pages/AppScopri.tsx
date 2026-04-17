@@ -1,14 +1,11 @@
 import { useEffect, useRef, useState, type MouseEvent, type TouchEvent } from "react";
 import {
   ChevronLeft, Sparkles, MapPin, Star, Tag, RefreshCw,
-  Utensils, Landmark, Dumbbell, Ticket,
-  Calendar, Bus, Car, Globe, Sun,
-  Gamepad2,
-  Building2, Film, Music, Drama, Trophy,
-  UtensilsCrossed, Coffee, ShoppingBag, PartyPopper,
-  Activity, ExternalLink, CalendarPlus, CheckCircle2
+  Calendar, ExternalLink, CalendarPlus, CheckCircle2,
 } from "lucide-react";
 import { VENUES_BY_ACTIVITY, type VenueOption, type ScopriToCreatePrefill } from "@/lib/appUtils";
+import { PLAN_CATEGORIES, PLAN_SUBCATEGORIES, venuePoolKeyForPlanSubcategory } from "@/lib/planCategories";
+import ScopriTorinoLeafletMap from "@/components/ScopriTorinoLeafletMap";
 
 interface AiVenue {
   name: string;
@@ -20,6 +17,9 @@ interface AiVenue {
   websiteUrl: string;
   mapsUrl: string;
   safariUrl?: string;
+  score?: number;
+  why?: string[];
+  openStatus?: "open" | "closed" | "unknown";
 }
 
 interface AiQuestion {
@@ -28,119 +28,16 @@ interface AiQuestion {
   options: { key: string; label: string }[];
 }
 
-/* ─── Data ─── */
-const MACRO = [
-  {
-    key: "cibo",
-    label: "Cibo",
-    desc: "Ristoranti, bar e locali",
-    Icon: Utensils,
-    color: "#d97706",
-    bg: "#FEF3C7",
-    accent: "#f59e0b",
-  },
-  {
-    key: "cultura",
-    label: "Cultura",
-    desc: "Arte, mostre e musei",
-    Icon: Landmark,
-    color: "#7c3aed",
-    bg: "#EDE9FE",
-    accent: "#8b5cf6",
-  },
-  {
-    key: "sport",
-    label: "Sport",
-    desc: "Attivita fisiche e outdoor",
-    Icon: Dumbbell,
-    color: "#059669",
-    bg: "#D1FAE5",
-    accent: "#10b981",
-  },
-  {
-    key: "eventi",
-    label: "Eventi",
-    desc: "Concerti, fiere e teatro",
-    Icon: Ticket,
-    color: "#dc2626",
-    bg: "#FEE2E2",
-    accent: "#ef4444",
-  },
-  {
-    key: "svago",
-    label: "Svago",
-    desc: "Uscite libere e passeggiate",
-    Icon: Gamepad2,
-    color: "#0f766e",
-    bg: "#CCFBF1",
-    accent: "#14b8a6",
-  },
-];
-
-type SubItem = { key: string; Icon: any; label: string; activity?: string };
-
-const SUBCATEGORIES: Record<string, SubItem[]> = {
-  cibo: [
-    { key: "aperitivo",  Icon: UtensilsCrossed, label: "Aperitivo",   activity: "aperitivo" },
-    { key: "cena",       Icon: Utensils,        label: "Cena",        activity: "cena" },
-    { key: "spuntino",   Icon: Coffee,          label: "Spuntino",    activity: "cibo" },
-    { key: "pranzo",     Icon: Utensils,        label: "Pranzo",      activity: "cena" },
-    { key: "colazione",  Icon: Coffee,          label: "Colazione",   activity: "cibo" },
-    { key: "brunch",     Icon: Coffee,          label: "Brunch",      activity: "cibo" },
-  ],
-  cultura: [
-    { key: "mostre",     Icon: Film,           label: "Mostre",     activity: "gita" },
-    { key: "musei",      Icon: Landmark,       label: "Musei",      activity: "gita" },
-  ],
-  sport: [
-    { key: "arti-marziali",Icon: Activity,     label: "Arti marziali", activity: "sport" },
-    { key: "basket",       Icon: Trophy,       label: "Basket",      activity: "sport" },
-    { key: "beach-volley", Icon: Trophy,       label: "Beach volley", activity: "sport" },
-    { key: "bici",         Icon: Activity,     label: "Bici", activity: "sport" },
-    { key: "calcio",       Icon: Trophy,       label: "Calcio", activity: "calcio" },
-    { key: "camminata",    Icon: Activity,     label: "Camminata", activity: "sport" },
-    { key: "canoa",        Icon: Activity,     label: "Canoa", activity: "sport" },
-    { key: "corsa",        Icon: Activity,     label: "Corsa", activity: "sport" },
-    { key: "hockey",       Icon: Trophy,       label: "Hockey", activity: "sport" },
-    { key: "padel",        Icon: Activity,     label: "Padel", activity: "padel" },
-    { key: "palestra",     Icon: Dumbbell,     label: "Palestra", activity: "sport" },
-    { key: "pallavolo",    Icon: Trophy,       label: "Pallavolo", activity: "sport" },
-    { key: "pattinaggio",  Icon: Activity,     label: "Pattinaggio", activity: "sport" },
-    { key: "ping-pong",    Icon: Trophy,       label: "Ping pong", activity: "sport" },
-    { key: "piscina",      Icon: Activity,     label: "Piscina", activity: "sport" },
-    { key: "sci",          Icon: Activity,     label: "Sci", activity: "sport" },
-    { key: "snowboard",    Icon: Activity,     label: "Snowboard", activity: "sport" },
-    { key: "tennis",       Icon: Trophy,       label: "Tennis", activity: "sport" },
-    { key: "arrampicata",  Icon: Activity,     label: "Arrampicata", activity: "sport" },
-    { key: "skateboard",   Icon: Activity,     label: "Skateboard", activity: "sport" },
-    { key: "skateboard-park", Icon: Activity,  label: "Skateboard park", activity: "sport" },
-    { key: "tiro-arco",    Icon: Activity,     label: "Tiro con l'arco", activity: "sport" },
-    { key: "parchi-ciclismo", Icon: Activity,  label: "Parchi per ciclismo", activity: "sport" },
-    { key: "nuoto",        Icon: Activity,     label: "Nuoto", activity: "sport" },
-    { key: "minigolf",     Icon: Trophy,       label: "Minigolf", activity: "sport" },
-    { key: "bowling",      Icon: Trophy,       label: "Bowling", activity: "sport" },
-    { key: "go-kart",      Icon: Trophy,       label: "Go-kart", activity: "sport" },
-  ],
-  eventi: [
-    { key: "concerti",   Icon: Music,          label: "Concerti",        activity: "cinema" },
-    { key: "discoteche", Icon: PartyPopper,    label: "Discoteche",      activity: "discoteche" },
-    { key: "festival",   Icon: PartyPopper,    label: "Festival",        activity: "cinema" },
-    { key: "fiere",      Icon: Building2,      label: "Fiere",           activity: "gita" },
-    { key: "teatro",     Icon: Drama,          label: "Teatro",          activity: "cinema" },
-  ],
-  svago: [
-    { key: "giro-centro", Icon: MapPin,      label: "Giro in centro", activity: "altro" },
-    { key: "giornata-mare", Icon: Sun,       label: "Giornata al mare", activity: "mare" },
-    { key: "mercatino", Icon: ShoppingBag,   label: "Mercatino", activity: "fiere" },
-    { key: "passeggiata", Icon: Activity,    label: "Passeggiata", activity: "altro" },
-    { key: "uscita", Icon: PartyPopper,      label: "Uscita", activity: "altro" },
-    { key: "uscita-montagna", Icon: Trophy,  label: "Uscita in montagna", activity: "montagna" },
-    { key: "sala-giochi", Icon: Gamepad2,    label: "Sala giochi", activity: "altro" },
-    { key: "acqua-park", Icon: Activity,     label: "Acqua park", activity: "altro" },
-    { key: "parco-giochi", Icon: Activity,   label: "Parco giochi", activity: "altro" },
-    { key: "escape-room", Icon: Building2,   label: "Escape room", activity: "altro" },
-  ],
+type ScopriConstraintMemory = {
+  category: string;
+  subcategory: string;
+  giorno?: string;
+  prezzo?: string;
+  mezzo?: string;
+  areaDisegnata?: string;
+  zonaLabel?: string;
 };
+
 
 function getPianificaStyleQuestions(): AiQuestion[] {
   return [
@@ -165,12 +62,12 @@ const SCOPRI_PRICE_TIERS: readonly { key: string; label: string }[] = [
   { key: "qualsiasi", label: "Qualsiasi" },
 ];
 
-/* ─── Result generator ─── */
+/* ─── Result generator (fallback locale) ─── */
 function generateResults(
-  subObj: SubItem,
-  answers: Record<string, string>
+  subcategoryLabel: string,
+  answers: Record<string, string>,
 ): (VenueOption & { reason: string })[] {
-  const activity = subObj.activity ?? "altro";
+  const activity = venuePoolKeyForPlanSubcategory(subcategoryLabel);
   const pool = [...(VENUES_BY_ACTIVITY[activity] ?? VENUES_BY_ACTIVITY.altro)];
   pool.sort((a, b) => b.rating - a.rating);
   // Soft-filter based on budget (prefer, but don't hard-exclude)
@@ -196,7 +93,7 @@ function buildReason(answers: Record<string, string>, v: VenueOption): string {
 }
 
 /* ─── Component ─── */
-type Phase = "macro" | "sub" | "loading-questions" | "day-calendar" | "question" | "zone-map" | "price" | "preferences" | "loading-venues" | "results";
+type Phase = "macro" | "sub" | "day-calendar" | "question" | "zone-map" | "price" | "preferences" | "loading-venues" | "results";
 
 export default function AppScopri({ embedded = false, onCreateEvent }: {
   embedded?: boolean;
@@ -204,13 +101,15 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
 }) {
   const [phase, setPhase] = useState<Phase>("macro");
   const [macro, setMacro] = useState<string | null>(null);
-  const [sub, setSub] = useState<SubItem | null>(null);
+  const [subLabel, setSubLabel] = useState<string | null>(null);
   const [qIdx, setQIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [aiQuestions, setAiQuestions] = useState<AiQuestion[]>([]);
   const [results, setResults] = useState<ReturnType<typeof generateResults>>([]);
   const [aiVenues, setAiVenues] = useState<AiVenue[]>([]);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [aiPrefetchStatus, setAiPrefetchStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [aiPrefetchCount, setAiPrefetchCount] = useState(0);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [firstSelectedDate, setFirstSelectedDate] = useState<Date | null>(null);
   const [secondSelectedDate, setSecondSelectedDate] = useState<Date | null>(null);
@@ -223,19 +122,23 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
   const drawFrameRef = useRef<number | null>(null);
   const pendingPointRef = useRef<{ x: number; y: number } | null>(null);
   const lastCommittedPointRef = useRef<{ x: number; y: number } | null>(null);
+  const searchProfileIdRef = useRef<string | null>(null);
   /** Backup se macro/sub in state non fossero disponibili al tap su "Crea evento". */
-  const lastScopriContextRef = useRef<{ macro: string; sub: SubItem } | null>(null);
+  const lastScopriContextRef = useRef<{ macro: string; subLabel: string } | null>(null);
   const [selectedPrice, setSelectedPrice] = useState<string | null>(null);
   const [userRequest, setUserRequest] = useState("");
   const [selectedResultVenues, setSelectedResultVenues] = useState<VenueOption[]>([]);
 
-  const macroObj = MACRO.find(m => m.key === macro) ?? MACRO[0];
+  const categoryDef = PLAN_CATEGORIES.find((c) => c.key === macro) ?? PLAN_CATEGORIES[0];
+  const CategoryIcon = categoryDef.Icon;
   const currentQ = aiQuestions[qIdx];
 
   const reset = () => {
-    setPhase("macro"); setMacro(null); setSub(null);
+    setPhase("macro"); setMacro(null); setSubLabel(null);
     setQIdx(0); setAnswers({}); setResults([]); setAiVenues([]);
     setAiQuestions([]); setAiError(null);
+    setAiPrefetchStatus("idle");
+    setAiPrefetchCount(0);
     setCalendarMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
     setFirstSelectedDate(null);
     setSecondSelectedDate(null);
@@ -254,6 +157,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
       drawFrameRef.current = null;
     }
     lastScopriContextRef.current = null;
+    searchProfileIdRef.current = null;
   };
 
   useEffect(() => {
@@ -264,14 +168,41 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
     };
   }, []);
 
-  const selectSub = async (s: SubItem) => {
-    if (macro) lastScopriContextRef.current = { macro, sub: s };
-    setSub(s);
-    setPhase("loading-questions");
+  const selectSub = async (label: string) => {
+    if (macro) lastScopriContextRef.current = { macro, subLabel: label };
+    if (!searchProfileIdRef.current) {
+      searchProfileIdRef.current = `scopri-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+    setSubLabel(label);
     setAiError(null);
     const questions = getPianificaStyleQuestions();
     setAiQuestions(questions);
     setQIdx(0);
+    if (macro) {
+      setAiPrefetchStatus("running");
+      void fetch("/api/scopri/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category: macro,
+          subcategory: label,
+          answers: {},
+          prefetch: true,
+          profileId: searchProfileIdRef.current,
+          constraints: {
+            category: macro,
+            subcategory: label,
+          },
+        }),
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error("prefetch failed"))))
+        .then((d) => {
+          const count = Array.isArray(d?.venues) ? d.venues.length : 0;
+          setAiPrefetchCount(count);
+          setAiPrefetchStatus("done");
+        })
+        .catch(() => setAiPrefetchStatus("error"));
+    }
     setPhase("day-calendar");
   };
 
@@ -279,14 +210,25 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
     setPhase("loading-venues");
     setAiError(null);
     try {
+      const memory: ScopriConstraintMemory = {
+        category: macro ?? "",
+        subcategory: subLabel ?? "",
+        giorno: finalAnswers.giorno,
+        prezzo: finalAnswers.prezzo,
+        mezzo: finalAnswers.mezzo,
+        areaDisegnata: finalAnswers.areaDisegnata,
+        zonaLabel: finalAnswers.zona,
+      };
       const resp = await fetch("/api/scopri/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           category: macro,
-          subcategory: sub?.label,
+          subcategory: subLabel,
           answers: finalAnswers,
-            userRequest: userRequest.trim() || undefined,
+          userRequest: userRequest.trim() || undefined,
+          profileId: searchProfileIdRef.current,
+          constraints: memory,
         }),
       });
       if (!resp.ok) throw new Error("Errore API");
@@ -294,16 +236,16 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
       if (data.venues && data.venues.length > 0) {
         setAiVenues(data.venues);
         if (data.venues.length < 5) {
-          setResults(generateResults(sub!, finalAnswers));
+          setResults(generateResults(subLabel ?? "", finalAnswers));
         } else {
           setResults([]);
         }
       } else {
-        setResults(generateResults(sub!, finalAnswers));
+        setResults(generateResults(subLabel ?? "", finalAnswers));
       }
     } catch {
       setAiError("Non riesco a connettermi all'AI. Mostro suggerimenti locali.");
-      setResults(generateResults(sub!, finalAnswers));
+      setResults(generateResults(subLabel ?? "", finalAnswers));
     } finally {
       setPhase("results");
     }
@@ -484,7 +426,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
     );
   };
 
-  /* ── Phase: Macro ── */
+  /* ── Phase: Macro — stessa griglia categorie del Pianifica ── */
   if (phase === "macro") return (
     <div className="flex flex-col min-h-full bg-gray-50">
       {!embedded && (
@@ -497,121 +439,66 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
         </div>
       )}
 
-      <div className="flex-1 px-4 pt-4 pb-6">
-        <div className="grid grid-cols-2 gap-3">
-          {MACRO.map(m => {
-            const Icon = m.Icon;
-            return (
-              <button
-                key={m.key}
-                data-testid={`macro-${m.key}`}
-                onClick={() => { setMacro(m.key); setPhase("sub"); }}
-                className={`flex flex-col items-start p-5 rounded-2xl bg-white border border-gray-100 shadow-sm active:scale-[0.97] transition-transform text-left gap-3 ${
-                  m.key === "svago" ? "col-span-2 w-full max-w-[180px] justify-self-center" : ""
-                }`}
-              >
-                <div
-                  className="w-11 h-11 rounded-xl flex items-center justify-center"
-                  style={{ backgroundColor: m.bg }}
-                >
-                  <Icon size={22} style={{ color: m.color }} strokeWidth={1.8} />
-                </div>
-                <div>
-                  <p className="font-bold text-gray-900 text-sm leading-tight">{m.label}</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5 leading-tight">{m.desc}</p>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Bottom promo strip */}
-        <div
-          className="mt-4 p-4 rounded-2xl flex items-center gap-3"
-          style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}
-        >
-          <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-            <Sparkles size={20} className="text-white" />
-          </div>
-          <div>
-            <p className="text-white font-bold text-sm">Scegli per me</p>
-            <p className="text-white/70 text-xs">Lascia decidere all'AI</p>
-          </div>
+      <div className="flex-1 px-5 pt-4 pb-6">
+        <p className="text-sm text-gray-500 mb-4">Scegli una categoria per la tua proposta di attività.</p>
+        <div className="grid grid-cols-5 gap-2">
+          {PLAN_CATEGORIES.map(({ key, label, Icon, cols, radius }) => (
+            <button
+              key={key}
+              data-testid={`macro-${key}`}
+              type="button"
+              onClick={() => {
+                setMacro(key);
+                setPhase("sub");
+              }}
+              style={{
+                gridColumn: `span ${cols}`,
+                borderRadius: radius,
+                height: cols >= 3 ? "108px" : cols === 1 ? "80px" : "88px",
+              }}
+              className="flex flex-col items-center justify-center gap-2 bg-[#EBF5FB] text-black hover:bg-[#d6ecf7] transition-all active:scale-95"
+            >
+              <Icon size={cols >= 3 ? 28 : 22} strokeWidth={1.6} />
+              <span className="text-xs font-semibold tracking-wide">{label}</span>
+            </button>
+          ))}
         </div>
       </div>
     </div>
   );
 
-  /* ── Phase: Sub ── */
+  /* ── Phase: Sub — stesse sottocategorie del Pianifica (pill) ── */
   if (phase === "sub") return (
     <div className="flex flex-col min-h-full bg-gray-50">
       <div className={`bg-white px-5 pb-5 ${embedded ? "pt-4" : "pt-12"}`}>
-        <button onClick={reset} className="flex items-center gap-1 text-sm text-gray-400 mb-4">
+        <button type="button" onClick={reset} className="flex items-center gap-1 text-sm text-gray-400 mb-4">
           <ChevronLeft size={16} /> Indietro
         </button>
         <div className="flex items-center gap-3">
-          <div
-            className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
-            style={{ backgroundColor: macroObj.bg }}
-          >
-            <macroObj.Icon size={22} style={{ color: macroObj.color }} strokeWidth={1.8} />
+          <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 bg-[#EBF5FB]">
+            <CategoryIcon size={22} className="text-gray-900" strokeWidth={1.6} />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-gray-900">{macroObj.label}</h2>
-            <p className="text-sm text-gray-400">Cosa hai in mente?</p>
+            <h2 className="text-xl font-bold text-gray-900">{categoryDef.label}</h2>
+            <p className="text-sm text-gray-400">Scegli una sottocategoria.</p>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 px-4 py-4">
-        <div className="grid grid-cols-3 gap-2.5">
-          {(SUBCATEGORIES[macro!] ?? []).map(s => {
-            const Icon = s.Icon;
-            return (
-              <button
-                key={s.key}
-                data-testid={`sub-${s.key}`}
-                onClick={() => selectSub(s)}
-                className="flex flex-col items-center gap-2 py-4 px-2 rounded-2xl bg-white border border-gray-100 shadow-sm active:scale-95 transition-transform"
-              >
-                <div
-                  className="w-9 h-9 rounded-lg flex items-center justify-center"
-                  style={{ backgroundColor: macroObj.bg }}
-                >
-                  <Icon size={17} style={{ color: macroObj.color }} strokeWidth={1.8} />
-                </div>
-                <span className="text-xs font-semibold text-gray-700 text-center leading-tight">{s.label}</span>
-              </button>
-            );
-          })}
+      <div className="flex-1 px-5 py-4">
+        <div className="flex flex-wrap gap-2">
+          {(PLAN_SUBCATEGORIES[macro!] ?? []).map((sub) => (
+            <button
+              key={sub}
+              type="button"
+              data-testid={`subcategory-${sub.replace(/\s+/g, "-").toLowerCase()}`}
+              onClick={() => void selectSub(sub)}
+              className="px-4 py-2 rounded-full text-sm font-medium bg-[#EBF5FB] text-black hover:bg-gray-200 transition-all active:scale-95"
+            >
+              {sub}
+            </button>
+          ))}
         </div>
-      </div>
-    </div>
-  );
-
-  /* ── Phase: Loading Questions ── */
-  if (phase === "loading-questions") return (
-    <div className="flex flex-col items-center justify-center min-h-full gap-4 bg-gray-50">
-      <div className="relative">
-        <div
-          className="w-16 h-16 rounded-2xl flex items-center justify-center"
-          style={{ backgroundColor: macroObj.bg }}
-        >
-          {sub && <sub.Icon size={30} style={{ color: macroObj.color }} strokeWidth={1.8} />}
-        </div>
-        <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-[#4A9BD9] rounded-full flex items-center justify-center">
-          <Sparkles size={12} className="text-white animate-pulse" />
-        </div>
-      </div>
-      <div className="text-center">
-        <p className="font-bold text-gray-900">Preparo le domande giuste...</p>
-        <p className="text-sm text-gray-400 mt-1">L'AI sta analizzando {sub?.label}</p>
-      </div>
-      <div className="flex gap-1.5 mt-2">
-        {[0, 1, 2].map(i => (
-          <div key={i} className="w-2 h-2 rounded-full bg-[#4A9BD9] animate-bounce"
-            style={{ animationDelay: `${i * 0.15}s` }} />
-        ))}
       </div>
     </div>
   );
@@ -632,7 +519,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
       </div>
       <div className="text-center">
         <p className="font-bold text-gray-900">Cerco i posti migliori a Torino...</p>
-        <p className="text-sm text-gray-400 mt-1">L'AI sta analizzando le tue preferenze</p>
+        <p className="text-sm text-gray-400 mt-1">L&apos;AI sta incrociando categoria, giorno, mezzo, area sulla mappa, prezzo e preferenze.</p>
       </div>
       <div className="flex gap-1.5 mt-2">
         {[0, 1, 2].map(i => (
@@ -660,6 +547,11 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
           </button>
           <p className="text-sm font-bold text-gray-900">Che giorno vuoi uscire?</p>
           <p className="text-xs text-gray-500 mt-1">Primo clic seleziona, secondo clic conferma o crea un intervallo.</p>
+          <p className="text-[11px] text-[#4A9BD9] mt-2 font-semibold">
+            {aiPrefetchStatus === "running" && "AI in pre-ricerca: sto gia filtrando luoghi coerenti con categoria e sottocategoria."}
+            {aiPrefetchStatus === "done" && `Pre-ricerca completata: ${aiPrefetchCount} candidati iniziali pronti per il filtraggio finale.`}
+            {aiPrefetchStatus === "error" && "Pre-ricerca momentaneamente non disponibile: continuo con ricerca completa a fine selezione."}
+          </p>
         </div>
 
         <div className="flex-1 px-4 py-4">
@@ -750,14 +642,12 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
           <span className="text-xs text-gray-400 font-medium shrink-0">{qIdx + 1}/{aiQuestions.length}</span>
         </div>
 
-        {/* Sub label */}
+        {/* Sottocategoria */}
         <div className="flex items-center gap-2 mb-4">
-          {sub && (
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: macroObj.bg }}>
-              <sub.Icon size={14} style={{ color: macroObj.color }} />
-            </div>
-          )}
-          <span className="text-sm font-semibold text-gray-600">{sub?.label}</span>
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-[#EBF5FB]">
+            <CategoryIcon size={14} className="text-gray-800" strokeWidth={1.6} />
+          </div>
+          <span className="text-sm font-semibold text-gray-600">{subLabel}</span>
         </div>
 
         {/* AI bubble */}
@@ -791,48 +681,107 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
     </div>
   );
 
-  /* ── Phase: Zone map ── */
-  if (phase === "zone-map") return (
+  /* ── Phase: Price (dopo mappa area) ── */
+  if (phase === "price") return (
     <div className="flex flex-col min-h-full bg-gray-50">
       <div className={`bg-white px-5 pb-5 ${embedded ? "pt-4" : "pt-12"}`}>
         <button
+          type="button"
+          onClick={() => setPhase("zone-map")}
+          className="flex items-center gap-1 text-sm text-gray-400 mb-4"
+        >
+          <ChevronLeft size={16} /> Indietro
+        </button>
+        <p className="text-sm font-bold text-gray-900">Seleziona il prezzo</p>
+        <p className="text-xs text-gray-500 mt-1">Filtriamo i luoghi anche per fascia di costo.</p>
+      </div>
+      <div className="flex-1 px-4 py-4">
+        <div className="flex flex-col gap-3">
+          {[
+            SCOPRI_PRICE_TIERS.slice(0, 2),
+            SCOPRI_PRICE_TIERS.slice(2, 4),
+          ].map((row, rowIdx) => (
+            <div key={rowIdx} className="flex gap-3">
+              {row.map((opt) => {
+                const selected = selectedPrice === opt.key;
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    data-testid={`price-${opt.key}`}
+                    onClick={() => setSelectedPrice(opt.key)}
+                    className={`flex-1 min-h-[64px] min-w-0 rounded-2xl border-2 text-sm font-semibold transition-all ${
+                      selected ? "border-[#4A9BD9] bg-[#EBF5FB] text-[#2e6f9f]" : "border-gray-100 bg-white text-gray-800"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="px-6 py-4 shrink-0 border-t border-gray-100">
+        <button
+          data-testid="button-price-next"
+          disabled={!selectedPrice}
           onClick={() => {
-            setQIdx(aiQuestions.length - 1);
-            setPhase("question");
+            const priceLabel = SCOPRI_PRICE_TIERS.find((p) => p.key === selectedPrice)?.label ?? "Qualsiasi";
+            setAnswers((prev) => ({ ...prev, prezzo: priceLabel }));
+            setPhase("preferences");
           }}
+          className="w-full py-3.5 rounded-xl font-semibold text-white bg-black transition-opacity disabled:opacity-40"
+        >
+          Continua
+        </button>
+      </div>
+    </div>
+  );
+
+  /* ── Phase: Zone map — OpenStreetMap (mappa reale) + selezione area ── */
+  if (phase === "zone-map") return (
+    <div className="flex flex-col min-h-full bg-gray-50">
+      <div className={`bg-white px-5 pb-4 ${embedded ? "pt-4" : "pt-12"}`}>
+        <button
+          type="button"
+          onClick={() => setPhase("question")}
           className="flex items-center gap-1 text-sm text-gray-400 mb-4"
         >
           <ChevronLeft size={16} /> Indietro
         </button>
         <div className="flex items-center gap-2 mb-1">
           <MapPin size={16} className="text-[#4A9BD9]" />
-          <p className="text-sm font-bold text-gray-900">Disegna un area sulla mappa</p>
+          <p className="text-sm font-bold text-gray-900">Zona su Torino</p>
         </div>
-        <p className="text-xs text-gray-500">Attiva lo strumento e delimita con il cursore la zona di ricerca.</p>
+        <p className="text-xs text-gray-500">
+          Mappa reale (strade e quartieri). Puoi spostarti e zoomare quando lo strumento di selezione è spento.
+          Attivalo per disegnare l&apos;area in cui l&apos;AI deve cercare i luoghi, oppure continua senza area.
+        </p>
       </div>
 
-      <div className="px-4 pt-3">
+      <div className="px-4 pt-1">
         <div className="rounded-2xl border border-gray-100 bg-white p-3">
           <div
             ref={mapDrawRef}
-            className="relative h-[220px] rounded-xl overflow-hidden border border-[#c7e3f4]"
-            style={{ touchAction: "none" }}
-            onMouseDown={startDraw}
-            onMouseMove={moveDraw}
-            onMouseUp={endDraw}
-            onMouseLeave={endDraw}
-            onTouchStart={startDrawTouch}
-            onTouchMove={moveDrawTouch}
-            onTouchEnd={endDrawTouch}
+            className="relative h-[220px] rounded-xl overflow-hidden border border-[#c7e3f4] gpu-smooth"
           >
-            <iframe
-              title="Torino Google Maps"
-              className={`absolute inset-0 w-full h-full ${isAreaSelectionActive ? "pointer-events-none" : ""}`}
-              src="https://www.google.com/maps?q=Torino&z=12&output=embed"
-              loading="lazy"
-            />
+            <ScopriTorinoLeafletMap freezeInteraction={isAreaSelectionActive} />
+            {isAreaSelectionActive && (
+              <div
+                className="absolute inset-0 z-[5]"
+                style={{ touchAction: "none" }}
+                onMouseDown={startDraw}
+                onMouseMove={moveDraw}
+                onMouseUp={endDraw}
+                onMouseLeave={endDraw}
+                onTouchStart={startDrawTouch}
+                onTouchMove={moveDrawTouch}
+                onTouchEnd={endDrawTouch}
+              />
+            )}
             {previewPoints.length > 1 && (
-              <svg className="absolute inset-0 w-full h-full">
+              <svg className="absolute inset-0 z-[6] w-full h-full pointer-events-none">
                 <polyline
                   points={toSvgPoints(previewPoints)}
                   fill="none"
@@ -887,14 +836,30 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
         <div className="rounded-xl border border-[#c7e3f4] bg-[#EBF5FB] p-3">
           <p className="text-xs font-semibold text-[#2e6f9f]">
             {drawnPolygon.length > 2
-              ? "Area selezionata pronta: l'AI cerchera luoghi dentro questa zona."
-              : "Disegna l'area con il mouse per filtrare i risultati."}
+              ? "Area selezionata: l'AI cercherà luoghi compatibili con questa zona sulla mappa."
+              : "Attiva lo strumento e disegna sull'area della mappa, oppure salta il passaggio."}
           </p>
         </div>
       </div>
 
-      <div className="px-6 py-4 shrink-0 border-t border-gray-100">
+      <div className="px-6 py-4 shrink-0 border-t border-gray-100 flex flex-col gap-2">
         <button
+          type="button"
+          data-testid="button-zone-skip"
+          onClick={() => {
+            setAnswers((prev) => {
+              const next = { ...prev, zona: "Tutta Torino" };
+              delete (next as { areaDisegnata?: string }).areaDisegnata;
+              return next;
+            });
+            setPhase("price");
+          }}
+          className="w-full py-3 rounded-xl font-semibold text-gray-700 bg-gray-100 border border-gray-200"
+        >
+          Continua senza area
+        </button>
+        <button
+          type="button"
           data-testid="button-zone-next"
           disabled={!isAreaSelectionActive || drawnPolygon.length < 3}
           onClick={() => {
@@ -903,66 +868,12 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
             const bounds = xs.length > 0 && ys.length > 0
               ? `bbox:${Math.min(...xs).toFixed(3)},${Math.min(...ys).toFixed(3)}-${Math.max(...xs).toFixed(3)},${Math.max(...ys).toFixed(3)}`
               : "bbox:torino";
-            const finalAnswers = { ...answers, zona: "Area disegnata Torino", areaDisegnata: bounds };
-            setAnswers(finalAnswers);
+            setAnswers((prev) => ({ ...prev, zona: "Area disegnata sulla mappa", areaDisegnata: bounds }));
             setPhase("price");
           }}
           className="w-full py-3.5 rounded-xl font-semibold text-white bg-black transition-opacity disabled:opacity-40"
         >
-          Continua
-        </button>
-      </div>
-    </div>
-  );
-
-  if (phase === "price") return (
-    <div className="flex flex-col min-h-full bg-gray-50">
-      <div className={`bg-white px-5 pb-5 ${embedded ? "pt-4" : "pt-12"}`}>
-        <button
-          onClick={() => setPhase("zone-map")}
-          className="flex items-center gap-1 text-sm text-gray-400 mb-4"
-        >
-          <ChevronLeft size={16} /> Indietro
-        </button>
-        <p className="text-sm font-bold text-gray-900">Seleziona il prezzo</p>
-        <p className="text-xs text-gray-500 mt-1">Filtriamo i luoghi anche per fascia di costo.</p>
-      </div>
-      <div className="flex-1 px-4 py-4">
-        <div className="grid grid-cols-2 gap-3">
-          {SCOPRI_PRICE_TIERS.filter(
-            (opt) => opt.key !== "gratis" && !/^gratis$/i.test(opt.label.trim()),
-          ).map((opt) => {
-            const selected = selectedPrice === opt.key;
-            return (
-              <button
-                key={opt.key}
-                type="button"
-                data-testid={`price-${opt.key}`}
-                onClick={() => setSelectedPrice(opt.key)}
-                className={`min-h-[64px] rounded-2xl border-2 text-sm font-semibold transition-all ${
-                  opt.key === "qualsiasi" ? "col-span-2 max-w-[160px] justify-self-center w-full " : ""
-                }${
-                  selected ? "border-[#4A9BD9] bg-[#EBF5FB] text-[#2e6f9f]" : "border-gray-100 bg-white text-gray-800"
-                }`}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      <div className="px-6 py-4 shrink-0 border-t border-gray-100">
-        <button
-          data-testid="button-price-next"
-          disabled={!selectedPrice}
-          onClick={() => {
-            const priceLabel = SCOPRI_PRICE_TIERS.find((p) => p.key === selectedPrice)?.label ?? "Qualsiasi";
-            setAnswers((prev) => ({ ...prev, prezzo: priceLabel }));
-            setPhase("preferences");
-          }}
-          className="w-full py-3.5 rounded-xl font-semibold text-white bg-black transition-opacity disabled:opacity-40"
-        >
-          Continua
+          Continua con area
         </button>
       </div>
     </div>
@@ -972,6 +883,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
     <div className="flex flex-col min-h-full bg-gray-50">
       <div className={`bg-white px-5 pb-5 ${embedded ? "pt-4" : "pt-12"}`}>
         <button
+          type="button"
           onClick={() => setPhase("price")}
           className="flex items-center gap-1 text-sm text-gray-400 mb-4"
         >
@@ -991,11 +903,12 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
       </div>
       <div className="px-6 py-4 shrink-0 border-t border-gray-100">
         <button
+          type="button"
           data-testid="button-preferences-search"
           onClick={() => {
             const finalAnswers = {
               ...answers,
-              prezzo: SCOPRI_PRICE_TIERS.find((p) => p.key === selectedPrice)?.label ?? "Qualsiasi",
+              prezzo: answers.prezzo ?? SCOPRI_PRICE_TIERS.find((p) => p.key === selectedPrice)?.label ?? "Qualsiasi",
             };
             setAnswers(finalAnswers);
             runVenueSearch(finalAnswers);
@@ -1042,9 +955,9 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
 
           {/* Summary chips */}
           <div className="flex flex-wrap gap-1.5 mt-3">
-            {sub && (
+            {subLabel && (
               <span className="text-xs bg-[#EBF5FB] text-[#4A9BD9] font-semibold px-2.5 py-1 rounded-full">
-                {sub.label}
+                {subLabel}
               </span>
             )}
             {answers.giorno && (
@@ -1102,12 +1015,29 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
                   <span className="flex items-center gap-1 text-xs text-amber-500 font-semibold">
                     <Star size={11} fill="currentColor" />{venue.rating}
                   </span>
+                  {typeof venue.score === "number" && (
+                    <span className="text-[11px] font-semibold text-[#2e6f9f] bg-[#EBF5FB] px-2 py-0.5 rounded-lg">
+                      Score {venue.score}
+                    </span>
+                  )}
+                  {venue.openStatus === "open" && (
+                    <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg">
+                      Aperto
+                    </span>
+                  )}
                 </div>
 
                 {/* AI description bubble */}
                 <div className="flex items-start gap-2 bg-gray-50 rounded-xl p-3">
                   <Sparkles size={12} className="text-[#4A9BD9] mt-0.5 shrink-0" />
-                  <p className="text-xs text-gray-600 leading-relaxed">{venue.description}</p>
+                  <div className="text-xs text-gray-600 leading-relaxed">
+                    <p>{venue.description}</p>
+                    {Array.isArray(venue.why) && venue.why.length > 0 && (
+                      <p className="mt-1 text-[11px] text-[#2e6f9f]">
+                        {venue.why.slice(0, 2).join(" · ")}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1124,14 +1054,14 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
                   <span className="text-[10px] font-semibold">Sito</span>
                 </a>
                 <a
-                  href={venue.safariUrl || venue.websiteUrl}
+                  href={venue.mapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${venue.name} ${venue.address}`)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  data-testid={`button-safari-${i}`}
+                  data-testid={`button-maps-${i}`}
                   className="flex flex-col items-center gap-1 py-3 text-gray-500 active:bg-gray-50 transition-colors"
                 >
-                  <ExternalLink size={15} />
-                  <span className="text-[10px] font-semibold">Safari</span>
+                  <MapPin size={15} />
+                  <span className="text-[10px] font-semibold">Maps</span>
                 </a>
                 <a
                   href={venue.bookingUrl}
@@ -1286,12 +1216,12 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
               data-testid="button-create-event-from-selected"
               onClick={() => {
                 const m = macro ?? lastScopriContextRef.current?.macro;
-                const sItem = sub ?? lastScopriContextRef.current?.sub;
-                if (!m || !sItem || !onCreateEvent) return;
+                const s = subLabel ?? lastScopriContextRef.current?.subLabel;
+                if (!m || !s || !onCreateEvent) return;
                 onCreateEvent({
                   venues: selectedResultVenues,
                   categoryKey: m,
-                  subcategoryLabel: sItem.label,
+                  subcategoryLabel: s,
                 });
               }}
               className="w-full py-3 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 active:opacity-80 transition-opacity"

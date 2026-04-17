@@ -1,3 +1,9 @@
+import {
+  getVotablePollTypesFromCounts,
+  senderCompletedVotablePoll,
+  type PollVoteLike,
+} from "@shared/eventPoll";
+
 /* ─── Contatti importati ─── */
 export interface MyContact {
   id: string;           // uuid locale
@@ -65,6 +71,39 @@ export function parseEvent(raw: any): ParsedEvent {
     timeOptions: safeParseJson(raw.timeOptions, []),
     venueOptions: safeParseJson(raw.venueOptions, []),
   };
+}
+
+/** Categorie del sondaggio con più di un’opzione (richiedono voto per aprire la chat). */
+export function getVotablePollTypesForEvent(event: ParsedEvent): Array<"date" | "time" | "venue"> {
+  return getVotablePollTypesFromCounts(
+    event.dateOptions.length,
+    event.timeOptions.length,
+    event.venueOptions.length,
+  );
+}
+
+/** L’utente ha votato tutte le categorie attualmente votabili (date/time/venue con almeno 2 opzioni). */
+export function userHasCompletedVotablePoll(
+  userName: string,
+  event: ParsedEvent,
+  votes: PollVoteLike[],
+): boolean {
+  return senderCompletedVotablePoll(
+    userName,
+    event.status,
+    event.dateOptions.length,
+    event.timeOptions.length,
+    event.venueOptions.length,
+    votes,
+  );
+}
+
+export type { PollVoteLike };
+
+/** Link assoluto alla chat dell’evento (inviti / condivisione). */
+export function getEventChatInviteUrl(eventId: number): string {
+  if (typeof window === "undefined" || !eventId) return "";
+  return `${window.location.origin}/events/${eventId}/chat`;
 }
 
 function safeParseJson<T>(val: any, fallback: T): T {

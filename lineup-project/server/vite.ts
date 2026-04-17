@@ -48,8 +48,34 @@ export async function setupVite(server: Server, app: Express) {
         `src="/src/main.tsx"`,
         `src="/src/main.tsx?v=${nanoid()}"`,
       );
+      // Prima di qualsiasi module: togli SW e Cache API (stessa origine = stessa porta).
+      // Altrimenti un SW registrato in precedenza su questa porta serve ancora HTML/JS vecchi
+      // finché non cambi porta (nuova "origine" = niente SW → sembra che "funzioni").
+      template = template.replace(
+        /<body([^>]*)>/,
+        `<body$1><script>
+(function(){
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.getRegistrations().then(function(regs){
+      regs.forEach(function(r){ r.unregister(); });
+    });
+  }
+  if ("caches" in window) {
+    caches.keys().then(function(keys){ keys.forEach(function(k){ caches.delete(k); }); });
+  }
+})();
+</script>`,
+      );
       const page = await vite.transformIndexHtml(url, template);
-      res.status(200).set({ "Content-Type": "text/html" }).end(page);
+      res
+        .status(200)
+        .set({
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+          Pragma: "no-cache",
+          Expires: "0",
+        })
+        .end(page);
     } catch (e) {
       vite.ssrFixStacktrace(e as Error);
       next(e);

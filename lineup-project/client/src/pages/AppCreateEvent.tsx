@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Star, MapPin, Tag, ChevronRight, ChevronLeft, Users, User, Search, UtensilsCrossed, Landmark, Dumbbell, Ticket, Gamepad2, PenLine, ArrowLeft, Plus, X, MessageCircle, Sunrise, Sun, Sunset, Moon, Coffee } from "lucide-react";
+import { CheckCircle2, Star, MapPin, Tag, ChevronRight, ChevronLeft, Users, User, Search, UtensilsCrossed, Landmark, Dumbbell, Ticket, Gamepad2, PenLine, ArrowLeft, Plus, X, MessageCircle, Sunrise, Sun, Sunset, Moon, Coffee, Link2, Copy, Check } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import {
   CONTACTS, GROUPS, ACTIVITIES, VENUES_BY_ACTIVITY,
-  getCurrentUser, getAvatarColor, getInitials, getMyContacts, type VenueOption, type ScopriToCreatePrefill
+  getCurrentUser, getAvatarColor, getInitials, getMyContacts, getEventChatInviteUrl, type VenueOption, type ScopriToCreatePrefill
 } from "@/lib/appUtils";
+import { PLAN_CATEGORIES, PLAN_SUBCATEGORIES, venuePoolKeyForPlanSubcategory } from "@/lib/planCategories";
 
 
 /* ─── Fasce orarie selezionabili (opzionali) ─── */
@@ -50,6 +51,7 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
   const [customSubcategory, setCustomSubcategory] = useState("");
   const [done, setDone] = useState(false);
   const [createdEventId, setCreatedEventId] = useState<number | null>(null);
+  const [inviteCopied, setInviteCopied] = useState(false);
   const [contactSearch, setContactSearch] = useState("");
   const [calMonth, setCalMonth] = useState(() => new Date());
 
@@ -57,6 +59,22 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const currentUser = getCurrentUser();
+
+  const inviteEventUrl = useMemo(
+    () => getEventChatInviteUrl(createdEventId ?? 0),
+    [createdEventId],
+  );
+
+  const copyInviteLink = async () => {
+    if (!inviteEventUrl) return;
+    try {
+      await navigator.clipboard.writeText(inviteEventUrl);
+      setInviteCopied(true);
+      setTimeout(() => setInviteCopied(false), 2000);
+    } catch {
+      toast({ title: "Impossibile copiare", description: "Seleziona il link e copialo manualmente.", variant: "destructive" });
+    }
+  };
 
   const idxToTime = (i: number) => {
     const h = Math.floor(i / 4);
@@ -123,67 +141,15 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
     selectedContacts.length > 1 ? `${selectedContacts[0]} +${selectedContacts.length - 1}` : ""
   );
 
-  const SUBCATEGORY_TO_KEY: Record<string, string> = {
-    aperitivo: "aperitivo", cena: "cena", colazione: "colazione",
-    pranzo: "pranzo", spuntino: "spuntino",
-    mostre: "mostre", musei: "musei",
-    "arti marziali": "sport", basket: "sport", "beach volley": "sport",
-    bici: "sport", calcio: "calcio", camminata: "sport", canoa: "sport",
-    corsa: "sport", hockey: "sport", padel: "padel", palestra: "palestra",
-    pallavolo: "sport", pattinaggio: "sport", "ping pong": "sport",
-    piscina: "piscina", sci: "montagna", snowboard: "montagna", tennis: "tennis",
-    concerti: "concerti", discoteche: "discoteche", festival: "festival",
-    fiere: "fiere", teatro: "teatro",
-    "giro in centro": "altro", "giornata al mare": "mare",
-    mercatino: "fiere", passeggiata: "altro", uscita: "altro",
-    "uscita in montagna": "montagna",
-    arrampicata: "sport", skateboard: "sport", "skateboard park": "sport",
-    "tiro con l'arco": "sport", "parchi per ciclismo": "sport",
-    "cucina alta e innovazione": "cena",
-    "cucina libanese": "cena",
-    "cucina turca": "cena",
-    "cucina cinese": "cena",
-    "cucina sudamericana": "cena",
-    "l aperitivo storico": "aperitivo",
-    apericena: "aperitivo",
-    "aperitivo alternativo": "aperitivo",
-    "merenda sinoira": "aperitivo",
-    "aperitivo popolare": "aperitivo",
-    "aperitivo fusion": "aperitivo",
-  };
-
-  const firstActivity = selectedSubcategories[0]?.toLowerCase() ?? null;
-  const venueKey = firstActivity ? (SUBCATEGORY_TO_KEY[firstActivity] ?? firstActivity) : null;
+  const venueKey = selectedSubcategories[0]
+    ? venuePoolKeyForPlanSubcategory(selectedSubcategories[0])
+    : null;
   const allVenues = venueKey ? (VENUES_BY_ACTIVITY[venueKey] ?? VENUES_BY_ACTIVITY.altro) : [];
   const activityVenues = venueSearch.trim()
     ? allVenues.filter(v => v.name.toLowerCase().includes(venueSearch.toLowerCase()))
     : allVenues;
 
-  const CATEGORIES = [
-    { key: "cibo",    label: "Cibo",    Icon: UtensilsCrossed, cols: 3, radius: "28px 10px 28px 10px" },
-    { key: "cultura", label: "Cultura", Icon: Landmark,         cols: 2, radius: "10px 28px 10px 28px" },
-    { key: "sport",   label: "Sport",   Icon: Dumbbell,         cols: 2, radius: "28px 10px 10px 28px" },
-    { key: "eventi",  label: "Eventi",  Icon: Ticket,           cols: 1, radius: "10px 10px 28px 28px" },
-    { key: "svago",   label: "Svago",   Icon: Gamepad2,         cols: 2, radius: "10px 28px 28px 10px" },
-  ] as const;
-
-  const catLabelForBanner = CATEGORIES.find(c => c.key === selectedCategory)?.label ?? "";
-
-  const SUBCATEGORIES: Record<string, string[]> = {
-    cibo:    [
-      "Aperitivo", "Cena", "Colazione", "Pranzo", "Spuntino", "Brunch",
-      "Cucina alta e innovazione", "Cucina libanese", "Cucina turca", "Cucina cinese", "Cucina sudamericana",
-      "L aperitivo storico", "Apericena", "Aperitivo alternativo", "Merenda sinoira", "Aperitivo popolare", "Aperitivo fusion",
-    ],
-    cultura: ["Mostre", "Musei"],
-    sport:   [
-      "Arti marziali", "Basket", "Beach volley", "Bici", "Calcio", "Camminata", "Canoa", "Corsa", "Hockey",
-      "Padel", "Palestra", "Pallavolo", "Pattinaggio", "Ping pong", "Piscina", "Sci", "Snowboard", "Tennis",
-      "Arrampicata", "Skateboard", "Skateboard park", "Tiro con l'arco", "Parchi per ciclismo", "Nuoto",
-    ],
-    eventi:  ["Concerti", "Discoteche", "Festival", "Fiere", "Teatro"],
-    svago:   ["Giro in centro", "Giornata al mare", "Mercatino", "Passeggiata", "Uscita", "Uscita in montagna"],
-  };
+  const catLabelForBanner = PLAN_CATEGORIES.find(c => c.key === selectedCategory)?.label ?? "";
 
   const toggleSubcategory = (sub: string) => {
     setSelectedSubcategories(prev =>
@@ -343,7 +309,7 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
           <div className="px-5 pt-4 pb-3 flex-1 overflow-y-auto no-scrollbar min-h-0">
             <p className="text-sm text-gray-500 mb-4">Scegli una categoria per la tua proposta di attività.</p>
             <div className="grid grid-cols-5 gap-2">
-              {CATEGORIES.map(({ key, label, Icon, cols, radius }) => (
+              {PLAN_CATEGORIES.map(({ key, label, Icon, cols, radius }) => (
                 <button
                   key={key}
                   data-testid={`category-${key}`}
@@ -384,14 +350,14 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
               className="flex items-center gap-2 mb-4 text-sm font-semibold text-gray-500 hover:text-black transition-colors"
             >
               <ArrowLeft size={16} />
-              {CATEGORIES.find(c => c.key === selectedCategory)?.label}
+              {PLAN_CATEGORIES.find(c => c.key === selectedCategory)?.label}
             </button>
 
             <p className="text-sm text-gray-500 mb-3">Scegli una sottocategoria.</p>
 
             {/* Pillole sottocategorie */}
             <div className="flex flex-wrap gap-2">
-              {(SUBCATEGORIES[selectedCategory] ?? []).map(sub => (
+              {(PLAN_SUBCATEGORIES[selectedCategory] ?? []).map(sub => (
                 <button
                   key={sub}
                   data-testid={`subcategory-${sub}`}
@@ -961,21 +927,52 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
 
   // Success
   if (done) return (
-    <div className="flex flex-col items-center justify-center h-full py-16 px-6 text-center">
-      <div className="w-20 h-20 rounded-full bg-emerald-50 flex items-center justify-center mb-4 animate-in zoom-in duration-300">
+    <div className="flex flex-col items-stretch justify-start min-h-0 h-full py-6 px-4 text-center w-full max-w-md mx-auto overflow-y-auto no-scrollbar">
+      <div className="w-20 h-20 rounded-full bg-emerald-50 flex items-center justify-center mb-4 mx-auto shrink-0 animate-in zoom-in duration-300">
         <CheckCircle2 size={40} className="text-emerald-500" />
       </div>
       <h3 className="text-xl font-bold text-gray-900">Proposta di evento inviata!</h3>
-      <p className="text-sm text-gray-400 mt-2">
+      <p className="text-sm text-gray-400 mt-2 px-1">
         {groupLabel} riceverà la notifica per votare
       </p>
+
+      {inviteEventUrl && (
+        <div className="mt-6 text-left w-full min-w-0 rounded-2xl border border-gray-100 bg-gray-50/80 p-3 shrink-0">
+          <div className="flex items-center gap-2 mb-1.5">
+            <Link2 size={14} className="text-[#4A9BD9] shrink-0" />
+            <p className="text-xs font-bold text-gray-800">Link per LineUp</p>
+          </div>
+          <p className="text-[11px] text-gray-500 leading-snug mb-2">
+            Copia e invia al gruppo: apre LineUp sull&apos;evento.
+          </p>
+          <div className="flex gap-2 items-stretch min-w-0">
+            <input
+              readOnly
+              value={inviteEventUrl}
+              className="flex-1 min-w-0 rounded-xl border border-gray-200 bg-white px-2.5 py-2 text-[11px] font-mono text-gray-700 outline-none"
+              onFocus={(e) => e.target.select()}
+            />
+            <button
+              type="button"
+              data-testid="button-copy-invite-link"
+              onClick={copyInviteLink}
+              className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white bg-[#4A9BD9] active:scale-[0.98]"
+            >
+              {inviteCopied ? <Check size={14} /> : <Copy size={14} />}
+              {inviteCopied ? "Fatto" : "Copia"}
+            </button>
+          </div>
+        </div>
+      )}
+
       <button
         data-testid="button-close-success"
+        type="button"
         onClick={() => {
           onClose();
           if (createdEventId) navigate(`/events/${createdEventId}/chat`);
         }}
-        className="mt-8 flex items-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-white"
+        className="mt-6 flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-white w-full shrink-0"
         style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}
       >
         <MessageCircle size={18} />

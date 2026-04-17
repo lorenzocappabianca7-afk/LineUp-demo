@@ -124,9 +124,8 @@ app.use((req, res, next) => {
   }
 
   // ALWAYS serve the app on the port specified in the environment variable PORT.
-  // Default 5001: on macOS, port 5000 is often taken by AirPlay Receiver (ControlCenter),
-  // which makes http://localhost:5000 show "site can't be reached" or the wrong service.
-  const port = parseInt(process.env.PORT || "5001", 10);
+  // Default 5174: evita 5000 (spesso AirPlay su macOS) e 5001 se usata da altre istanze / anteprime.
+  const port = parseInt(process.env.PORT || "5174", 10);
   httpServer.listen(
     {
       port,

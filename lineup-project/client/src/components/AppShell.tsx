@@ -26,7 +26,7 @@ export default function AppShell({ children }: AppShellProps) {
       <div className="relative flex flex-col w-full max-w-sm h-screen bg-[#F0F4F8] overflow-hidden shadow-2xl">
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto pb-14 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex-1 overflow-y-auto overscroll-y-contain pb-14 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]">
           {children}
         </div>
 
@@ -39,12 +39,13 @@ export default function AppShell({ children }: AppShellProps) {
                 return (
                   <Link key={tab.path} href={tab.path}>
                     <button
+                      type="button"
                       data-testid={`nav-${tab.label.toLowerCase()}`}
-                      className="flex items-center justify-center p-2"
+                      className="flex items-center justify-center rounded-xl p-2 transition-transform duration-200 ease-out active:scale-95 motion-reduce:transition-none motion-reduce:active:scale-100"
                     >
                       <tab.icon
                         size={21}
-                        className="transition-colors"
+                        className="transition-[color,stroke-width] duration-200 ease-out motion-reduce:transition-none"
                         style={{ color: active ? "#4A9BD9" : "#9CA3AF" }}
                         strokeWidth={active ? 2.5 : 1.8}
                       />

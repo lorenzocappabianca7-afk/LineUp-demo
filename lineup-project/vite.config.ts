@@ -37,5 +37,9 @@ export default defineConfig({
       strict: true,
       deny: ["**/.*"],
     },
+    /** In dev evita che browser/anteprima IDE servano moduli o asset da cache HTTP. */
+    headers: {
+      "Cache-Control": "no-store",
+    },
   },
 });

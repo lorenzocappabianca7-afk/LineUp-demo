@@ -7,8 +7,12 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
-  parseEvent, getActivity, getAvatarColor, getInitials,
+  parseEvent,
+  getActivity,
+  getAvatarColor,
+  getInitials,
   getCurrentUser,
+  userHasCompletedVotablePoll,
 } from "@/lib/appUtils";
 
 interface AppVote {
@@ -158,6 +162,7 @@ export default function AppEventDetail() {
   const event = parseEvent(rawEvent);
   const act = getActivity(event.activity);
   const isPlanning = event.status === "planning";
+  const canUseChat = userHasCompletedVotablePoll(currentUser, event, votes);
 
   const dateVotes = groupVotes(votes, "date");
   const timeVotes = groupVotes(votes, "time");
@@ -192,21 +197,41 @@ export default function AppEventDetail() {
             </button>
           </Link>
           <div className="flex-1" />
-          <Link href={`/events/${id}/chat`}>
+          {canUseChat || !isPlanning ? (
+            <Link href={`/events/${id}/chat`}>
+              <button
+                data-testid="button-go-chat"
+                type="button"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold"
+                style={{ background: "#EBF5FB", color: "#4A9BD9" }}
+              >
+                <MessageCircle size={15} />
+                Chat
+                {messages.length > 0 && (
+                  <span className="bg-[#4A9BD9] text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                    {messages.length}
+                  </span>
+                )}
+              </button>
+            </Link>
+          ) : (
             <button
-              data-testid="button-go-chat"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold"
+              type="button"
+              data-testid="button-go-chat-locked"
+              onClick={() =>
+                toast({
+                  title: "Completa il sondaggio",
+                  description:
+                    "Vota tutte le categorie con più opzioni (giorno, ora, luogo) prima di aprire la chat.",
+                })
+              }
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold opacity-50"
               style={{ background: "#EBF5FB", color: "#4A9BD9" }}
             >
               <MessageCircle size={15} />
               Chat
-              {messages.length > 0 && (
-                <span className="bg-[#4A9BD9] text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                  {messages.length}
-                </span>
-              )}
             </button>
-          </Link>
+          )}
         </div>
 
         <div className="flex items-center gap-4">
@@ -323,95 +348,168 @@ export default function AppEventDetail() {
             <section>
               <h3 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
                 📅 Quando?
-                <span className="text-xs text-gray-400 font-normal">
-                  ({votes.filter(v => v.voteType === "date").length} voti)
-                </span>
+                {event.dateOptions.length > 1 && (
+                  <span className="text-xs text-gray-400 font-normal">
+                    ({votes.filter((v) => v.voteType === "date").length} voti)
+                  </span>
+                )}
               </h3>
-              <div className="space-y-2">
-                {event.dateOptions.map(date => {
-                  const group = dateVotes.find(g => g.value === date);
-                  return (
-                    <VoteBar
+              {event.dateOptions.length <= 1 ? (
+                <div className="space-y-2">
+                  {(event.dateOptions[0] ? [event.dateOptions[0]] : ["—"]).map((date) => (
+                    <div
                       key={date}
-                      value={date}
-                      voters={group?.voters ?? []}
-                      total={totalParticipants}
-                      myVote={isMine("date", date)}
-                      onVote={() => castVote({ voteType: "date", voteValue: date })}
-                      disabled={false}
-                    />
-                  );
-                })}
-              </div>
+                      className="w-full p-3 rounded-xl border-2 border-gray-100 bg-gray-50 text-left text-sm font-semibold text-gray-800"
+                    >
+                      {date}
+                      <span className="block text-[10px] font-medium text-gray-400 mt-1">
+                        Predefinito dall&apos;organizzatore
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {event.dateOptions.map((date) => {
+                    const group = dateVotes.find((g) => g.value === date);
+                    return (
+                      <VoteBar
+                        key={date}
+                        value={date}
+                        voters={group?.voters ?? []}
+                        total={totalParticipants}
+                        myVote={isMine("date", date)}
+                        onVote={() => castVote({ voteType: "date", voteValue: date })}
+                        disabled={false}
+                      />
+                    );
+                  })}
+                </div>
+              )}
             </section>
 
             {/* Time voting */}
             <section>
               <h3 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
                 🕐 A che ora?
-                <span className="text-xs text-gray-400 font-normal">
-                  ({votes.filter(v => v.voteType === "time").length} voti)
-                </span>
+                {event.timeOptions.length > 1 && (
+                  <span className="text-xs text-gray-400 font-normal">
+                    ({votes.filter((v) => v.voteType === "time").length} voti)
+                  </span>
+                )}
               </h3>
-              <div className="space-y-2">
-                {event.timeOptions.map(time => {
-                  const group = timeVotes.find(g => g.value === time);
-                  return (
-                    <VoteBar
+              {event.timeOptions.length <= 1 ? (
+                <div className="space-y-2">
+                  {(event.timeOptions[0] ? [event.timeOptions[0]] : ["—"]).map((time) => (
+                    <div
                       key={time}
-                      value={time}
-                      voters={group?.voters ?? []}
-                      total={totalParticipants}
-                      myVote={isMine("time", time)}
-                      onVote={() => castVote({ voteType: "time", voteValue: time })}
-                      disabled={false}
-                    />
-                  );
-                })}
-              </div>
+                      className="w-full p-3 rounded-xl border-2 border-gray-100 bg-gray-50 text-left text-sm font-semibold text-gray-800"
+                    >
+                      {time}
+                      <span className="block text-[10px] font-medium text-gray-400 mt-1">
+                        Predefinito dall&apos;organizzatore
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {event.timeOptions.map((time) => {
+                    const group = timeVotes.find((g) => g.value === time);
+                    return (
+                      <VoteBar
+                        key={time}
+                        value={time}
+                        voters={group?.voters ?? []}
+                        total={totalParticipants}
+                        myVote={isMine("time", time)}
+                        onVote={() => castVote({ voteType: "time", voteValue: time })}
+                        disabled={false}
+                      />
+                    );
+                  })}
+                </div>
+              )}
             </section>
 
             {/* Venue voting */}
             <section>
               <h3 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
                 📍 Dove?
-                <span className="text-xs text-gray-400 font-normal">
-                  ({votes.filter(v => v.voteType === "venue").length} voti)
-                </span>
+                {event.venueOptions.length > 1 && (
+                  <span className="text-xs text-gray-400 font-normal">
+                    ({votes.filter((v) => v.voteType === "venue").length} voti)
+                  </span>
+                )}
               </h3>
-              <div className="space-y-2">
-                {event.venueOptions.map(venue => {
-                  const group = venueVotes.find(g => g.value === venue.name);
-                  return (
-                    <div key={venue.name} className="relative">
-                      <VoteBar
-                        value={venue.name}
-                        voters={group?.voters ?? []}
-                        total={totalParticipants}
-                        myVote={isMine("venue", venue.name)}
-                        onVote={() => castVote({ voteType: "venue", voteValue: venue.name })}
-                        disabled={false}
-                      />
-                      <div className="px-3 pb-2 -mt-1 flex items-center gap-3">
-                        <span className="flex items-center gap-0.5 text-xs text-amber-500 font-semibold">
-                          <Star size={10} fill="currentColor" />
-                          {venue.rating}
-                        </span>
-                        <span className="flex items-center gap-0.5 text-xs text-gray-400">
-                          <MapPin size={10} />
-                          {venue.distance}
-                        </span>
-                        {venue.discount && (
-                          <span className="flex items-center gap-0.5 text-[10px] text-emerald-600 font-semibold">
-                            <Tag size={9} />
-                            {venue.discount}
+              {event.venueOptions.length <= 1 ? (
+                <div className="space-y-2">
+                  {event.venueOptions.length === 0 ? (
+                    <p className="text-xs text-gray-400 px-1">Nessun luogo indicato nel sondaggio.</p>
+                  ) : (
+                    event.venueOptions.map((venue) => (
+                      <div key={venue.name} className="relative">
+                        <div className="w-full p-3 rounded-xl border-2 border-gray-100 bg-gray-50 text-left text-sm font-semibold text-gray-800">
+                          {venue.name}
+                          <span className="block text-[10px] font-medium text-gray-400 mt-1">
+                            Predefinito dall&apos;organizzatore
                           </span>
-                        )}
+                        </div>
+                        <div className="px-3 pb-2 -mt-1 flex items-center gap-3">
+                          <span className="flex items-center gap-0.5 text-xs text-amber-500 font-semibold">
+                            <Star size={10} fill="currentColor" />
+                            {venue.rating}
+                          </span>
+                          <span className="flex items-center gap-0.5 text-xs text-gray-400">
+                            <MapPin size={10} />
+                            {venue.distance}
+                          </span>
+                          {venue.discount && (
+                            <span className="flex items-center gap-0.5 text-[10px] text-emerald-600 font-semibold">
+                              <Tag size={9} />
+                              {venue.discount}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    ))
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {event.venueOptions.map((venue) => {
+                    const group = venueVotes.find((g) => g.value === venue.name);
+                    return (
+                      <div key={venue.name} className="relative">
+                        <VoteBar
+                          value={venue.name}
+                          voters={group?.voters ?? []}
+                          total={totalParticipants}
+                          myVote={isMine("venue", venue.name)}
+                          onVote={() => castVote({ voteType: "venue", voteValue: venue.name })}
+                          disabled={false}
+                        />
+                        <div className="px-3 pb-2 -mt-1 flex items-center gap-3">
+                          <span className="flex items-center gap-0.5 text-xs text-amber-500 font-semibold">
+                            <Star size={10} fill="currentColor" />
+                            {venue.rating}
+                          </span>
+                          <span className="flex items-center gap-0.5 text-xs text-gray-400">
+                            <MapPin size={10} />
+                            {venue.distance}
+                          </span>
+                          {venue.discount && (
+                            <span className="flex items-center gap-0.5 text-[10px] text-emerald-600 font-semibold">
+                              <Tag size={9} />
+                              {venue.discount}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </section>
           </>
         )}

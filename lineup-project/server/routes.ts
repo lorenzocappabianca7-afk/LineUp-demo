@@ -4,24 +4,35 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
 import OpenAI from "openai";
-
-const aiVenueSchema = z.object({
-  name: z.string().min(2),
-  address: z.string().min(6),
-  description: z.string().min(10),
-  rating: z.number().min(0).max(5),
-  priceRange: z.string().min(1),
-  bookingUrl: z.string().url(),
-  websiteUrl: z.string().url(),
-  mapsUrl: z.string().url(),
-  safariUrl: z.string().url().optional(),
-});
-
-const aiVenueResponseSchema = z.object({
-  venues: z.array(aiVenueSchema).min(1).max(12),
-});
+import { buildUserPreferencesFromScopri } from "@shared/aiPrompts";
+import { generateSystemPrompt, generateUserPrompt } from "../client/src/lib/ai-provider";
+import {
+  assertUserPreferencesForAi,
+  expandScopriAiSuggestionToVenue,
+  scopriVenuePipelineSchema as aiVenueSchema,
+  validateScopriAiVenuesResponse,
+  validateSuggestions,
+} from "@shared/aiValidation";
+import { senderCompletedVotablePoll } from "@shared/eventPoll";
 
 type AiVenue = z.infer<typeof aiVenueSchema>;
+type SearchIntent = "food" | "sport" | "culture" | "nightlife" | "outdoor" | "generic";
+type ScopriConstraintMemory = {
+  category?: string;
+  subcategory?: string;
+  giorno?: string;
+  prezzo?: string;
+  mezzo?: string;
+  areaDisegnata?: string;
+  zonaLabel?: string;
+};
+type GeoVenue = AiVenue & {
+  lat?: number;
+  lng?: number;
+  openStatus?: "open" | "closed" | "unknown";
+  score?: number;
+  why?: string[];
+};
 
 const TORINO_FALLBACK_VENUES: AiVenue[] = [
   {
@@ -247,6 +258,59 @@ const TORINO_DISCOTECHE_FALLBACK: AiVenue[] = [
   },
 ];
 
+const TORINO_SPORT_FALLBACK: AiVenue[] = [
+  {
+    name: "Jolly Joker Club",
+    address: "Corso San Maurizio 52, Torino",
+    description: "Club sportivo con campi da tennis e padel, adatto a partite in gruppo.",
+    rating: 4.4,
+    priceRange: "€€",
+    bookingUrl: "https://www.playtomic.io/",
+    websiteUrl: "https://www.jollyjokertorino.it/",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Jolly+Joker+Club+Torino",
+  },
+  {
+    name: "Sporting Club CH4",
+    address: "Via Trofarello 10, Torino",
+    description: "Centro sportivo con campi da tennis, aree fitness e servizi per prenotazioni.",
+    rating: 4.3,
+    priceRange: "€€",
+    bookingUrl: "https://www.sportingclubch4.it/",
+    websiteUrl: "https://www.sportingclubch4.it/",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Sporting+Club+CH4+Torino",
+  },
+  {
+    name: "Cus Torino Tennis",
+    address: "Via Panetti 30, Torino",
+    description: "Impianto universitario con campi da tennis e attivita sportive prenotabili.",
+    rating: 4.2,
+    priceRange: "€",
+    bookingUrl: "https://www.custorino.it/",
+    websiteUrl: "https://www.custorino.it/",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=CUS+Torino+Tennis",
+  },
+  {
+    name: "Circolo della Stampa Sporting",
+    address: "Corso Agnelli 67, Torino",
+    description: "Storico circolo sportivo con campi tennis e servizi dedicati.",
+    rating: 4.5,
+    priceRange: "€€€",
+    bookingUrl: "https://www.sporting.to.it/",
+    websiteUrl: "https://www.sporting.to.it/",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Circolo+della+Stampa+Sporting+Torino",
+  },
+  {
+    name: "Master Club 2.0",
+    address: "Corso Moncalieri 494, Torino",
+    description: "Club sportivo con campi da racchetta e servizi leisure.",
+    rating: 4.2,
+    priceRange: "€€",
+    bookingUrl: "https://www.masterclub.it/",
+    websiteUrl: "https://www.masterclub.it/",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Master+Club+Torino",
+  },
+];
+
 function isDiscotecaSubcategory(subcategory: string): boolean {
   const s = String(subcategory).toLowerCase();
   return s.includes("discotec") || s.includes("night club") || s.includes("nightclub");
@@ -280,8 +344,63 @@ function isSpecificFoodVenueSubcategory(subcategory: string): boolean {
   );
 }
 
+export function detectIntent(category: string, subcategory: string): SearchIntent {
+  const c = `${category} ${subcategory}`.toLowerCase();
+  if (isDiscotecaSubcategory(subcategory)) return "nightlife";
+  if (isSpecificFoodVenueSubcategory(subcategory) || c.includes("cibo")) return "food";
+  if (/\b(tennis|padel|sport|palestra|piscina|calcio|corsa|yoga|basket|beach volley|arrampicata)\b/i.test(c)) return "sport";
+  if (/\b(muse|cinema|teatro|mostr|concert|festival|fier)\b/i.test(c)) return "culture";
+  if (/\b(mare|montagna|giro|passeggiata|parco)\b/i.test(c)) return "outdoor";
+  return "generic";
+}
+
+function looksFoodLike(v: AiVenue): boolean {
+  const t = `${v.name} ${v.description}`.toLowerCase();
+  return /\b(ristor|tratt|oster|bistr|bar|caff|caf[eé]|pasticc|gelat|mercato)\b/.test(t);
+}
+
+function looksSportLike(v: AiVenue): boolean {
+  const t = `${v.name} ${v.description}`.toLowerCase();
+  return /\b(tennis|padel|sport|palestra|campo|club|circolo|fitness|piscina)\b/.test(t);
+}
+
+function looksCultureLike(v: AiVenue): boolean {
+  const t = `${v.name} ${v.description}`.toLowerCase();
+  return /\b(muse|teatro|cinema|mostra|festival|concerto|arena|galleria)\b/.test(t);
+}
+
+function looksNightlifeLike(v: AiVenue): boolean {
+  const t = `${v.name} ${v.description}`.toLowerCase();
+  return /\b(discotec|night\s*club|club|dj|dance|serata)\b/.test(t);
+}
+
+export function venueMatchesIntent(venue: AiVenue, category: string, subcategory: string): boolean {
+  const intent = detectIntent(category, subcategory);
+  const sub = subcategory.toLowerCase();
+  if (sub.includes("tennis")) {
+    const t = `${venue.name} ${venue.description}`.toLowerCase();
+    if (!/\b(tennis|racchetta|circolo|club)\b/.test(t)) return false;
+  }
+  if (sub.includes("padel")) {
+    const t = `${venue.name} ${venue.description}`.toLowerCase();
+    if (!/\b(padel|racchetta|club|circolo)\b/.test(t)) return false;
+  }
+
+  if (intent === "food") return looksFoodLike(venue) && !isGenericNonSpecificFoodVenue(venue.name, venue.description);
+  if (intent === "sport") return looksSportLike(venue);
+  if (intent === "culture") return looksCultureLike(venue);
+  if (intent === "nightlife") return looksNightlifeLike(venue) && !looksLikePubOrCafeNotDisco(venue.name, venue.description);
+  return true;
+}
+
+export function filterByRequestedPrice(venues: AiVenue[], requested: string | undefined): AiVenue[] {
+  const req = String(requested ?? "").trim();
+  if (!req || req === "Qualsiasi") return venues;
+  return venues.filter((v) => normalizePriceRange(v.priceRange) === req);
+}
+
 /** Piazze intere, parchi, ecc. non sono luoghi dove "fare colazione" nel senso richiesto dall'utente. */
-function isGenericNonSpecificFoodVenue(name: string, description: string): boolean {
+export function isGenericNonSpecificFoodVenue(name: string, description: string): boolean {
   const n = name.trim();
   const t = `${n}\n${description}`.toLowerCase();
   if (/^piazza\s+/i.test(n)) return true;
@@ -320,7 +439,7 @@ function sanitizeAiVenues(rawVenues: unknown[]): AiVenue[] {
     if (!parsed.success) continue;
     const venue = parsed.data;
     if (!isTorinoAddress(venue.address)) continue;
-    const key = venue.name.trim().toLowerCase();
+    const key = normalizeVenueIdentity(venue.name, venue.address);
     if (unique.has(key)) continue;
     unique.set(key, {
       ...venue,
@@ -331,7 +450,32 @@ function sanitizeAiVenues(rawVenues: unknown[]): AiVenue[] {
   return [...unique.values()];
 }
 
-function getFallbackVenuesForSubcategory(subcategory: string): AiVenue[] {
+export function normalizeVenueIdentity(name: string, address: string): string {
+  const normalize = (v: string) =>
+    v
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\b(club|circolo|sporting|torino|ssd|asd)\b/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  return `${normalize(name)}|${normalize(address)}`;
+}
+
+function dedupeStrong(venues: GeoVenue[]): GeoVenue[] {
+  const seen = new Set<string>();
+  const out: GeoVenue[] = [];
+  for (const v of venues) {
+    const id = normalizeVenueIdentity(v.name, v.address);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(v);
+  }
+  return out;
+}
+
+function getFallbackVenuesForSubcategory(subcategory: string, category?: string): AiVenue[] {
   const sub = String(subcategory).toLowerCase();
 
   if (isDiscotecaSubcategory(subcategory)) {
@@ -340,6 +484,9 @@ function getFallbackVenuesForSubcategory(subcategory: string): AiVenue[] {
 
   if (isSpecificFoodVenueSubcategory(subcategory)) {
     return [...TORINO_CIBO_LOCALI_FALLBACK];
+  }
+  if (detectIntent(String(category ?? ""), subcategory) === "sport") {
+    return [...TORINO_SPORT_FALLBACK];
   }
 
   const filtered = TORINO_FALLBACK_VENUES.filter((v) => {
@@ -364,7 +511,34 @@ function getFallbackVenuesForSubcategory(subcategory: string): AiVenue[] {
       merged.push(venue);
     }
   }
-  return merged.slice(0, 8);
+  return merged.slice(0, 10);
+}
+
+const aiWarmupCache = new Map<string, { at: number; venues: AiVenue[] }>();
+const aiConstraintMemory = new Map<string, { at: number; constraints: ScopriConstraintMemory }>();
+
+function cacheKeyForSearch(category: string, subcategory: string): string {
+  return `${category.trim().toLowerCase()}::${subcategory.trim().toLowerCase()}`;
+}
+
+function cleanConstraintMemory(input: ScopriConstraintMemory): ScopriConstraintMemory {
+  const out: ScopriConstraintMemory = {};
+  for (const [k, v] of Object.entries(input)) {
+    if (typeof v === "string" && v.trim().length > 0) {
+      (out as Record<string, string>)[k] = v.trim();
+    }
+  }
+  return out;
+}
+
+function mergeConstraintMemory(
+  previous: ScopriConstraintMemory | undefined,
+  current: ScopriConstraintMemory,
+): ScopriConstraintMemory {
+  return {
+    ...(previous ?? {}),
+    ...cleanConstraintMemory(current),
+  };
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -411,7 +585,13 @@ async function validateVenueLinks(venues: AiVenue[]): Promise<AiVenue[]> {
   const checks = await Promise.all(
     venues.map(async (venue) => {
       const websiteOk = await isUrlReachable(venue.websiteUrl);
-      if (!websiteOk) return null;
+      if (!websiteOk) {
+        return {
+          ...venue,
+          websiteUrl: venue.mapsUrl || buildMapsUrl(venue.name, venue.address),
+          bookingUrl: venue.mapsUrl || buildMapsUrl(venue.name, venue.address),
+        };
+      }
 
       const bookingOk = await isUrlReachable(venue.bookingUrl);
       return {
@@ -421,6 +601,92 @@ async function validateVenueLinks(venues: AiVenue[]): Promise<AiVenue[]> {
     }),
   );
   return checks.filter((v): v is AiVenue => Boolean(v));
+}
+
+const TORINO_GEO_BOUNDS = {
+  north: 45.133,
+  south: 45.02,
+  west: 7.57,
+  east: 7.78,
+};
+
+function bboxToLatLngBounds(areaDisegnata?: string): { minLat: number; maxLat: number; minLng: number; maxLng: number } | null {
+  if (!areaDisegnata || !areaDisegnata.startsWith("bbox:")) return null;
+  const m = areaDisegnata.match(/bbox:([0-9.]+),([0-9.]+)-([0-9.]+),([0-9.]+)/);
+  if (!m) return null;
+  const x1 = Number(m[1]); const y1 = Number(m[2]); const x2 = Number(m[3]); const y2 = Number(m[4]);
+  const minX = Math.min(x1, x2); const maxX = Math.max(x1, x2);
+  const minY = Math.min(y1, y2); const maxY = Math.max(y1, y2);
+  const toLng = (x: number) => TORINO_GEO_BOUNDS.west + x * (TORINO_GEO_BOUNDS.east - TORINO_GEO_BOUNDS.west);
+  const toLat = (y: number) => TORINO_GEO_BOUNDS.north - y * (TORINO_GEO_BOUNDS.north - TORINO_GEO_BOUNDS.south);
+  const minLng = toLng(minX);
+  const maxLng = toLng(maxX);
+  const maxLat = toLat(minY);
+  const minLat = toLat(maxY);
+  return { minLat, maxLat, minLng, maxLng };
+}
+
+function isInsideBounds(v: GeoVenue, bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number } | null): boolean {
+  if (!bounds) return true;
+  if (typeof v.lat !== "number" || typeof v.lng !== "number") return true;
+  return v.lat >= bounds.minLat && v.lat <= bounds.maxLat && v.lng >= bounds.minLng && v.lng <= bounds.maxLng;
+}
+
+function extractRequestedWeekdays(giorno?: string): number[] {
+  if (!giorno) return [];
+  const t = giorno.toLowerCase();
+  const map: Record<string, number> = { lun: 1, mar: 2, mer: 3, gio: 4, ven: 5, sab: 6, dom: 0 };
+  return Object.entries(map).filter(([k]) => t.includes(k)).map(([, v]) => v);
+}
+
+function dayRuleMatches(openingText: string[] | undefined, weekdays: number[]): boolean {
+  if (!openingText || openingText.length === 0 || weekdays.length === 0) return true;
+  const englishDays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  const lines = openingText.map((l) => l.toLowerCase());
+  return weekdays.every((wd) => {
+    const idx = englishDays[wd];
+    const line = lines.find((l) => l.startsWith(idx));
+    if (!line) return true;
+    return !line.includes("closed");
+  });
+}
+
+async function enrichWithPlacesMeta(venue: GeoVenue, requestedWeekdays: number[]): Promise<GeoVenue> {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) return { ...venue, openStatus: "unknown" };
+  try {
+    const query = encodeURIComponent(`${venue.name} ${venue.address} Torino`);
+    const searchResp = await fetch(`https://maps.googleapis.com/maps/api/place/textsearch/json?query=${query}&key=${apiKey}`);
+    const searchJson: any = await searchResp.json();
+    const first = searchJson?.results?.[0];
+    if (!first?.place_id) return { ...venue, openStatus: "unknown" };
+    const detailsResp = await fetch(`https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(first.place_id)}&fields=geometry,opening_hours&key=${apiKey}`);
+    const detailsJson: any = await detailsResp.json();
+    const loc = detailsJson?.result?.geometry?.location;
+    const opening = detailsJson?.result?.opening_hours;
+    const isOpenNow = typeof opening?.open_now === "boolean" ? opening.open_now : undefined;
+    const weekdayText: string[] | undefined = Array.isArray(opening?.weekday_text) ? opening.weekday_text : undefined;
+    const dayMatches = dayRuleMatches(weekdayText, requestedWeekdays);
+    return {
+      ...venue,
+      lat: typeof loc?.lat === "number" ? loc.lat : venue.lat,
+      lng: typeof loc?.lng === "number" ? loc.lng : venue.lng,
+      openStatus: dayMatches && isOpenNow !== false ? "open" : "closed",
+    };
+  } catch {
+    return { ...venue, openStatus: "unknown" };
+  }
+}
+
+function scoreVenue(v: GeoVenue, c: ScopriConstraintMemory, inBounds: boolean): GeoVenue {
+  const why: string[] = [];
+  let score = 0;
+  if (c.category && c.subcategory) { score += 30; why.push("Categoria e sottocategoria coerenti"); }
+  if (!c.prezzo || c.prezzo === "Qualsiasi" || normalizePriceRange(v.priceRange) === c.prezzo) { score += 20; why.push("Prezzo coerente"); }
+  if (inBounds) { score += 20; why.push("Dentro area mappa"); }
+  if (v.openStatus === "open") { score += 20; why.push("Aperto nel giorno richiesto"); }
+  if (c.mezzo) { score += 10; why.push(`Adatto al mezzo: ${c.mezzo}`); }
+  return { ...v, score, why };
 }
 
 export async function registerRoutes(
@@ -668,6 +934,32 @@ export async function registerRoutes(
     if (!senderName || !isNonEmptyString(content)) {
       return res.status(400).json({ message: "Messaggio vuoto" });
     }
+    const event = await storage.getAppEvent(eventId);
+    if (!event) return res.status(404).json({ message: "Evento non trovato" });
+    const safeJson = (v: any, fb: any) => {
+      try {
+        return typeof v === "string" ? JSON.parse(v) : (v ?? fb);
+      } catch {
+        return fb;
+      }
+    };
+    const dateOpts: string[] = safeJson(event.dateOptions, []);
+    const timeOpts: string[] = safeJson(event.timeOptions, []);
+    const venueOpts: unknown[] = safeJson(event.venueOptions, []);
+    const votes = await storage.getVotesByEvent(eventId);
+    const ok = senderCompletedVotablePoll(
+      String(senderName),
+      String(event.status ?? "planning"),
+      dateOpts.length,
+      timeOpts.length,
+      venueOpts.length,
+      votes,
+    );
+    if (!ok) {
+      return res.status(403).json({
+        message: "Completa tutte le votazioni obbligatorie prima di scrivere in chat",
+      });
+    }
     const message = await storage.createMessage({ eventId, senderName, content: content.trim() });
     res.status(201).json(message);
   });
@@ -846,14 +1138,41 @@ Rispondi SOLO con questo JSON (nessun testo extra):
 
   // ── AI Scopri: suggerisce venues ──
   app.post("/api/scopri/ai", async (req, res) => {
-    const { category, subcategory, answers, userRequest } = req.body;
+    const { category, subcategory, answers, userRequest, prefetch, profileId, constraints } = req.body;
     if (!category || !subcategory || !answers) {
       return res.status(400).json({ error: "Dati mancanti" });
     }
 
+    const memoryKey = typeof profileId === "string" && profileId.trim().length > 0
+      ? profileId.trim()
+      : cacheKeyForSearch(String(category), String(subcategory));
+    const fromAnswers: ScopriConstraintMemory = {
+      category: String(category),
+      subcategory: String(subcategory),
+      giorno: typeof answers?.giorno === "string" ? answers.giorno : undefined,
+      prezzo: typeof answers?.prezzo === "string" ? answers.prezzo : undefined,
+      mezzo: typeof answers?.mezzo === "string" ? answers.mezzo : undefined,
+      areaDisegnata: typeof answers?.areaDisegnata === "string" ? answers.areaDisegnata : undefined,
+      zonaLabel: typeof answers?.zona === "string" ? answers.zona : undefined,
+    };
+    const prevMemory = aiConstraintMemory.get(memoryKey);
+    const mergedConstraints = mergeConstraintMemory(
+      prevMemory?.constraints,
+      {
+        ...(typeof constraints === "object" && constraints ? constraints as ScopriConstraintMemory : {}),
+        ...fromAnswers,
+      },
+    );
+    aiConstraintMemory.set(memoryKey, { at: Date.now(), constraints: mergedConstraints });
+    for (const [k, v] of aiConstraintMemory.entries()) {
+      if (Date.now() - v.at > 30 * 60_000) aiConstraintMemory.delete(k);
+    }
+
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      const fallbackOnly = getFallbackVenuesForSubcategory(subcategory).map((v) => ({ ...v, safariUrl: v.websiteUrl }));
+      const fallbackOnly = getFallbackVenuesForSubcategory(subcategory, category)
+        .filter((v) => venueMatchesIntent(v, String(category), String(subcategory)))
+        .map((v) => ({ ...v, safariUrl: v.websiteUrl }));
       return res.json({ venues: fallbackOnly });
     }
     const openai = new OpenAI({ apiKey });
@@ -888,20 +1207,44 @@ CIBO (colazione, brunch, spuntino, pranzo, cena, aperitivo) — locali PRECISI
 `
       : "";
 
-    const searchPrompt = `Sei un city concierge locale.
-Trova QUANTE PIU opzioni possibili (minimo 6, massimo 8) di luoghi REALMENTE ESISTENTI e attivi nell'area di TORINO CITTA (non fuori Torino) per "${subcategory}".
+    const scopriPrefs = buildUserPreferencesFromScopri({
+      category: String(category),
+      subcategory: String(subcategory),
+      merged: mergedConstraints,
+      userRequest: requestText,
+    });
+    assertUserPreferencesForAi(scopriPrefs);
+    const aiDirectorBlock = `${generateSystemPrompt()}
+
+${generateUserPrompt(scopriPrefs)}
+
+══════════════════════════════════════════════════════════════════
+ISTRUZIONI OPERATIVE (segui anche queste, oltre al blocco sopra)
+══════════════════════════════════════════════════════════════════
+`;
+
+    const searchPrompt = `${aiDirectorBlock}Sei un city concierge locale.
+Trova QUANTE PIU opzioni possibili (minimo 8, massimo 10) di luoghi REALMENTE ESISTENTI e attivi nell'area di TORINO CITTA (non fuori Torino) per "${subcategory}".
 ${discoConstraints}${foodConstraints}
 Vincoli obbligatori:
-- Usa solo posti verificabili online.
-- L'indirizzo deve essere completo e contenere "Torino".
-- Fornisci URL reali e funzionanti di sito/prenotazione.
-- Se non trovi booking ufficiale, usa sito ufficiale anche in bookingUrl.
-- Niente luoghi inventati o generici.
-- Le opzioni DEVONO rispettare le richieste personali dell'utente, se presenti.
+- Usa solo posti verificabili online (sito ufficiale, Google Maps, TheFork, ticket office ufficiale).
+- L'indirizzo deve essere completo con via e numero civico e contenere "Torino".
+- Niente luoghi inventati, generici o senza presenza online chiara.
+- Le opzioni DEVONO rispettare tutte le richieste dell'utente sotto, inclusa fascia prezzo (priceRange 1-4) e area mappa se indicate.
 
 Preferenze utente:
 ${answersText}
 ${requestText ? `\nRichieste personali utente (OBBLIGATORIE):\n- ${requestText}\n` : ""}
+CRITICO:
+- La categoria richiesta e "${mergedConstraints.category ?? category}" e la sottocategoria richiesta e "${mergedConstraints.subcategory ?? subcategory}".
+- NON proporre luoghi fuori categoria/sottocategoria.
+- Giorno/intervallo selezionato: "${mergedConstraints.giorno ?? "non specificato"}".
+- Prezzo selezionato: "${mergedConstraints.prezzo ?? "Qualsiasi"}".
+- Mezzo selezionato: "${mergedConstraints.mezzo ?? "non specificato"}".
+- Zona mappa selezionata: "${mergedConstraints.zonaLabel ?? "non specificata"}" (${mergedConstraints.areaDisegnata ?? "no-bbox"}).
+- Se giorno e selezionato, includi solo posti aperti in quel giorno/intervallo.
+- Se prezzo e diverso da "Qualsiasi", includi solo posti in quella fascia.
+- Se esiste area mappa, includi solo posti compatibili con la zona selezionata.
 
 Dopo la ricerca, rispondi SOLO con un JSON valido (nessun testo fuori dal JSON) con questa struttura esatta:
 {
@@ -909,18 +1252,21 @@ Dopo la ricerca, rispondi SOLO con un JSON valido (nessun testo fuori dal JSON) 
     {
       "name": "Nome esatto del posto trovato online",
       "address": "Indirizzo completo con via e numero civico trovato online, Torino",
-      "description": "2 frasi in italiano su perché è la scelta perfetta per queste preferenze",
-      "rating": 4.5,
-      "priceRange": "€ oppure €€ oppure €€€",
-      "bookingUrl": "URL diretto per prenotare trovato online (TheFork, sito ufficiale, Playtomic ecc.)",
-      "websiteUrl": "URL sito ufficiale trovato online",
-      "mapsUrl": "https://www.google.com/maps/search/NOME+ENCODED+Torino",
-      "safariUrl": "stesso URL di websiteUrl (link da aprire in Safari)"
+      "matchScore": 88,
+      "explanation": "Almeno due frasi in italiano su perché il locale rispetta ZONA, priceRange, trasporto e tema richiesti",
+      "estimatedPrice": "€ oppure €€ oppure €€€ coerente con la fascia richiesta"
     }
   ]
 }`;
 
     try {
+      const cacheKey = cacheKeyForSearch(String(category), String(subcategory));
+      const warm = aiWarmupCache.get(cacheKey);
+      const warmValid = warm && Date.now() - warm.at < 5 * 60_000;
+      if (prefetch && warmValid) {
+        return res.json({ venues: warm.venues.map((v) => ({ ...v, safariUrl: v.websiteUrl })), warmed: true });
+      }
+
       // Prima prova: Responses API con ricerca web in tempo reale
       let rawText = "";
       try {
@@ -937,7 +1283,7 @@ Dopo la ricerca, rispondi SOLO con un JSON valido (nessun testo fuori dal JSON) 
           model: "gpt-4o-mini",
           messages: [{ role: "user", content: searchPrompt }],
           response_format: { type: "json_object" },
-          max_tokens: 1200,
+          max_tokens: 1800,
         }), 12000, "chat.completions");
         rawText = completion.choices[0]?.message?.content ?? "{}";
       }
@@ -946,8 +1292,15 @@ Dopo la ricerca, rispondi SOLO con un JSON valido (nessun testo fuori dal JSON) 
       const jsonMatch = rawText.match(/\{[\s\S]*"venues"[\s\S]*\}/);
       const jsonStr = jsonMatch ? jsonMatch[0] : rawText;
       const parsed = JSON.parse(jsonStr);
-      const parsedResp = aiVenueResponseSchema.safeParse(parsed);
-      const aiCandidates = parsedResp.success ? parsedResp.data.venues : [];
+      const parsedVenues = validateScopriAiVenuesResponse(parsed);
+      if (!parsedVenues.ok) {
+        console.warn("Risposta AI Scopri non valida (schema venue):", parsedVenues.error);
+      }
+      const aiCandidates = parsedVenues.ok
+        ? validateSuggestions(parsedVenues.data.venues, scopriPrefs).map((s) =>
+            expandScopriAiSuggestionToVenue(s),
+          )
+        : [];
       const discoMode = isDiscotecaSubcategory(String(subcategory));
       const foodSpecificMode = isSpecificFoodVenueSubcategory(String(subcategory));
       let sanitized = sanitizeAiVenues(aiCandidates);
@@ -955,57 +1308,92 @@ Dopo la ricerca, rispondi SOLO con un JSON valido (nessun testo fuori dal JSON) 
       if (foodSpecificMode) sanitized = filterFoodMustBeSpecificVenue(sanitized);
 
       // Fallback robusto su venue reali di Torino se AI non e affidabile
-      const fallback = getFallbackVenuesForSubcategory(subcategory);
+      const fallback = getFallbackVenuesForSubcategory(subcategory, category);
 
-      let merged = [...sanitized];
+      let merged: GeoVenue[] = [...sanitized];
       for (const fb of fallback) {
-        if (merged.length >= 8) break;
+        if (merged.length >= 10) break;
         if (!merged.some((v) => v.name.toLowerCase() === fb.name.toLowerCase())) {
           merged.push(fb);
         }
       }
-      if (merged.length < 6) {
+      if (merged.length < 8) {
         const extraPool = discoMode
           ? TORINO_DISCOTECHE_FALLBACK
           : foodSpecificMode
             ? TORINO_CIBO_LOCALI_FALLBACK
-            : TORINO_FALLBACK_VENUES;
+            : detectIntent(String(category), String(subcategory)) === "sport"
+              ? TORINO_SPORT_FALLBACK
+              : TORINO_FALLBACK_VENUES;
         for (const fb of extraPool) {
-          if (merged.length >= 8) break;
+          if (merged.length >= 10) break;
           if (!merged.some((v) => v.name.toLowerCase() === fb.name.toLowerCase())) {
             merged.push(fb);
           }
         }
       }
+      merged = merged.filter((v) => venueMatchesIntent(v, String(category), String(subcategory)));
+      merged = filterByRequestedPrice(merged, mergedConstraints.prezzo);
       if (discoMode) merged = filterStrictDiscotecheVenues(merged);
       if (foodSpecificMode) merged = filterFoodMustBeSpecificVenue(merged);
-      const candidates = merged.slice(0, 6);
+      merged = dedupeStrong(merged);
+      const candidates = merged.slice(0, 10);
       const verified = await validateVenueLinks(candidates);
+      const weekdays = extractRequestedWeekdays(mergedConstraints.giorno);
+      const withPlaces = await Promise.all(verified.map((v) => enrichWithPlacesMeta(v, weekdays)));
+      const areaBounds = bboxToLatLngBounds(mergedConstraints.areaDisegnata);
+      const geoFiltered = withPlaces.filter((v) => isInsideBounds(v, areaBounds));
+      const openFiltered = geoFiltered.filter((v) => v.openStatus !== "closed");
+      const hardFiltered = dedupeStrong(openFiltered);
 
       // Garantisce almeno 5 risultati: se la validazione link e troppo restrittiva,
       // completa con fallback affidabili gia sanitizzati.
-      const finalPool = [...verified];
+      const finalPool: GeoVenue[] = [...hardFiltered];
       if (finalPool.length < 5) {
-        for (const venue of merged) {
+        for (const venue of hardFiltered) {
           if (finalPool.length >= 5) break;
-          if (!finalPool.some((v) => v.name.toLowerCase() === venue.name.toLowerCase())) {
+          if (!finalPool.some((v) => normalizeVenueIdentity(v.name, v.address) === normalizeVenueIdentity(venue.name, venue.address))) {
             finalPool.push(venue);
           }
         }
       }
-      const finalVenues = finalPool.slice(0, 8);
+      const ranked = finalPool.map((v) => scoreVenue(v, mergedConstraints, isInsideBounds(v, areaBounds)));
+      ranked.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+      const finalVenues = filterByRequestedPrice(
+        ranked.filter((v) => venueMatchesIntent(v, String(category), String(subcategory))),
+        mergedConstraints.prezzo,
+      ).slice(0, 10);
+      aiWarmupCache.set(cacheKey, { at: Date.now(), venues: finalVenues });
       res.json({
         venues: finalVenues.map((v) => ({
           ...v,
           safariUrl: v.websiteUrl,
         })),
+        checks: {
+          category: String(category),
+          subcategory: String(subcategory),
+          price: String(mergedConstraints.prezzo ?? "Qualsiasi"),
+          day: String(mergedConstraints.giorno ?? ""),
+          transport: String(mergedConstraints.mezzo ?? ""),
+          area: String(mergedConstraints.areaDisegnata ?? ""),
+          strictIntentFilter: true,
+          hardReject: true,
+          geoBoundsApplied: Boolean(areaBounds),
+          openingHoursApplied: true,
+        },
       });
     } catch (err: any) {
       console.error("AI Scopri error:", err?.message);
-      const safeFallback = getFallbackVenuesForSubcategory(subcategory).map((v) => ({
-        ...v,
-        safariUrl: v.websiteUrl,
-      }));
+      const safeFallback = filterByRequestedPrice(
+        getFallbackVenuesForSubcategory(subcategory, category)
+          .filter((v) => venueMatchesIntent(v, String(category), String(subcategory))),
+        mergedConstraints.prezzo,
+      )
+        .map((v) => scoreVenue({ ...v, openStatus: "unknown" }, mergedConstraints, true))
+        .map((v) => ({
+          ...v,
+          safariUrl: v.websiteUrl,
+        }));
       res.json({ venues: safeFallback });
     }
   });

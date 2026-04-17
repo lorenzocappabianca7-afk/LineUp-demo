@@ -61,6 +61,11 @@
     text-rendering: optimizeLegibility;
     scroll-behavior: smooth;
   }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
   body {
     @apply bg-background text-foreground antialiased selection:bg-primary/20 selection:text-primary;
     font-family: var(--font-sans);
@@ -181,4 +186,33 @@ input[type="range"].time-slider::-moz-range-thumb {
   transform: translateZ(0);
   backface-visibility: hidden;
   will-change: transform, opacity;
+}
+
+@keyframes mapReveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.scopri-leaflet-host .leaflet-container {
+  font-family: var(--font-sans), system-ui, sans-serif;
+  background: hsl(210 20% 94%);
+  animation: mapReveal 0.28s ease-out both;
+}
+
+.scopri-leaflet-host .leaflet-control-zoom a {
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blob-fluid-button {
+    animation: none !important;
+  }
+  .scopri-leaflet-host .leaflet-container {
+    animation: none;
+    opacity: 1;
+  }
 }

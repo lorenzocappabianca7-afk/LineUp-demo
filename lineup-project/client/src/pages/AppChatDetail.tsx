@@ -1,9 +1,24 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRoute, Link, useLocation } from "wouter";
-import { ArrowLeft, Send, ChevronDown, ChevronUp, MapPin, Clock, Star, Tag, ThumbsUp, Pencil, Check as CheckIcon, CalendarDays, Building2, UserMinus, UserCheck, CalendarPlus, CheckCircle2, X, Shield, Flag, ChevronRight, ChevronLeft, Search, Trash2, Plus, CalendarSearch, Timer, MapPinned, Bell } from "lucide-react";
+import { ArrowLeft, Send, ChevronDown, ChevronUp, MapPin, Clock, Star, Tag, ThumbsUp, Pencil, Check as CheckIcon, CalendarDays, Building2, UserMinus, UserCheck, CalendarPlus, CheckCircle2, X, Shield, Flag, ChevronRight, ChevronLeft, Search, Trash2, Plus, CalendarSearch, Timer, MapPinned, Bell, AlertCircle, Link2, Copy } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
-import { parseEvent, getActivity, getAvatarColor, getInitials, getCurrentUser, GROUPS, MONTHS_IT, DAYS_IT, VENUES_BY_ACTIVITY, type VenueOption } from "@/lib/appUtils";
+import { useToast } from "@/hooks/use-toast";
+import {
+  parseEvent,
+  getActivity,
+  getAvatarColor,
+  getInitials,
+  getCurrentUser,
+  GROUPS,
+  MONTHS_IT,
+  DAYS_IT,
+  VENUES_BY_ACTIVITY,
+  userHasCompletedVotablePoll,
+  getVotablePollTypesForEvent,
+  getEventChatInviteUrl,
+  type VenueOption,
+} from "@/lib/appUtils";
 
 /* ─── LocalStorage helpers for contact nicknames ─── */
 const LS_CONTACTS = "lineup-contact-names";
@@ -790,9 +805,15 @@ function RecapBanner({
   alwaysExpanded?: boolean;
 }) {
   const isPlanning = event.status === "planning";
-  const topDate = isPlanning ? getMostVoted(votes, "date") : event.confirmedDate;
-  const topTime = isPlanning ? getMostVoted(votes, "time") : event.confirmedTime;
-  const topVenue = isPlanning ? getMostVoted(votes, "venue") : event.confirmedVenue;
+  const topDate = isPlanning
+    ? getMostVoted(votes, "date") ?? (event.dateOptions.length === 1 ? event.dateOptions[0] ?? null : null)
+    : event.confirmedDate;
+  const topTime = isPlanning
+    ? getMostVoted(votes, "time") ?? (event.timeOptions.length === 1 ? event.timeOptions[0] ?? null : null)
+    : event.confirmedTime;
+  const topVenue = isPlanning
+    ? getMostVoted(votes, "venue") ?? (event.venueOptions.length === 1 ? event.venueOptions[0]?.name ?? null : null)
+    : event.confirmedVenue;
 
   const myVote = (type: string, val: string) =>
     votes.some(v => v.voterName === currentUser && v.voteType === type && v.voteValue === val);
@@ -862,8 +883,59 @@ function RecapBanner({
             },
           ].map(section => {
             if (!section.options.length) return null;
-            const myVotedHere = section.options.some(o => myVote(section.type, o.key));
-            const maxVoters = Math.max(...section.options.map(o => getVoters(votes, section.type, o.key).length), 0);
+            const isVotable = section.options.length > 1;
+
+            if (!isVotable) {
+              return (
+                <div key={section.type} className="mb-1">
+                  <div className="flex items-center gap-2 px-4 pt-3 pb-2 flex-wrap">
+                    <span className="text-sm font-bold text-gray-800">{section.label}</span>
+                    <span className="text-[10px] font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">
+                      Predefinito dall&apos;organizzatore
+                    </span>
+                  </div>
+                  <div className="px-3 space-y-1.5 pb-1">
+                    {section.options.map((opt) => (
+                      <div
+                        key={opt.key}
+                        className="w-full rounded-2xl px-4 py-3 text-left bg-gray-50 border-2 border-gray-100"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-gray-200">
+                            <CheckCircle2 size={14} className="text-gray-500" strokeWidth={2.5} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-bold leading-tight text-gray-800">{opt.label}</span>
+                            {opt.sub && (
+                              <div className="flex items-center gap-2 mt-0.5">
+                                {opt.sub.map((s, i) => (
+                                  <span key={i} className="flex items-center gap-0.5 text-xs text-gray-400 font-medium">
+                                    {s.icon}{s.text}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onOpenPropose(section.type)}
+                    className="w-full flex items-center gap-2 px-4 py-3 text-sm font-semibold text-[#4A9BD9] border-t border-gray-100/80 active:bg-gray-50 transition-colors"
+                  >
+                    <div className="w-5 h-5 rounded-full border border-[#4A9BD9]/50 flex items-center justify-center shrink-0">
+                      <span className="text-sm leading-none">+</span>
+                    </div>
+                    Proponi un&apos;altra opzione (attiva il voto)
+                  </button>
+                </div>
+              );
+            }
+
+            const myVotedHere = section.options.some((o) => myVote(section.type, o.key));
+            const maxVoters = Math.max(...section.options.map((o) => getVoters(votes, section.type, o.key).length), 0);
 
             return (
               <div key={section.type} className="mb-1">
@@ -877,7 +949,7 @@ function RecapBanner({
 
                 {/* Options */}
                 <div className="px-3 space-y-1.5 pb-1">
-                  {section.options.map(opt => {
+                  {section.options.map((opt) => {
                     const voters = getVoters(votes, section.type, opt.key);
                     const mine = myVote(section.type, opt.key);
                     const isTop = voters.length > 0 && voters.length === maxVoters;
@@ -886,6 +958,7 @@ function RecapBanner({
                     return (
                       <button
                         key={opt.key}
+                        type="button"
                         data-testid={`banner-vote-${section.type}-${opt.key}`}
                         aria-pressed={mine}
                         onClick={() => onVote(section.type, opt.key)}
@@ -906,25 +979,33 @@ function RecapBanner({
 
                         <div className="relative flex items-center gap-3">
                           {/* Left: check or empty circle */}
-                          <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-all ${
-                            mine ? "bg-[#4A9BD9]" : "bg-gray-100"
-                          }`}>
-                            {mine
-                              ? <CheckCircle2 size={16} className="text-white" strokeWidth={2.5} />
-                              : <div className="w-2.5 h-2.5 rounded-full bg-gray-300" />
-                            }
+                          <div
+                            className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-all ${
+                              mine ? "bg-[#4A9BD9]" : "bg-gray-100"
+                            }`}
+                          >
+                            {mine ? (
+                              <CheckCircle2 size={16} className="text-white" strokeWidth={2.5} />
+                            ) : (
+                              <div className="w-2.5 h-2.5 rounded-full bg-gray-300" />
+                            )}
                           </div>
 
                           {/* Label + sub */}
                           <div className="flex-1 min-w-0">
-                            <span className={`text-sm font-bold leading-tight ${mine ? "text-[#4A9BD9]" : isTop && voters.length > 0 ? "text-gray-900" : "text-gray-700"}`}>
+                            <span
+                              className={`text-sm font-bold leading-tight ${
+                                mine ? "text-[#4A9BD9]" : isTop && voters.length > 0 ? "text-gray-900" : "text-gray-700"
+                              }`}
+                            >
                               {opt.label}
                             </span>
                             {opt.sub && (
                               <div className="flex items-center gap-2 mt-0.5">
                                 {opt.sub.map((s, i) => (
                                   <span key={i} className="flex items-center gap-0.5 text-xs text-gray-400 font-medium">
-                                    {s.icon}{s.text}
+                                    {s.icon}
+                                    {s.text}
                                   </span>
                                 ))}
                               </div>
@@ -936,10 +1017,13 @@ function RecapBanner({
                             {voters.length > 0 && (
                               <>
                                 <div className="flex -space-x-1.5">
-                                  {voters.slice(0, 3).map(v => (
-                                    <div key={v} title={v}
+                                  {voters.slice(0, 3).map((v) => (
+                                    <div
+                                      key={v}
+                                      title={v}
                                       className="w-5 h-5 rounded-full border-2 border-white flex items-center justify-center text-[7px] font-bold text-white"
-                                      style={{ backgroundColor: getAvatarColor(v) }}>
+                                      style={{ backgroundColor: getAvatarColor(v) }}
+                                    >
                                       {getInitials(v)}
                                     </div>
                                   ))}
@@ -963,13 +1047,14 @@ function RecapBanner({
 
                 {/* ─── Proponi una nuova opzione ─── */}
                 <button
+                  type="button"
                   onClick={() => onOpenPropose(section.type)}
                   className="w-full flex items-center gap-2 px-4 py-3 text-sm font-semibold text-[#4A9BD9] border-t border-gray-100/80 active:bg-gray-50 transition-colors"
                 >
                   <div className="w-5 h-5 rounded-full border border-[#4A9BD9]/50 flex items-center justify-center shrink-0">
                     <span className="text-sm leading-none">+</span>
                   </div>
-                  Proponi un'opzione
+                  Proponi un&apos;opzione
                 </button>
               </div>
             );
@@ -1051,9 +1136,13 @@ export default function AppChatDetail() {
   const [proposalSheetType, setProposalSheetType] = useState<"date" | "time" | "venue" | null>(null);
   const [showProposalTypeChooser, setShowProposalTypeChooser] = useState(false);
   const [contactNames, setContactNames] = useState<Record<string, string>>(loadContactNames);
+  const [showChatLockedBanner, setShowChatLockedBanner] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
+  const chatLockedBannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const currentUser = getCurrentUser();
   const [, navigate] = useLocation();
 
@@ -1065,6 +1154,7 @@ export default function AppChatDetail() {
       setBannerExpanded(false);
       setText("");
       setEditingName(false);
+      setShowChatLockedBanner(false);
     }
   }, [params?.id]);
 
@@ -1090,6 +1180,23 @@ export default function AppChatDetail() {
     () => (rawEvent?.id ? parseEvent(rawEvent) : null),
     [rawEvent],
   );
+
+  const inviteChatUrl = useMemo(() => getEventChatInviteUrl(activeEventId), [activeEventId]);
+
+  const copyInviteChatLink = async () => {
+    if (!inviteChatUrl) return;
+    try {
+      await navigator.clipboard.writeText(inviteChatUrl);
+      setInviteCopied(true);
+      setTimeout(() => setInviteCopied(false), 2000);
+    } catch {
+      toast({
+        title: "Impossibile copiare",
+        description: "Seleziona il link e copialo manualmente.",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Related events: same non-"Io" participants (exact match for switcher tabs)
   const relatedEvents = useMemo(() => {
@@ -1134,6 +1241,12 @@ export default function AppChatDetail() {
       setText("");
       queryClient.invalidateQueries({ queryKey: ["/api/app/events", activeEventId, "messages"] });
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    },
+    onError: (err: Error) => {
+      const msg = err.message?.includes("403")
+        ? "Completa tutte le votazioni obbligatorie (giorno, ora, luogo) prima di scrivere in chat."
+        : "Impossibile inviare il messaggio.";
+      toast({ title: "Chat non disponibile", description: msg, variant: "destructive" });
     },
   });
 
@@ -1229,6 +1342,30 @@ export default function AppChatDetail() {
   const isCreator = currentUser === activeEvent?.createdBy;
   const isConfirmed = activeEvent?.status === "confirmed";
 
+  const canUseChat = useMemo(() => {
+    if (!activeEvent) return false;
+    return userHasCompletedVotablePoll(currentUser, activeEvent, votes);
+  }, [activeEvent, currentUser, votes]);
+
+  useEffect(() => {
+    if (canUseChat) setShowChatLockedBanner(false);
+  }, [canUseChat]);
+
+  useEffect(() => {
+    return () => {
+      if (chatLockedBannerTimer.current) clearTimeout(chatLockedBannerTimer.current);
+    };
+  }, []);
+
+  const showChatLockedNotice = () => {
+    if (chatLockedBannerTimer.current) clearTimeout(chatLockedBannerTimer.current);
+    setShowChatLockedBanner(true);
+    chatLockedBannerTimer.current = setTimeout(() => {
+      setShowChatLockedBanner(false);
+      chatLockedBannerTimer.current = null;
+    }, 4500);
+  };
+
   const handleConfirmEvent = () => {
     if (!activeEvent || !isCreator || isConfirmed) return;
     const confirmedDate = getMostVoted(votes, "date") || activeEvent.dateOptions[0] || "";
@@ -1239,36 +1376,50 @@ export default function AppChatDetail() {
     }
   };
 
-  // Auto-conferma: tutti i partecipanti (individuali) votano stesso giorno/ora/luogo
+  // Auto-conferma: tutti i partecipanti (individuali) allineati; giorno/ora/luogo unici usano il predefinito senza voto
   useEffect(() => {
     if (!activeEvent || isConfirmed || votes.length === 0) return;
     const groupNames = new Set(GROUPS.map(g => g.name));
-    const individuals = activeEvent.participants.filter(p => !groupNames.has(p));
+    const individuals = activeEvent.participants.filter((p) => !groupNames.has(p));
     if (individuals.length < 2) return;
 
     const dateVotes = new Map<string, string>();
     const timeVotes = new Map<string, string>();
     const venueVotes = new Map<string, string>();
-    votes.forEach(v => {
-      if (v.voteType === "date")  dateVotes.set(v.voterName, v.voteValue);
-      if (v.voteType === "time")  timeVotes.set(v.voterName, v.voteValue);
+    votes.forEach((v) => {
+      if (v.voteType === "date") dateVotes.set(v.voterName, v.voteValue);
+      if (v.voteType === "time") timeVotes.set(v.voterName, v.voteValue);
       if (v.voteType === "venue") venueVotes.set(v.voterName, v.voteValue);
     });
 
     const first = individuals[0];
-    const allSameDate  = individuals.every(p => dateVotes.get(p) === dateVotes.get(first)) && dateVotes.has(first);
-    const allSameTime  = individuals.every(p => timeVotes.get(p) === timeVotes.get(first)) && timeVotes.has(first);
-    const hasVenues    = activeEvent.venueOptions.length > 0;
-    const allSameVenue = !hasVenues || (individuals.every(p => venueVotes.get(p) === venueVotes.get(first)) && venueVotes.has(first));
+    const dateVal = (p: string) =>
+      activeEvent.dateOptions.length <= 1 ? activeEvent.dateOptions[0] : dateVotes.get(p);
+    const timeVal = (p: string) =>
+      activeEvent.timeOptions.length <= 1 ? activeEvent.timeOptions[0] : timeVotes.get(p);
+    const venueVal = (p: string) => {
+      if (activeEvent.venueOptions.length === 0) return "";
+      if (activeEvent.venueOptions.length <= 1) return activeEvent.venueOptions[0]?.name ?? "";
+      return venueVotes.get(p);
+    };
+
+    const allSameDate =
+      Boolean(dateVal(first)) && individuals.every((p) => dateVal(p) === dateVal(first));
+    const allSameTime =
+      Boolean(timeVal(first)) && individuals.every((p) => timeVal(p) === timeVal(first));
+    const hasVenues = activeEvent.venueOptions.length > 0;
+    const allSameVenue =
+      !hasVenues ||
+      (Boolean(venueVal(first)) && individuals.every((p) => venueVal(p) === venueVal(first)));
 
     if (allSameDate && allSameTime && allSameVenue) {
       confirmEvent({
-        confirmedDate:  dateVotes.get(first)!,
-        confirmedTime:  timeVotes.get(first)!,
-        confirmedVenue: hasVenues ? venueVotes.get(first)! : "",
+        confirmedDate: String(dateVal(first)),
+        confirmedTime: String(timeVal(first)),
+        confirmedVenue: hasVenues ? String(venueVal(first)) : "",
       });
     }
-  }, [votes, activeEvent?.id]);
+  }, [votes, activeEvent?.id, isConfirmed]);
 
   useEffect(() => {
     if (view === "chat") {
@@ -1276,16 +1427,23 @@ export default function AppChatDetail() {
     }
   }, [messages, activeEventId, view]);
 
+  useEffect(() => {
+    if (view === "chat" && !canUseChat && activeEvent?.status === "planning") {
+      setView("vote");
+    }
+  }, [view, canUseChat, activeEvent?.status]);
+
   // Switch event: reset view + scroll
   const switchEvent = (id: number) => {
     setActiveEventId(id);
     setView("vote");
     setText("");
     setEditingName(false);
+    setShowChatLockedBanner(false);
   };
 
   const handleSend = () => {
-    if (!text.trim() || isPending) return;
+    if (!text.trim() || isPending || !canUseChat) return;
     sendMessage(text.trim());
   };
 
@@ -1414,11 +1572,39 @@ export default function AppChatDetail() {
           onChange={switchEvent}
         />
 
+        {inviteChatUrl ? (
+          <div className="px-3 pb-2 shrink-0 w-full max-w-full box-border" data-testid="row-chat-invite-link">
+            <div className="flex items-center gap-2 rounded-xl bg-gray-50 border border-gray-100 px-2.5 py-2 min-w-0">
+              <Link2 size={14} className="text-[#4A9BD9] shrink-0" aria-hidden />
+              <p className="text-[11px] text-gray-600 flex-1 min-w-0 leading-tight truncate" title={inviteChatUrl}>
+                Link per invitare al gruppo
+              </p>
+              <button
+                type="button"
+                data-testid="button-copy-chat-invite"
+                onClick={copyInviteChatLink}
+                className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 bg-white text-gray-700 active:scale-95 transition-transform"
+                aria-label={inviteCopied ? "Copiato" : "Copia link invito"}
+              >
+                {inviteCopied ? (
+                  <CheckIcon size={14} className="text-emerald-600" strokeWidth={2.5} />
+                ) : (
+                  <Copy size={14} strokeWidth={2.25} />
+                )}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         {/* ─── Tab switcher: Voto | Chat ─── */}
         <div className="flex border-b border-gray-100">
           <button
             data-testid="tab-vote"
-            onClick={() => setView("vote")}
+            type="button"
+            onClick={() => {
+              setShowChatLockedBanner(false);
+              setView("vote");
+            }}
             className={`flex-1 py-3.5 text-base font-bold transition-colors ${
               view === "vote"
                 ? "text-black border-b-[3px] border-black"
@@ -1429,11 +1615,21 @@ export default function AppChatDetail() {
           </button>
           <button
             data-testid="tab-chat"
-            onClick={() => setView("chat")}
+            type="button"
+            onClick={() => {
+              if (!canUseChat) {
+                showChatLockedNotice();
+                return;
+              }
+              setShowChatLockedBanner(false);
+              setView("chat");
+            }}
             className={`flex-1 py-3.5 text-base font-bold transition-colors ${
               view === "chat"
                 ? "text-black border-b-[3px] border-black"
-                : "text-gray-400"
+                : canUseChat
+                  ? "text-gray-400"
+                  : "text-gray-300"
             }`}
           >
             Chat
@@ -1444,6 +1640,28 @@ export default function AppChatDetail() {
             )}
           </button>
         </div>
+
+        {showChatLockedBanner && !canUseChat && (
+          <div className="px-3 pb-2 shrink-0 w-full max-w-full box-border" data-testid="banner-chat-locked">
+            <div className="flex items-center gap-2 rounded-xl border border-amber-200/90 bg-amber-50 px-2.5 py-2 w-full min-w-0">
+              <AlertCircle className="shrink-0 text-amber-600" size={16} strokeWidth={2.25} aria-hidden />
+              <p className="text-[11px] leading-snug font-semibold text-amber-950 min-w-0 flex-1">
+                Prima vota nel tab <span className="text-amber-800">Voto</span>.
+              </p>
+              <button
+                type="button"
+                aria-label="Chiudi"
+                onClick={() => {
+                  if (chatLockedBannerTimer.current) clearTimeout(chatLockedBannerTimer.current);
+                  setShowChatLockedBanner(false);
+                }}
+                className="shrink-0 p-1 rounded-lg text-amber-700/80 hover:bg-amber-100/80 active:scale-95"
+              >
+                <X size={14} strokeWidth={2.5} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ─── Creator Options Sheet ─── */}
@@ -1534,6 +1752,7 @@ export default function AppChatDetail() {
                 const participants = activeEvent.participants;
                 const yesCount = participants.filter(p => attendanceByUser(p) === "yes").length;
                 const noCount  = participants.filter(p => attendanceByUser(p) === "no").length;
+                const showRsvpYes = getVotablePollTypesForEvent(activeEvent).length === 0;
 
                 return (
                   <div className="px-4 pt-5 pb-4 border-b border-gray-100">
@@ -1549,23 +1768,27 @@ export default function AppChatDetail() {
                       </div>
                     </div>
 
-                    {/* 3 pulsanti RSVP */}
+                    {/* RSVP: "Sì ci sono" solo se non ci sono sondaggi (giorno/ora/luogo tutti predefiniti singoli) */}
                     <div className="flex gap-2 mb-4">
-                      <button
-                        data-testid="button-rsvp-yes"
-                        aria-pressed={myAttendance === "yes"}
-                        onClick={() => castVote({ voteType: "attendance", voteValue: "yes" })}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 ${
-                          myAttendance === "yes"
-                            ? "bg-emerald-500 text-white shadow-sm"
-                            : "bg-emerald-50 text-emerald-600 border border-emerald-200"
-                        }`}
-                      >
-                        <UserCheck size={15} />
-                        Sì ci sono
-                      </button>
+                      {showRsvpYes && (
+                        <button
+                          data-testid="button-rsvp-yes"
+                          type="button"
+                          aria-pressed={myAttendance === "yes"}
+                          onClick={() => castVote({ voteType: "attendance", voteValue: "yes" })}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                            myAttendance === "yes"
+                              ? "bg-emerald-500 text-white shadow-sm"
+                              : "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                          }`}
+                        >
+                          <UserCheck size={15} />
+                          Sì ci sono
+                        </button>
+                      )}
                       <button
                         data-testid="button-rsvp-no"
+                        type="button"
                         aria-pressed={myAttendance === "no"}
                         onClick={() => castVote({ voteType: "attendance", voteValue: "no" })}
                         className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 ${
@@ -1851,20 +2074,27 @@ export default function AppChatDetail() {
 
           {/* ─── Input ─── */}
           <div className="bg-white border-t border-gray-100 px-4 py-3 shrink-0">
+            {!canUseChat && (
+              <p className="text-[11px] text-gray-500 mb-2 text-center px-1 leading-snug">
+                Completa i voti nel tab <span className="font-semibold text-gray-700">Voto</span>.
+              </p>
+            )}
             <div className="flex items-center gap-2">
               <input
                 data-testid="input-message"
                 type="text"
                 value={text}
-                onChange={e => setText(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleSend()}
-                placeholder="Scrivi un messaggio..."
-                className="flex-1 bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2.5 text-sm outline-none focus:border-[#4A9BD9] transition-colors"
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                placeholder={canUseChat ? "Scrivi un messaggio..." : "Completa i voti per scrivere..."}
+                disabled={!canUseChat}
+                className="flex-1 bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2.5 text-sm outline-none focus:border-[#4A9BD9] transition-colors disabled:opacity-50"
               />
               <button
                 data-testid="button-send-message"
+                type="button"
                 onClick={handleSend}
-                disabled={!text.trim() || isPending}
+                disabled={!text.trim() || isPending || !canUseChat}
                 className="w-10 h-10 rounded-full flex items-center justify-center disabled:opacity-40 transition-opacity active:scale-95 shrink-0"
                 style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}
               >
