@@ -15,7 +15,7 @@ export default function AppAddContact() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-100 to-gray-200 flex items-center justify-center p-6">
       <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden">
-        <div className="h-1.5" style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }} />
+        <div className="h-1.5 bg-gradient-to-r from-primary to-primary/75" />
 
         <div className="px-8 pt-8 pb-10 flex flex-col items-center text-center">
           <div
@@ -29,16 +29,13 @@ export default function AppAddContact() {
           {email && <p className="text-xs text-gray-400 mb-1">{email}</p>}
           <p className="text-sm text-gray-400 mb-8">vuole connettersi con te su LineUp</p>
 
-          <div
-            className="w-full rounded-2xl px-5 py-5 mb-6"
-            style={{ background: "linear-gradient(135deg, #4A9BD9 0%, #7CB9E8 100%)" }}
-          >
-            <div className="flex items-center justify-center gap-2.5 mb-2">
-              <UserPlus size={20} className="text-white" strokeWidth={2.5} />
-              <p className="text-white font-bold text-lg">Aggiungi come amico</p>
+          <div className="mb-6 w-full rounded-2xl bg-gradient-to-br from-primary to-primary/75 px-5 py-5">
+            <div className="mb-2 flex items-center justify-center gap-2.5">
+              <UserPlus size={20} className="text-primary-foreground" strokeWidth={2.5} />
+              <p className="text-lg font-bold text-primary-foreground">Aggiungi come amico</p>
             </div>
-            <p className="text-white/75 text-sm">
-              Apri LineUp sul tuo dispositivo per aggiungere <strong className="text-white">{user}</strong> ai tuoi contatti.
+            <p className="text-sm text-primary-foreground/80">
+              Apri LineUp sul tuo dispositivo per aggiungere <strong className="text-primary-foreground">{user}</strong> ai tuoi contatti.
             </p>
           </div>
 

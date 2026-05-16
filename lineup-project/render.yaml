@@ -1,0 +1,31 @@
+# Deploy su Render: collega il repo GitHub e usa "Blueprint" oppure crea Web Service manualmente.
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: lineup-demo
+    runtime: node
+    plan: free
+    # Se il repo Git è la cartella padre "Lineup", usa rootDir; se il repo è solo lineup-project, rimuovi rootDir.
+    rootDir: lineup-project
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /prova-pianifica
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: PIANIFICA_DEMO_FEEDBACK_TO
+        value: lorenzo.cappabianca7@gmail.com,federico.bossotti@gmail.com

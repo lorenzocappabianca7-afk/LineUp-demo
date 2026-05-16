@@ -5,7 +5,6 @@ import type { AppBanner } from "@shared/schema";
 import { Plus, Search, X, Check, MessageCircleDashed, ChevronRight } from "lucide-react";
 import { useLocation } from "wouter";
 import { parseEvent, getActivity, getAvatarColor, getInitials, CONTACTS } from "@/lib/appUtils";
-
 type Filter = "all" | "planning" | "confirmed" | "past";
 
 const FILTERS: { key: Filter; label: string }[] = [
@@ -109,8 +108,7 @@ function EmptyState({ filter, onPlanify }: { filter: Filter; onPlanify: () => vo
         <button
           data-testid="button-empty-planify"
           onClick={onPlanify}
-          className="mt-6 px-6 py-2.5 rounded-full text-sm font-semibold text-white"
-          style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}
+          className="mt-6 rounded-full bg-gradient-to-br from-primary to-primary/75 px-6 py-2.5 text-sm font-semibold text-primary-foreground"
         >
           Vai ad Home
         </button>
@@ -187,10 +185,9 @@ export default function AppChatList() {
           <button
             data-testid="button-new-chat"
             onClick={() => setShowNew(true)}
-            className="w-9 h-9 rounded-full flex items-center justify-center"
-            style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/75"
           >
-            <Plus size={18} className="text-white" strokeWidth={2.5} />
+            <Plus size={18} className="text-primary-foreground" strokeWidth={2.5} />
           </button>
         </div>
 
@@ -240,7 +237,7 @@ export default function AppChatList() {
       <div className="flex-1 flex flex-col">
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
-            <div className="animate-spin w-6 h-6 border-2 border-[#4A9BD9] border-t-transparent rounded-full" />
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           </div>
         ) : filtered.length === 0 ? (
           <EmptyState filter={filter} onPlanify={() => navigate("/")} />
@@ -285,7 +282,7 @@ export default function AppChatList() {
                         </div>
                       )}
                       {hasPlanning && (
-                        <div className="w-4 h-4 rounded-full bg-[#4A9BD9]" />
+                        <div className="h-4 w-4 rounded-full bg-primary" />
                       )}
                       <ChevronRight size={15} className="text-gray-300" />
                     </div>
@@ -336,7 +333,7 @@ export default function AppChatList() {
                             <Check size={9} className="text-white" strokeWidth={3} />
                           </div>
                         ) : (
-                          <div className="w-4 h-4 rounded-full bg-[#4A9BD9] shrink-0" />
+                          <div className="h-4 w-4 shrink-0 rounded-full bg-primary" />
                         )}
                       </div>
                     </div>

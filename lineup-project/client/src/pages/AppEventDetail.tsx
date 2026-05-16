@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
 import {
   ArrowLeft, MessageCircle, CheckCircle2, Star, MapPin, Tag,
-  Users, Clock, ThumbsUp, Trophy
+  Users, Clock, Trophy,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -13,7 +13,9 @@ import {
   getInitials,
   getCurrentUser,
   userHasCompletedVotablePoll,
+  venueLocationPreview,
 } from "@/lib/appUtils";
+import { PollOptionButton } from "@/components/poll/PollOptionButton";
 
 interface AppVote {
   id: number;
@@ -38,60 +40,6 @@ function groupVotes(votes: AppVote[], type: string): VoteGroup[] {
   return Object.entries(map)
     .map(([value, voters]) => ({ value, voters }))
     .sort((a, b) => b.voters.length - a.voters.length);
-}
-
-function VoteBar({ value, voters, total, myVote, onVote, disabled }: {
-  value: string;
-  voters: string[];
-  total: number;
-  myVote: boolean;
-  onVote: () => void;
-  disabled: boolean;
-}) {
-  const pct = total > 0 ? Math.round((voters.length / total) * 100) : 0;
-  return (
-    <button
-      data-testid={`vote-option-${value}`}
-      onClick={onVote}
-      disabled={disabled}
-      className={`w-full p-3 rounded-xl border-2 text-left transition-all ${
-        myVote
-          ? "border-[#4A9BD9] bg-[#EBF5FB]"
-          : "border-gray-100 bg-white hover:border-gray-200"
-      }`}
-    >
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-sm font-semibold text-gray-900">{value}</span>
-        <div className="flex items-center gap-1.5">
-          {myVote && <ThumbsUp size={12} className="text-[#4A9BD9]" />}
-          <span className="text-xs font-bold text-gray-600">{voters.length} voti</span>
-        </div>
-      </div>
-      <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{
-            width: `${pct}%`,
-            backgroundColor: myVote ? "#4A9BD9" : "#D1D5DB",
-          }}
-        />
-      </div>
-      {voters.length > 0 && (
-        <div className="flex -space-x-1 mt-2">
-          {voters.slice(0, 6).map(name => (
-            <div
-              key={name}
-              title={name}
-              className="w-5 h-5 rounded-full border border-white flex items-center justify-center text-[8px] font-bold text-white"
-              style={{ backgroundColor: getAvatarColor(name) }}
-            >
-              {getInitials(name)}
-            </div>
-          ))}
-        </div>
-      )}
-    </button>
-  );
 }
 
 export default function AppEventDetail() {
@@ -129,16 +77,23 @@ export default function AppEventDetail() {
   });
 
   const { mutate: castVote } = useMutation({
-    mutationFn: ({ voteType, voteValue }: { voteType: string; voteValue: string }) =>
-      apiRequest("POST", `/api/app/events/${id}/votes`, {
+    mutationFn: async ({ voteType, voteValue }: { voteType: string; voteValue: string }) => {
+      const res = await apiRequest("POST", `/api/app/events/${id}/votes`, {
         voterName: currentUser,
         voteType,
         voteValue,
-      }),
+      });
+      return res.json().catch(() => ({}));
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/app/events", id, "votes"] });
     },
-    onError: () => toast({ title: "Errore nel voto", variant: "destructive" }),
+    onError: (err: Error) =>
+      toast({
+        title: "Errore nel voto",
+        description: err.message || "Riprova tra poco.",
+        variant: "destructive",
+      }),
   });
 
   const { mutate: confirmEvent } = useMutation({
@@ -154,7 +109,7 @@ export default function AppEventDetail() {
   if (loadingEvent || !rawEvent) {
     return (
       <div className="flex items-center justify-center min-h-full">
-        <div className="animate-spin w-8 h-8 border-2 border-[#4A9BD9] border-t-transparent rounded-full" />
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
       </div>
     );
   }
@@ -168,7 +123,31 @@ export default function AppEventDetail() {
   const timeVotes = groupVotes(votes, "time");
   const venueVotes = groupVotes(votes, "venue");
 
-  const totalParticipants = event.participants.length;
+  const dateBallotTotal = event.dateOptions.reduce((sum, d) => {
+    const g = dateVotes.find((x) => x.value === d);
+    return sum + (g?.voters.length ?? 0);
+  }, 0);
+  const timeBallotTotal = event.timeOptions.reduce((sum, t) => {
+    const g = timeVotes.find((x) => x.value === t);
+    return sum + (g?.voters.length ?? 0);
+  }, 0);
+  const venueBallotTotal = event.venueOptions.reduce((sum, v) => {
+    const g = venueVotes.find((x) => x.value === v.name);
+    return sum + (g?.voters.length ?? 0);
+  }, 0);
+
+  const dateMaxVoters = Math.max(
+    0,
+    ...event.dateOptions.map((d) => dateVotes.find((g) => g.value === d)?.voters.length ?? 0),
+  );
+  const timeMaxVoters = Math.max(
+    0,
+    ...event.timeOptions.map((t) => timeVotes.find((g) => g.value === t)?.voters.length ?? 0),
+  );
+  const venueMaxVoters = Math.max(
+    0,
+    ...event.venueOptions.map((v) => venueVotes.find((g) => g.value === v.name)?.voters.length ?? 0),
+  );
 
   const getWinner = (groups: VoteGroup[], options: string[]) => {
     if (groups.length === 0) return options[0] ?? null;
@@ -186,14 +165,14 @@ export default function AppEventDetail() {
   return (
     <div className="flex flex-col min-h-full">
       {/* Header */}
-      <div className="bg-white px-5 pt-12 pb-5 shadow-sm">
+      <div className="bg-card px-5 pt-12 pb-5 shadow-sm">
         <div className="flex items-center gap-3 mb-4">
           <Link href="/">
             <button
               data-testid="button-back"
-              className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-muted"
             >
-              <ArrowLeft size={18} className="text-gray-600" />
+              <ArrowLeft size={18} className="text-muted-foreground" />
             </button>
           </Link>
           <div className="flex-1" />
@@ -202,13 +181,12 @@ export default function AppEventDetail() {
               <button
                 data-testid="button-go-chat"
                 type="button"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold"
-                style={{ background: "#EBF5FB", color: "#4A9BD9" }}
+                className="flex items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-2 text-sm font-semibold text-primary"
               >
                 <MessageCircle size={15} />
                 Chat
                 {messages.length > 0 && (
-                  <span className="bg-[#4A9BD9] text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
                     {messages.length}
                   </span>
                 )}
@@ -225,8 +203,7 @@ export default function AppEventDetail() {
                     "Vota tutte le categorie con più opzioni (giorno, ora, luogo) prima di aprire la chat.",
                 })
               }
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold opacity-50"
-              style={{ background: "#EBF5FB", color: "#4A9BD9" }}
+              className="flex items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-2 text-sm font-semibold text-primary opacity-50"
             >
               <MessageCircle size={15} />
               Chat
@@ -242,13 +219,13 @@ export default function AppEventDetail() {
             {act.emoji}
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">{act.label}</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <h1 className="text-xl font-bold text-foreground">{act.label}</h1>
+            <p className="mt-0.5 text-sm text-muted-foreground">
               Organizzato da {event.createdBy}
             </p>
             <div className="mt-2">
               {isPlanning ? (
-                <span className="text-xs font-semibold text-[#4A9BD9] bg-[#EBF5FB] px-3 py-1 rounded-full">
+                <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
                   Pianificando...
                 </span>
               ) : (
@@ -263,27 +240,27 @@ export default function AppEventDetail() {
 
         {/* Participants */}
         <div className="flex items-center gap-2 mt-4">
-          <Users size={14} className="text-gray-400" />
+          <Users size={14} className="text-muted-foreground" />
           <div className="flex -space-x-1.5">
             {event.participants.map(name => (
               <div
                 key={name}
                 title={name}
-                className="w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-bold text-white"
+                className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-card text-[10px] font-bold text-white"
                 style={{ backgroundColor: getAvatarColor(name) }}
               >
                 {getInitials(name)}
               </div>
             ))}
           </div>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-muted-foreground">
             {event.participants.join(", ")}
           </span>
         </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 px-4 py-5 space-y-5">
+      <div className="flex-1 px-4 py-4 space-y-3.5">
         {/* Confirmed info */}
         {!isPlanning && (
           <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100">
@@ -292,18 +269,18 @@ export default function AppEventDetail() {
               Dettagli confermati
             </h3>
             <div className="space-y-2">
+              {event.confirmedVenue && (
+                <div className="flex items-center gap-2">
+                  <MapPin size={14} className="text-emerald-500" />
+                  <span className="text-sm text-gray-700 font-medium">{event.confirmedVenue}</span>
+                </div>
+              )}
               {event.confirmedDate && (
                 <div className="flex items-center gap-2">
                   <Clock size={14} className="text-emerald-500" />
                   <span className="text-sm text-gray-700 font-medium">
                     {event.confirmedDate} · {event.confirmedTime}
                   </span>
-                </div>
-              )}
-              {event.confirmedVenue && (
-                <div className="flex items-center gap-2">
-                  <MapPin size={14} className="text-emerald-500" />
-                  <span className="text-sm text-gray-700 font-medium">{event.confirmedVenue}</span>
                 </div>
               )}
             </div>
@@ -315,17 +292,13 @@ export default function AppEventDetail() {
           <>
             {/* Confirm suggestion */}
             {event.createdBy === currentUser && votes.length >= 3 && (
-              <div
-                className="rounded-2xl p-4 border"
-                style={{ background: "linear-gradient(135deg, #EBF5FB, #D6EAF8)", borderColor: "#7CB9E8" }}
-              >
+              <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 to-primary/5 p-3">
                 <div className="flex items-start gap-2">
-                  <Trophy size={16} className="text-[#4A9BD9] mt-0.5 shrink-0" />
+                  <Trophy size={14} className="mt-0.5 shrink-0 text-primary" />
                   <div className="flex-1">
-                    <p className="text-sm font-bold text-[#4A9BD9]">Abbastanza voti raccolti!</p>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      Proposta: {winDate} · {winTime}
-                      {winVenue ? ` · ${winVenue}` : ""}
+                    <p className="text-xs font-bold text-primary">Abbastanza voti raccolti!</p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground leading-snug">
+                      Proposta: {winVenue ? `${winVenue} · ` : ""}{winDate} · {winTime}
                     </p>
                     <button
                       data-testid="button-confirm-event"
@@ -334,8 +307,7 @@ export default function AppEventDetail() {
                         confirmedTime: winTime,
                         confirmedVenue: winVenue,
                       })}
-                      className="mt-2 px-4 py-2 rounded-lg text-xs font-bold text-white"
-                      style={{ background: "#4A9BD9" }}
+                      className="mt-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-bold text-primary-foreground hover:bg-primary/90"
                     >
                       Conferma evento
                     </button>
@@ -344,129 +316,43 @@ export default function AppEventDetail() {
               </div>
             )}
 
-            {/* Date voting */}
+            {/* Sondaggi: sfondo blu, opzioni bianche */}
+            <div className="space-y-4 rounded-2xl bg-blue-600 p-3 shadow-sm">
+            {/* Venue voting — prima del giorno */}
             <section>
-              <h3 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
-                📅 Quando?
-                {event.dateOptions.length > 1 && (
-                  <span className="text-xs text-gray-400 font-normal">
-                    ({votes.filter((v) => v.voteType === "date").length} voti)
-                  </span>
-                )}
-              </h3>
-              {event.dateOptions.length <= 1 ? (
-                <div className="space-y-2">
-                  {(event.dateOptions[0] ? [event.dateOptions[0]] : ["—"]).map((date) => (
-                    <div
-                      key={date}
-                      className="w-full p-3 rounded-xl border-2 border-gray-100 bg-gray-50 text-left text-sm font-semibold text-gray-800"
-                    >
-                      {date}
-                      <span className="block text-[10px] font-medium text-gray-400 mt-1">
-                        Predefinito dall&apos;organizzatore
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {event.dateOptions.map((date) => {
-                    const group = dateVotes.find((g) => g.value === date);
-                    return (
-                      <VoteBar
-                        key={date}
-                        value={date}
-                        voters={group?.voters ?? []}
-                        total={totalParticipants}
-                        myVote={isMine("date", date)}
-                        onVote={() => castVote({ voteType: "date", voteValue: date })}
-                        disabled={false}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            {/* Time voting */}
-            <section>
-              <h3 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
-                🕐 A che ora?
-                {event.timeOptions.length > 1 && (
-                  <span className="text-xs text-gray-400 font-normal">
-                    ({votes.filter((v) => v.voteType === "time").length} voti)
-                  </span>
-                )}
-              </h3>
-              {event.timeOptions.length <= 1 ? (
-                <div className="space-y-2">
-                  {(event.timeOptions[0] ? [event.timeOptions[0]] : ["—"]).map((time) => (
-                    <div
-                      key={time}
-                      className="w-full p-3 rounded-xl border-2 border-gray-100 bg-gray-50 text-left text-sm font-semibold text-gray-800"
-                    >
-                      {time}
-                      <span className="block text-[10px] font-medium text-gray-400 mt-1">
-                        Predefinito dall&apos;organizzatore
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {event.timeOptions.map((time) => {
-                    const group = timeVotes.find((g) => g.value === time);
-                    return (
-                      <VoteBar
-                        key={time}
-                        value={time}
-                        voters={group?.voters ?? []}
-                        total={totalParticipants}
-                        myVote={isMine("time", time)}
-                        onVote={() => castVote({ voteType: "time", voteValue: time })}
-                        disabled={false}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            {/* Venue voting */}
-            <section>
-              <h3 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+              <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-white">
                 📍 Dove?
                 {event.venueOptions.length > 1 && (
-                  <span className="text-xs text-gray-400 font-normal">
+                  <span className="text-[11px] font-normal text-blue-200">
                     ({votes.filter((v) => v.voteType === "venue").length} voti)
                   </span>
                 )}
               </h3>
               {event.venueOptions.length <= 1 ? (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {event.venueOptions.length === 0 ? (
-                    <p className="text-xs text-gray-400 px-1">Nessun luogo indicato nel sondaggio.</p>
+                    <p className="text-[11px] text-blue-200 px-1">Nessun luogo indicato nel sondaggio.</p>
                   ) : (
                     event.venueOptions.map((venue) => (
                       <div key={venue.name} className="relative">
-                        <div className="w-full p-3 rounded-xl border-2 border-gray-100 bg-gray-50 text-left text-sm font-semibold text-gray-800">
+                        <div className="w-full rounded-lg border border-gray-200 bg-white p-2.5 text-left text-xs font-semibold text-gray-800 shadow-sm">
                           {venue.name}
-                          <span className="block text-[10px] font-medium text-gray-400 mt-1">
+                          <span className="block text-[9px] font-medium text-gray-400 mt-0.5">
                             Predefinito dall&apos;organizzatore
                           </span>
                         </div>
-                        <div className="px-3 pb-2 -mt-1 flex items-center gap-3">
-                          <span className="flex items-center gap-0.5 text-xs text-amber-500 font-semibold">
-                            <Star size={10} fill="currentColor" />
+                        <div className="px-2.5 pb-1.5 -mt-0.5 flex flex-wrap items-center gap-2">
+                          <span className="flex items-center gap-0.5 text-[11px] text-amber-500 font-semibold">
+                            <Star size={9} fill="currentColor" />
                             {venue.rating}
                           </span>
-                          <span className="flex items-center gap-0.5 text-xs text-gray-400">
-                            <MapPin size={10} />
-                            {venue.distance}
+                          <span className="flex items-center gap-0.5 text-[11px] text-gray-400">
+                            <MapPin size={9} />
+                            {venueLocationPreview(venue)}
                           </span>
                           {venue.discount && (
-                            <span className="flex items-center gap-0.5 text-[10px] text-emerald-600 font-semibold">
-                              <Tag size={9} />
+                            <span className="flex items-center gap-0.5 text-[9px] text-emerald-600 font-semibold">
+                              <Tag size={8} />
                               {venue.discount}
                             </span>
                           )}
@@ -476,41 +362,143 @@ export default function AppEventDetail() {
                   )}
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {event.venueOptions.map((venue) => {
                     const group = venueVotes.find((g) => g.value === venue.name);
+                    const voters = group?.voters ?? [];
+                    const n = voters.length;
                     return (
-                      <div key={venue.name} className="relative">
-                        <VoteBar
-                          value={venue.name}
-                          voters={group?.voters ?? []}
-                          total={totalParticipants}
-                          myVote={isMine("venue", venue.name)}
-                          onVote={() => castVote({ voteType: "venue", voteValue: venue.name })}
-                          disabled={false}
-                        />
-                        <div className="px-3 pb-2 -mt-1 flex items-center gap-3">
-                          <span className="flex items-center gap-0.5 text-xs text-amber-500 font-semibold">
-                            <Star size={10} fill="currentColor" />
-                            {venue.rating}
-                          </span>
-                          <span className="flex items-center gap-0.5 text-xs text-gray-400">
-                            <MapPin size={10} />
-                            {venue.distance}
-                          </span>
-                          {venue.discount && (
-                            <span className="flex items-center gap-0.5 text-[10px] text-emerald-600 font-semibold">
-                              <Tag size={9} />
-                              {venue.discount}
+                      <PollOptionButton
+                        key={venue.name}
+                        variant="onBlue"
+                        label={venue.name}
+                        sub={
+                          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                            <span className="flex items-center gap-0.5 text-[11px] font-semibold text-amber-500">
+                              <Star size={9} fill="currentColor" />
+                              {venue.rating}
                             </span>
-                          )}
-                        </div>
-                      </div>
+                            <span className="flex items-center gap-0.5 text-[11px] text-muted-foreground">
+                              <MapPin size={9} />
+                              {venueLocationPreview(venue)}
+                            </span>
+                            {venue.discount ? (
+                              <span className="flex items-center gap-0.5 text-[9px] font-semibold text-emerald-600">
+                                <Tag size={8} />
+                                {venue.discount}
+                              </span>
+                            ) : null}
+                          </div>
+                        }
+                        voters={voters}
+                        totalBallots={venueBallotTotal}
+                        selected={isMine("venue", venue.name)}
+                        onClick={() => castVote({ voteType: "venue", voteValue: venue.name })}
+                        showTopBadge={n > 0 && n === venueMaxVoters}
+                        data-testid={`vote-option-${venue.name}`}
+                      />
                     );
                   })}
                 </div>
               )}
             </section>
+
+            {/* Date voting */}
+            <section>
+              <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-white">
+                📅 Quando?
+                {event.dateOptions.length > 1 && (
+                  <span className="text-[11px] font-normal text-blue-200">
+                    ({votes.filter((v) => v.voteType === "date").length} voti)
+                  </span>
+                )}
+              </h3>
+              {event.dateOptions.length <= 1 ? (
+                <div className="space-y-1.5">
+                  {(event.dateOptions[0] ? [event.dateOptions[0]] : ["—"]).map((date) => (
+                    <div
+                      key={date}
+                      className="w-full rounded-lg border border-gray-200 bg-white p-2.5 text-left text-xs font-semibold text-gray-800 shadow-sm"
+                    >
+                      {date}
+                      <span className="block text-[9px] font-medium text-gray-400 mt-0.5">
+                        Predefinito dall&apos;organizzatore
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {event.dateOptions.map((date) => {
+                    const group = dateVotes.find((g) => g.value === date);
+                    const voters = group?.voters ?? [];
+                    const n = voters.length;
+                    return (
+                      <PollOptionButton
+                        key={date}
+                        variant="onBlue"
+                        label={date}
+                        voters={voters}
+                        totalBallots={dateBallotTotal}
+                        selected={isMine("date", date)}
+                        onClick={() => castVote({ voteType: "date", voteValue: date })}
+                        showTopBadge={n > 0 && n === dateMaxVoters}
+                        data-testid={`vote-option-${date}`}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            {/* Time voting */}
+            <section>
+              <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-white">
+                🕐 A che ora?
+                {event.timeOptions.length > 1 && (
+                  <span className="text-[11px] font-normal text-blue-200">
+                    ({votes.filter((v) => v.voteType === "time").length} voti)
+                  </span>
+                )}
+              </h3>
+              {event.timeOptions.length <= 1 ? (
+                <div className="space-y-1.5">
+                  {(event.timeOptions[0] ? [event.timeOptions[0]] : ["—"]).map((time) => (
+                    <div
+                      key={time}
+                      className="w-full rounded-lg border border-gray-200 bg-white p-2.5 text-left text-xs font-semibold text-gray-800 shadow-sm"
+                    >
+                      {time}
+                      <span className="block text-[9px] font-medium text-gray-400 mt-0.5">
+                        Predefinito dall&apos;organizzatore
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {event.timeOptions.map((time) => {
+                    const group = timeVotes.find((g) => g.value === time);
+                    const voters = group?.voters ?? [];
+                    const n = voters.length;
+                    return (
+                      <PollOptionButton
+                        key={time}
+                        variant="onBlue"
+                        label={time}
+                        voters={voters}
+                        totalBallots={timeBallotTotal}
+                        selected={isMine("time", time)}
+                        onClick={() => castVote({ voteType: "time", voteValue: time })}
+                        showTopBadge={n > 0 && n === timeMaxVoters}
+                        data-testid={`vote-option-${time}`}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+            </div>
           </>
         )}
       </div>

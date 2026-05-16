@@ -18,6 +18,8 @@ export const userPreferencesSchema = z.object({
 export const scopriAiSuggestionSchema = z.object({
   name: z.string().min(2),
   address: z.string().min(6),
+  /** Quartiere / zona di Torino (anteprima; non via civica). */
+  quartiere: z.string().min(2).max(80).optional(),
   matchScore: z.number().min(0).max(100),
   explanation: z.string().min(10),
   estimatedPrice: z.string().min(1),
@@ -39,15 +41,37 @@ export const scopriVenuePipelineSchema = z.object({
   lat: z.number().optional(),
   lng: z.number().optional(),
   openStatus: z.enum(["open", "closed", "unknown"]).optional(),
+  quartiere: z.string().max(80).optional(),
 });
 
 export const scopriAiVenuesResponseSchema = z.object({
   venues: z.array(scopriAiSuggestionSchema).min(0).max(12),
 });
 
+/** Risposta JSON per ricerca luoghi a Torino (creazione evento / banner). */
+export const torinoVenueSearchItemSchema = z.object({
+  name: z.string().min(2).max(160),
+  /** Breve ok: la riga mostrata usa anche la query di `mapsUrl`. */
+  address: z.string().min(2).max(220),
+  /** Quartiere o zona (anteprima UI, senza via civica). */
+  quartiere: z.string().min(2).max(80).optional(),
+  rating: z.number().min(0).max(5),
+  mapsUrl: z.string().url(),
+  websiteUrl: z.string().url(),
+  instagramUrl: z
+    .union([z.string().url(), z.literal(""), z.null()])
+    .optional()
+    .transform((u) => (u && String(u).trim().length > 0 ? String(u).trim() : undefined)),
+});
+
+export const torinoVenueSearchResponseSchema = z.object({
+  venues: z.array(torinoVenueSearchItemSchema).min(0).max(10),
+});
+
 export type ScopriAiSuggestion = z.infer<typeof scopriAiSuggestionSchema>;
 export type ScopriAiVenuesResponse = z.infer<typeof scopriAiVenuesResponseSchema>;
 export type ScopriAiVenue = z.infer<typeof scopriVenuePipelineSchema>;
+export type TorinoVenueSearchItem = z.infer<typeof torinoVenueSearchItemSchema>;
 
 function stripDiacritics(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -157,14 +181,107 @@ export function validateSuggestions(suggestions: AISuggestion[], prefs: UserPref
   });
 }
 
+function scopriRequestNorm(s: string): string {
+  return stripDiacritics(s.toLowerCase());
+}
+
+function suggestionMatchesUserRequestKeywords(
+  s: AISuggestion,
+  wantsPizza: boolean,
+  wantsGlutenFree: boolean,
+): boolean {
+  const blob = scopriRequestNorm([s.name, s.address, s.explanation].join(" "));
+  const nameN = scopriRequestNorm(s.name);
+
+  if (wantsPizza) {
+    const pizzaSignal =
+      /\b(pizzeria|pizza al|pizza\s|forno a legna|teglia|margherita|napoletana|romana|impasto pizza|menu pizza|pizze|pizzaiol)\b/.test(
+        blob,
+      );
+    if (!pizzaSignal) return false;
+    const looksNonPizzaOnly =
+      /\b(pasticcer|gelater|confiser|laboratorio dolci|^caffe\s|^caffè\s|^bar\s|mulassano|baratti|bicerin|fiorio|platti|san carlo\b)/i.test(
+        nameN,
+      );
+    if (looksNonPizzaOnly && !/\b(pizzeria|pizza senza|forno a legna|menu.{0,40}pizza|pizza.{0,20}glut)\b/.test(blob)) {
+      return false;
+    }
+  }
+
+  if (wantsGlutenFree) {
+    const gfSignal =
+      /\b(senza\s*glutine|gluten[-\s]?free|celiac|celiachia|\baic\b|opzione senza glutine|menu senza glutine|impasto senza glutine|farina senza glutine|pizza senza glutine|deglutin|offerta.{0,20}glut)\b/.test(
+        blob,
+      );
+    if (!gfSignal) return false;
+  }
+
+  return true;
+}
+
+/**
+ * Dopo `validateSuggestions`: se l'utente chiede esplicitamente pizzeria e/o senza glutine,
+ * scarta suggerimenti che nel nome o nella spiegazione non dimostrano quel tipo di locale (es. pasticceria generica).
+ */
+export function filterAiSuggestionsByUserRequest(suggestions: AISuggestion[], userRequest: string): AISuggestion[] {
+  const raw = userRequest.trim();
+  if (!raw) return suggestions;
+  const u = scopriRequestNorm(raw);
+
+  const wantsPizza =
+    /\bpizzeria\b/.test(u) ||
+    /\bpizza\b/.test(u) ||
+    /\bpizze\b/.test(u) ||
+    (u.includes("forno") && u.includes("pizza"));
+  const wantsGlutenFree =
+    /\bceliac|\bceliachia|senza\s*glutine|no\s*glutine|gluten[-\s]?free|deglutinat|\baic\b/i.test(u);
+
+  if (!wantsPizza && !wantsGlutenFree) return suggestions;
+
+  return suggestions.filter((s) => suggestionMatchesUserRequestKeywords(s, wantsPizza, wantsGlutenFree));
+}
+
+/** Stesso criterio su venue espansi o voci catalogo (nome + descrizione). */
+export function venueTextMatchesUserRequest(userRequest: string, name: string, description: string): boolean {
+  const raw = userRequest.trim();
+  if (!raw) return true;
+  const u = scopriRequestNorm(raw);
+  const wantsPizza =
+    /\bpizzeria\b/.test(u) ||
+    /\bpizza\b/.test(u) ||
+    /\bpizze\b/.test(u) ||
+    (u.includes("forno") && u.includes("pizza"));
+  const wantsGlutenFree =
+    /\bceliac|\bceliachia|senza\s*glutine|no\s*glutine|gluten[-\s]?free|deglutinat|\baic\b/i.test(u);
+  if (!wantsPizza && !wantsGlutenFree) return true;
+
+  const fake: AISuggestion = {
+    name,
+    address: "",
+    matchScore: 50,
+    explanation: description,
+    estimatedPrice: "€€",
+  };
+  return suggestionMatchesUserRequestKeywords(fake, wantsPizza, wantsGlutenFree);
+}
+
 function defaultBuildMapsUrl(name: string, address: string): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${name} ${address} Torino`)}`;
 }
 
 /** Converte il payload minimale dell'AI nel formato pipeline (sanitize / filtri / UI). */
+function quartiereFromAddressLine(address: string): string | undefined {
+  const t = address.trim();
+  if (t.length < 3) return undefined;
+  const beforeComma = t.split(",")[0]?.trim();
+  if (beforeComma && beforeComma.length >= 2 && beforeComma.length <= 80) return beforeComma;
+  return undefined;
+}
+
 export function expandScopriAiSuggestionToVenue(s: ScopriAiSuggestion): ScopriAiVenue {
   const mapsUrl = defaultBuildMapsUrl(s.name, s.address);
   const rating = Math.min(5, Math.max(0, s.matchScore / 20));
+  const q = (s.quartiere ?? "").trim() || quartiereFromAddressLine(s.address);
   return {
     name: s.name,
     address: s.address,
@@ -175,6 +292,7 @@ export function expandScopriAiSuggestionToVenue(s: ScopriAiSuggestion): ScopriAi
     websiteUrl: mapsUrl,
     mapsUrl,
     safariUrl: mapsUrl,
+    ...(q ? { quartiere: q } : {}),
   };
 }
 

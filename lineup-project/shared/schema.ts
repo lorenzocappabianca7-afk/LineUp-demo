@@ -1,5 +1,5 @@
 
-import { pgTable, text, serial, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -42,6 +42,8 @@ export const appEvents = pgTable("app_events", {
   confirmedDate: text("confirmed_date"),
   confirmedTime: text("confirmed_time"),
   confirmedVenue: text("confirmed_venue"),
+  /** Modalità di sondaggio (vedi `shared/surveyModes.ts`). */
+  surveyMode: text("survey_mode").notNull().default("flexible_voting"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 export const insertAppEventSchema = createInsertSchema(appEvents).omit({ id: true, createdAt: true });
@@ -98,6 +100,64 @@ export const appProposals = pgTable("app_proposals", {
 export const insertAppProposalSchema = createInsertSchema(appProposals).omit({ id: true, createdAt: true });
 export type AppProposal = typeof appProposals.$inferSelect;
 export type InsertAppProposal = z.infer<typeof insertAppProposalSchema>;
+
+// Friends (owner → friend): chi può ricevere proposte e vedere note pubblicate "tutti i friends"
+export const appFriends = pgTable("app_friends", {
+  id: serial("id").primaryKey(),
+  ownerName: text("owner_name").notNull(),
+  friendName: text("friend_name").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAppFriendSchema = createInsertSchema(appFriends).omit({ id: true, createdAt: true });
+export type AppFriend = typeof appFriends.$inferSelect;
+export type InsertAppFriend = z.infer<typeof insertAppFriendSchema>;
+
+// Pubblicazione evento in bacheca "note" sopra le chat (una attiva per evento)
+export const appEventPublications = pgTable("app_event_publications", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull(),
+  publishedBy: text("published_by").notNull(),
+  /** "all" = tutti i friends dell'autore; "selected" = solo friendNames */
+  audience: text("audience").notNull(),
+  friendNames: text("friend_names").notNull().default("[]"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAppEventPublicationSchema = createInsertSchema(appEventPublications).omit({
+  id: true,
+  createdAt: true,
+});
+export type AppEventPublication = typeof appEventPublications.$inferSelect;
+export type InsertAppEventPublication = z.infer<typeof insertAppEventPublicationSchema>;
+
+// Lettura nota (bordo grigio dopo visualizzazione)
+export const appPublicationViews = pgTable(
+  "app_publication_views",
+  {
+    publicationId: integer("publication_id").notNull(),
+    viewerName: text("viewer_name").notNull(),
+    viewedAt: timestamp("viewed_at").defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.publicationId, t.viewerName] }),
+  }),
+);
+
+export type AppPublicationView = typeof appPublicationViews.$inferSelect;
+
+// Richiesta di partecipazione a evento pubblicato
+export const appJoinRequests = pgTable("app_join_requests", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull(),
+  requesterName: text("requester_name").notNull(),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAppJoinRequestSchema = createInsertSchema(appJoinRequests).omit({ id: true, createdAt: true });
+export type AppJoinRequest = typeof appJoinRequests.$inferSelect;
+export type InsertAppJoinRequest = z.infer<typeof insertAppJoinRequestSchema>;
 
 // Legacy tables kept for compatibility
 export const demoStories = pgTable("demo_stories", {

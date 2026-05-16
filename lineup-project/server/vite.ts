@@ -29,10 +29,23 @@ export async function setupVite(server: Server, app: Express) {
     appType: "custom",
   });
 
-  app.use(vite.middlewares);
+  // Non far passare /api dal middleware Vite: in alcuni ambienti risponde con HTML
+  // (index) e rompe le POST JSON verso Express.
+  app.use((req, res, next) => {
+    const pathOnly = (req.originalUrl || "").split("?")[0] || "";
+    if (pathOnly.startsWith("/api")) return next();
+    return vite.middlewares(req, res, next);
+  });
 
   app.use("/{*path}", async (req, res, next) => {
     const url = req.originalUrl;
+    const pathOnly = url.split("?")[0] ?? url;
+    if (pathOnly.startsWith("/api")) {
+      res.status(404).type("application/json").json({
+        message: `API non trovata: ${req.method} ${pathOnly}. Riavvia il server (npm run dev) con l'ultima versione del codice.`,
+      });
+      return;
+    }
 
     try {
       const clientTemplate = path.resolve(

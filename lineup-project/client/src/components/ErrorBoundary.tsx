@@ -30,10 +30,7 @@ export default class ErrorBoundary extends Component<Props, State> {
     return (
       <div className="fixed inset-0 bg-white flex flex-col items-center justify-center px-8 text-center">
         <div className="w-full max-w-sm">
-          <div
-            className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg"
-            style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}
-          >
+          <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-primary to-primary/75 shadow-lg">
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
               <line x1="12" y1="8" x2="12" y2="12" />
@@ -44,7 +41,7 @@ export default class ErrorBoundary extends Component<Props, State> {
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Ops, qualcosa è andato storto</h1>
           <p className="text-sm text-gray-500 leading-relaxed mb-6">
             Si è verificato un problema inaspettato. Il team&nbsp;
-            <span className="font-semibold text-[#4A9BD9]">LineUp</span>&nbsp;
+            <span className="font-semibold text-primary">LineUp</span>&nbsp;
             sta già lavorando per risolverlo nel più breve tempo possibile.
             <br /><br />
             Ci scusiamo per il disagio.
@@ -62,8 +59,7 @@ export default class ErrorBoundary extends Component<Props, State> {
               this.setState({ hasError: false, errorId: "" });
               window.location.href = "/";
             }}
-            className="w-full py-3.5 rounded-2xl font-bold text-white text-sm shadow-sm active:opacity-90 transition-opacity"
-            style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}
+            className="w-full rounded-2xl bg-gradient-to-br from-primary to-primary/75 py-3.5 text-sm font-bold text-primary-foreground shadow-sm transition-opacity active:opacity-90"
           >
             Torna alla Home
           </button>

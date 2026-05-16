@@ -5,7 +5,7 @@ import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import {
   getCurrentUser, setCurrentUser, getAvatarColor, getInitials,
-  getActivity, MONTHS_IT, parseEvent,
+  getActivity, MONTHS_IT, parseEvent, CONTACTS,
 } from "@/lib/appUtils";
 
 const LS_PHOTO = "lineup-profile-photo";
@@ -120,7 +120,7 @@ function EditProfileModal({
           value={draft}
           onChange={e => setDraft(e.target.value)}
           onKeyDown={e => e.key === "Enter" && onSave(draft, draftPhoto)}
-          className="w-full border-2 border-gray-200 focus:border-[#4A9BD9] rounded-xl px-4 py-3 text-base font-semibold outline-none transition-colors mb-5"
+          className="w-full border-2 border-gray-200 focus:border-primary rounded-xl px-4 py-3 text-base font-semibold outline-none transition-colors mb-5"
           placeholder="Il tuo nome"
         />
 
@@ -128,8 +128,7 @@ function EditProfileModal({
           data-testid="button-save-profile"
           onClick={() => onSave(draft, draftPhoto)}
           disabled={!draft.trim()}
-          className="w-full py-3.5 rounded-xl font-semibold text-white disabled:opacity-40 flex items-center justify-center gap-2"
-          style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-primary to-primary/75 py-3.5 font-semibold text-primary-foreground disabled:opacity-40"
         >
           <Check size={17} />
           Salva modifiche
@@ -149,10 +148,12 @@ const saveHidden = (s: Set<number>) =>
 
 function ProfileCalendar({
   events,
+  viewerName,
   onUnconfirm,
   onHide,
 }: {
   events: ReturnType<typeof parseEvent>[];
+  viewerName: string;
   onUnconfirm: (id: number) => void;
   onHide: (id: number) => void;
 }) {
@@ -248,7 +249,7 @@ function ProfileCalendar({
                 >
                   <div className={`w-9 h-9 flex items-center justify-center rounded-full text-[15px] font-semibold transition-all ${
                     isToday ? "bg-red-500 text-white"
-                    : isSel ? "bg-[#4A9BD9] text-white"
+                    : isSel ? "bg-primary text-white"
                     : isPast ? "text-gray-300"
                     : "text-gray-800"
                   }`}>
@@ -259,7 +260,7 @@ function ProfileCalendar({
                       <div className={`w-4/5 h-[5px] rounded-full ${isPast ? "bg-gray-200" : "bg-emerald-400"}`} />
                     )}
                     {dayInfo?.planning && (
-                      <div className={`w-4/5 h-[5px] rounded-full ${isPast ? "bg-gray-200" : "bg-[#4A9BD9]/60"}`} />
+                      <div className={`w-4/5 h-[5px] rounded-full ${isPast ? "bg-gray-200" : "bg-primary/60"}`} />
                     )}
                   </div>
                 </button>
@@ -298,7 +299,7 @@ function ProfileCalendar({
                         <span className="text-xs font-bold text-gray-500 leading-none">
                           {time || "--:--"}
                         </span>
-                        <div className={`w-0.5 h-4 mt-1 rounded-full ${confirmed ? "bg-emerald-300" : "bg-[#4A9BD9]/40"}`} />
+                        <div className={`w-0.5 h-4 mt-1 rounded-full ${confirmed ? "bg-emerald-300" : "bg-primary/40"}`} />
                       </div>
 
                       {/* Banner */}
@@ -306,7 +307,7 @@ function ProfileCalendar({
                         className={`flex-1 flex items-center justify-between px-3 py-2.5 rounded-xl text-white active:opacity-80 transition-opacity ${
                           confirmed
                             ? "bg-emerald-500"
-                            : "bg-[#4A9BD9]"
+                            : "bg-primary"
                         }`}
                         onClick={() => setExpandedId(isExp ? null : e.id)}
                       >
@@ -367,19 +368,21 @@ function ProfileCalendar({
               <p className="text-xs text-gray-400 uppercase font-bold tracking-wide mb-1">Rimuovi evento</p>
               <p className="text-base font-bold text-gray-900 mb-5">{act.label}</p>
 
-              <button
-                data-testid="button-unconfirm-event"
-                onClick={() => { onUnconfirm(deleteModalId); setDeleteModalId(null); setSelDay(null); }}
-                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-[#EBF5FB] mb-3 active:opacity-80 transition-opacity"
-              >
-                <div className="w-9 h-9 rounded-full bg-[#4A9BD9]/10 flex items-center justify-center shrink-0">
-                  <CalendarX size={17} className="text-[#4A9BD9]" />
-                </div>
-                <div className="text-left">
-                  <p className="text-sm font-bold text-gray-800">Solo dal calendario</p>
-                  <p className="text-xs text-gray-400">L'evento torna in programma e resti nella chat</p>
-                </div>
-              </button>
+              {ev.createdBy === viewerName && (
+                <button
+                  data-testid="button-unconfirm-event"
+                  onClick={() => { onUnconfirm(deleteModalId); setDeleteModalId(null); setSelDay(null); }}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-primary/10 mb-3 active:opacity-80 transition-opacity"
+                >
+                  <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                    <CalendarX size={17} className="text-primary" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-bold text-gray-800">Solo dal calendario</p>
+                    <p className="text-xs text-gray-400">L'evento torna in programma e resti nella chat</p>
+                  </div>
+                </button>
+              )}
 
               <button
                 data-testid="button-hide-event"
@@ -419,6 +422,41 @@ export default function AppProfile() {
   const queryClient = useQueryClient();
   const { data: rawEvents } = useQuery<any[]>({ queryKey: ["/api/app/events"] });
 
+  const { data: friendsRes, refetch: refetchFriends } = useQuery<{ friends: string[] }>({
+    queryKey: ["/api/app/friends", name],
+    queryFn: async () => {
+      const r = await fetch(`/api/app/friends/${encodeURIComponent(name)}`);
+      if (!r.ok) return { friends: [] };
+      return r.json();
+    },
+  });
+  const friends = friendsRes?.friends ?? [];
+
+  const { mutate: seedFriends, isPending: seedingFriends } = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/app/friends/seed-demo", { ownerName: name }),
+    onSuccess: () => {
+      refetchFriends();
+      queryClient.invalidateQueries({ queryKey: ["/api/app/friends", name] });
+    },
+  });
+
+  const { mutate: addFriendMut } = useMutation({
+    mutationFn: (friendName: string) => apiRequest("POST", "/api/app/friends", { ownerName: name, friendName }),
+    onSuccess: () => {
+      refetchFriends();
+      queryClient.invalidateQueries({ queryKey: ["/api/app/friends", name] });
+    },
+  });
+
+  const { mutate: removeFriendMut } = useMutation({
+    mutationFn: (friendName: string) =>
+      apiRequest("DELETE", `/api/app/friends/${encodeURIComponent(name)}/${encodeURIComponent(friendName)}`),
+    onSuccess: () => {
+      refetchFriends();
+      queryClient.invalidateQueries({ queryKey: ["/api/app/friends", name] });
+    },
+  });
+
   const events = (rawEvents || []).map(parseEvent).filter(e => !getHidden().has(e.id));
   // Mostra tutti gli eventi confermati dove l'utente partecipa
   const calendarEvents = events.filter(e => e.status === "confirmed" && e.participants.includes(name));
@@ -428,7 +466,7 @@ export default function AppProfile() {
   const confirmed   = events.filter(e => e.status === "confirmed" && e.participants.includes(name));
 
   const { mutate: unconfirmEvent } = useMutation({
-    mutationFn: (id: number) => apiRequest("PUT", `/api/app/events/${id}/unconfirm`),
+    mutationFn: (id: number) => apiRequest("PUT", `/api/app/events/${id}/unconfirm`, { actorName: name }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/app/events"] }),
   });
 
@@ -502,10 +540,72 @@ export default function AppProfile() {
       </div>
 
       <div className="flex-1 px-4 py-5 space-y-5">
+        {/* ─── Friends ─── */}
+        <section>
+          <div className="flex items-center justify-between mb-2 px-1">
+            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide">Friends</h2>
+            <button
+              type="button"
+              data-testid="button-seed-friends"
+              disabled={seedingFriends}
+              onClick={() => seedFriends()}
+              className="text-[11px] font-bold text-primary disabled:opacity-40"
+            >
+              Aggiungi demo
+            </button>
+          </div>
+          <div className="bg-white rounded-2xl border border-gray-100 p-3 space-y-2">
+            {friends.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-3">
+                Nessun friend ancora. Usa &quot;Aggiungi demo&quot; o aggiungi singoli contatti qui sotto.
+              </p>
+            ) : (
+              <ul className="space-y-1.5">
+                {friends.map((f) => (
+                  <li key={f} className="flex items-center justify-between gap-2 py-1.5 border-b border-gray-50 last:border-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                        style={{ backgroundColor: getAvatarColor(f) }}
+                      >
+                        {getInitials(f)}
+                      </div>
+                      <span className="text-sm font-semibold text-gray-900 truncate">{f}</span>
+                    </div>
+                    <button
+                      type="button"
+                      data-testid={`remove-friend-${f}`}
+                      onClick={() => removeFriendMut(f)}
+                      className="text-xs font-bold text-red-500 shrink-0 px-2 py-1"
+                    >
+                      Rimuovi
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="text-[10px] text-gray-400 font-medium pt-1">Aggiungi da contatti demo non ancora in lista:</p>
+            <div className="flex flex-wrap gap-2">
+              {CONTACTS.filter((c) => c !== name && !friends.includes(c)).map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  data-testid={`add-friend-${c}`}
+                  onClick={() => addFriendMut(c)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/30"
+                >
+                  <Users size={12} />
+                  {c}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* ─── Calendario ─── */}
         <section>
           <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2 px-1">Il tuo calendario</h2>
-          <ProfileCalendar events={calendarEvents} onUnconfirm={unconfirmEvent} onHide={hideEvent} />
+          <ProfileCalendar events={calendarEvents} viewerName={name} onUnconfirm={unconfirmEvent} onHide={hideEvent} />
         </section>
 
         <div className="pb-4" />

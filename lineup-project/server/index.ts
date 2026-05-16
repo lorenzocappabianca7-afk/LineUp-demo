@@ -50,10 +50,12 @@ app.use("/api/app/events", (req, _res, next) => {
   if (req.method === "POST") return writeLimiter(req, _res, next);
   next();
 });
+app.use("/api/app/pianifica-demo/feedback", writeLimiter);
 
 // ── Request timeout (30s per AI, 10s per tutto il resto) ──
 app.use((req: Request, res: Response, next: NextFunction) => {
-  const timeout = req.path.startsWith("/api/scopri") ? 30_000 : 10_000;
+  const timeout =
+    req.path.startsWith("/api/scopri") || req.path.startsWith("/api/app/venues/ai-search") ? 30_000 : 10_000;
   res.setTimeout(timeout, () => {
     if (!res.headersSent) res.status(503).json({ message: "Richiesta scaduta, riprova." });
   });
@@ -133,6 +135,11 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      if (process.env.LINEUP_DEV_SIM === "1") {
+        log(
+          `modalità simulazione (seconda istanza): stesso codice su porta diversa — apri http://localhost:${port} · dev principale di solito su http://localhost:5174`,
+        );
+      }
     },
   );
 })();

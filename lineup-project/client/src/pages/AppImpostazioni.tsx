@@ -132,7 +132,7 @@ function SettingsRow({
 
 /* ─── Preset palette per i banner ─── */
 const BANNER_COLORS = [
-  { label: "Blu",     value: "#4A9BD9" },
+  { label: "Blu",     value: "#8ABFE8" },
   { label: "Verde",   value: "#22C55E" },
   { label: "Arancio", value: "#F97316" },
   { label: "Rosso",   value: "#EF4444" },
@@ -247,7 +247,7 @@ function BannerAdminPanel({ adminPw, onClose }: { adminPw: string; onClose: () =
   const qc = useQueryClient();
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
-  const [bgColor, setBgColor] = useState("#4A9BD9");
+  const [bgColor, setBgColor] = useState("#8ABFE8");
   const [preview, setPreview] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
 
@@ -259,7 +259,7 @@ function BannerAdminPanel({ adminPw, onClose }: { adminPw: string; onClose: () =
       qc.invalidateQueries({ queryKey: ["/api/app/banners"] });
       setTitle("");
       setSubtitle("");
-      setBgColor("#4A9BD9");
+      setBgColor("#8ABFE8");
       setPreview(false);
     },
   });
@@ -277,8 +277,8 @@ function BannerAdminPanel({ adminPw, onClose }: { adminPw: string; onClose: () =
           <X size={16} className="text-gray-500" />
         </button>
         <h2 className="text-lg font-bold text-gray-900 flex-1">Gestione banner</h2>
-        <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}>
-          <Megaphone size={15} className="text-white" />
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/75">
+          <Megaphone size={15} className="text-primary-foreground" />
         </div>
       </div>
 
@@ -321,7 +321,7 @@ function BannerAdminPanel({ adminPw, onClose }: { adminPw: string; onClose: () =
                 onChange={e => setTitle(e.target.value)}
                 placeholder="Es. Novità in arrivo su LineUp..."
                 rows={2}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#4A9BD9] resize-none bg-white"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary resize-none bg-white"
               />
             </div>
 
@@ -333,7 +333,7 @@ function BannerAdminPanel({ adminPw, onClose }: { adminPw: string; onClose: () =
                 value={subtitle}
                 onChange={e => setSubtitle(e.target.value)}
                 placeholder="Es. Presto potrai invitare amici con un link..."
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#4A9BD9] bg-white"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary bg-white"
               />
             </div>
 
@@ -341,7 +341,7 @@ function BannerAdminPanel({ adminPw, onClose }: { adminPw: string; onClose: () =
             {title && (
               <button
                 onClick={() => setPreview(v => !v)}
-                className="flex items-center gap-1.5 text-xs text-[#4A9BD9] font-semibold"
+                className="flex items-center gap-1.5 text-xs text-primary font-semibold"
               >
                 <Eye size={13} /> {preview ? "Nascondi" : "Anteprima"}
               </button>
@@ -359,8 +359,7 @@ function BannerAdminPanel({ adminPw, onClose }: { adminPw: string; onClose: () =
             <button
               onClick={() => createMutation.mutate()}
               disabled={!title || createMutation.isPending}
-              className="w-full py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-40"
-              style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}
+              className="w-full rounded-xl bg-gradient-to-br from-primary to-primary/75 py-2.5 text-sm font-bold text-primary-foreground disabled:opacity-40"
             >
               {createMutation.isPending ? "Pubblicazione..." : "Pubblica banner"}
             </button>
@@ -372,7 +371,7 @@ function BannerAdminPanel({ adminPw, onClose }: { adminPw: string; onClose: () =
           <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Banner attivi</p>
           {isLoading ? (
             <div className="flex justify-center py-8">
-              <div className="animate-spin w-5 h-5 border-2 border-[#4A9BD9] border-t-transparent rounded-full" />
+              <div className="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full" />
             </div>
           ) : banners.length === 0 ? (
             <div className="bg-gray-50 rounded-2xl px-4 py-8 text-center border border-gray-100">
@@ -481,7 +480,7 @@ function ContactsSection() {
         <div className="flex items-center gap-2">
           <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide">I tuoi contatti</h2>
           {contacts.length > 0 && (
-            <span className="text-[10px] font-bold text-white bg-[#4A9BD9] rounded-full w-4 h-4 flex items-center justify-center">
+            <span className="text-[10px] font-bold text-white bg-primary rounded-full w-4 h-4 flex items-center justify-center">
               {contacts.length}
             </span>
           )}
@@ -497,7 +496,7 @@ function ContactsSection() {
             <button
               onClick={handleImportFromPhone}
               disabled={importing}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#4A9BD9] active:opacity-80 transition-opacity disabled:opacity-60"
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary active:opacity-80 transition-opacity disabled:opacity-60"
             >
               <BookUser size={15} className="text-white" />
               <span className="text-sm font-semibold text-white">
@@ -521,14 +520,14 @@ function ContactsSection() {
                 placeholder="Nome *"
                 value={formName}
                 onChange={e => setFormName(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm outline-none focus:border-[#4A9BD9] transition-colors"
+                className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm outline-none focus:border-primary transition-colors"
               />
               <input
                 type="tel"
                 placeholder="Numero di telefono (opzionale)"
                 value={formPhone}
                 onChange={e => setFormPhone(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm outline-none focus:border-[#4A9BD9] transition-colors"
+                className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm outline-none focus:border-primary transition-colors"
               />
               <div className="flex gap-2 pt-1">
                 <button
@@ -574,7 +573,7 @@ function ContactsSection() {
                       <div className="flex items-center gap-1.5">
                         <span className="text-sm font-semibold text-gray-900 truncate">{c.name}</span>
                         {onLineup && (
-                          <CheckCircle2 size={12} className="text-[#4A9BD9] shrink-0" />
+                          <CheckCircle2 size={12} className="text-primary shrink-0" />
                         )}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
@@ -586,7 +585,7 @@ function ContactsSection() {
                         )}
                         <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
                           c.source === "rubrica"
-                            ? "bg-[#EBF5FB] text-[#4A9BD9]"
+                            ? "bg-primary/10 text-primary"
                             : "bg-gray-100 text-gray-400"
                         }`}>
                           {c.source === "rubrica" ? "rubrica" : "manuale"}
@@ -683,7 +682,7 @@ export default function AppImpostazioni() {
               label="Notifiche"
               onClick={toggleNotif}
               right={
-                <div className={`w-11 h-6 rounded-full transition-colors flex items-center px-0.5 ${notif ? "bg-[#4A9BD9]" : "bg-gray-200"}`}>
+                <div className={`w-11 h-6 rounded-full transition-colors flex items-center px-0.5 ${notif ? "bg-primary" : "bg-gray-200"}`}>
                   <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${notif ? "translate-x-5" : "translate-x-0"}`} />
                 </div>
               }
@@ -709,14 +708,14 @@ export default function AppImpostazioni() {
                     key={f.key}
                     onClick={() => cycleFont(f.key)}
                     className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border transition-colors ${
-                      fontKey === f.key ? "border-[#4A9BD9] bg-[#EBF5FB]" : "border-gray-100 bg-gray-50"
+                      fontKey === f.key ? "border-primary bg-primary/10" : "border-gray-100 bg-gray-50"
                     }`}
                   >
-                    <span className={`text-sm font-medium ${fontKey === f.key ? "text-[#4A9BD9]" : "text-gray-700"}`}
+                    <span className={`text-sm font-medium ${fontKey === f.key ? "text-primary" : "text-gray-700"}`}
                       style={{ fontSize: f.px }}>
                       {f.label}
                     </span>
-                    {fontKey === f.key && <Check size={15} className="text-[#4A9BD9]" />}
+                    {fontKey === f.key && <Check size={15} className="text-primary" />}
                   </button>
                 ))}
               </div>
@@ -765,11 +764,11 @@ export default function AppImpostazioni() {
                     >
                       <div
                         className={`w-10 h-10 rounded-xl border-2 transition-all ${
-                          chatBg === bg.key ? "border-[#4A9BD9] scale-110" : "border-gray-200"
+                          chatBg === bg.key ? "border-primary scale-110" : "border-gray-200"
                         }`}
                         style={{ backgroundColor: bg.color }}
                       />
-                      <span className={`text-[9px] font-medium ${chatBg === bg.key ? "text-[#4A9BD9]" : "text-gray-400"}`}>
+                      <span className={`text-[9px] font-medium ${chatBg === bg.key ? "text-primary" : "text-gray-400"}`}>
                         {bg.label}
                       </span>
                     </button>
@@ -824,8 +823,8 @@ export default function AppImpostazioni() {
 
             <SettingsRow
               testId="button-qr-code"
-              icon={<QrCode size={17} className="text-[#4A9BD9]" />}
-              iconBg="bg-[#EBF5FB]"
+              icon={<QrCode size={17} className="text-primary" />}
+              iconBg="bg-primary/10"
               label="Codice amico"
               onClick={() => setShowQr(true)}
             />

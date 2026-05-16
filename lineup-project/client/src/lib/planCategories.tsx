@@ -26,25 +26,8 @@ export const PLAN_CATEGORIES: readonly PlanCategoryDef[] = [
 
 /** Stesse sottocategorie del Pianifica ("Scegli una sottocategoria"). */
 export const PLAN_SUBCATEGORIES: Record<string, readonly string[]> = {
-  cibo: [
-    "Aperitivo",
-    "Cena",
-    "Colazione",
-    "Pranzo",
-    "Spuntino",
-    "Brunch",
-    "Cucina alta e innovazione",
-    "Cucina libanese",
-    "Cucina turca",
-    "Cucina cinese",
-    "Cucina sudamericana",
-    "L aperitivo storico",
-    "Apericena",
-    "Aperitivo alternativo",
-    "Merenda sinoira",
-    "Aperitivo popolare",
-    "Aperitivo fusion",
-  ],
+  /** Solo le prime sei sottocategorie (fino a Brunch) per il flusso Cibo in app. */
+  cibo: ["Aperitivo", "Cena", "Colazione", "Pranzo", "Spuntino", "Brunch"],
   cultura: ["Mostre", "Musei"],
   sport: [
     "Arti marziali",

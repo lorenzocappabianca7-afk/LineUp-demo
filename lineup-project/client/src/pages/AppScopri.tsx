@@ -3,13 +3,21 @@ import {
   ChevronLeft, Sparkles, MapPin, Star, Tag, RefreshCw,
   Calendar, ExternalLink, CalendarPlus, CheckCircle2,
 } from "lucide-react";
-import { VENUES_BY_ACTIVITY, type VenueOption, type ScopriToCreatePrefill } from "@/lib/appUtils";
+import {
+  VENUES_BY_ACTIVITY,
+  venuePollSubtitle,
+  venueOptionFromScopriAi,
+  type VenueOption,
+  type ScopriToCreatePrefill,
+} from "@/lib/appUtils";
 import { PLAN_CATEGORIES, PLAN_SUBCATEGORIES, venuePoolKeyForPlanSubcategory } from "@/lib/planCategories";
 import ScopriTorinoLeafletMap from "@/components/ScopriTorinoLeafletMap";
 
 interface AiVenue {
   name: string;
   address: string;
+  /** Zona / quartiere (anteprima lista). */
+  quartiere?: string;
   description: string;
   rating: number;
   priceRange: string;
@@ -20,6 +28,8 @@ interface AiVenue {
   score?: number;
   why?: string[];
   openStatus?: "open" | "closed" | "unknown";
+  /** Dal server: "verified" = catalogo o controlli link/geo; "suggestion" = altre idee meno verificate. */
+  scopriVerification?: "verified" | "suggestion";
 }
 
 interface AiQuestion {
@@ -39,8 +49,32 @@ type ScopriConstraintMemory = {
 };
 
 
+const CHI_LABEL: Record<string, string> = {
+  amici: "Amici",
+  famiglia: "Familiari",
+  coppia: "Coppia",
+  solo: "Da solo",
+};
+
+const MEZZO_LABEL: Record<string, string> = {
+  piedi: "A piedi",
+  mezzi: "Bus / Metro",
+  auto: "In auto",
+  moto: "Moto / Scooter",
+};
+
 function getPianificaStyleQuestions(): AiQuestion[] {
   return [
+    {
+      id: "chi",
+      text: "Con chi ci vuoi andare?",
+      options: [
+        { key: "amici", label: "Amici" },
+        { key: "famiglia", label: "Familiari" },
+        { key: "coppia", label: "Coppia" },
+        { key: "solo", label: "Da solo" },
+      ],
+    },
     {
       id: "mezzo",
       text: "Come vuoi arrivarci?",
@@ -83,9 +117,11 @@ function generateResults(
 
 function buildReason(answers: Record<string, string>, v: VenueOption): string {
   const parts: string[] = [];
-  if (answers.chi === "coppia") parts.push("ottimo per una serata romantica");
-  if (answers.chi === "famiglia") parts.push("adatto a tutta la famiglia");
-  if (answers.chi === "amici") parts.push("perfetto per un gruppo");
+  const chi = answers.chi?.toLowerCase();
+  if (chi === "coppia") parts.push("ottimo per una serata romantica");
+  if (chi === "famiglia") parts.push("adatto a tutta la famiglia");
+  if (chi === "amici") parts.push("perfetto per un gruppo");
+  if (chi === "solo") parts.push("adatto anche a chi va da solo");
   if (answers.quando === "stasera") parts.push("disponibile stasera");
   if (v.discount) parts.push(`offerta: ${v.discount}`);
   if (parts.length === 0) parts.push(`valutazione ${v.rating} stelle`);
@@ -180,9 +216,12 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
     setQIdx(0);
     if (macro) {
       setAiPrefetchStatus("running");
+      const prefetchAc = new AbortController();
+      const prefetchDeadline = window.setTimeout(() => prefetchAc.abort(), 3000);
       void fetch("/api/scopri/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: prefetchAc.signal,
         body: JSON.stringify({
           category: macro,
           subcategory: label,
@@ -201,7 +240,8 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
           setAiPrefetchCount(count);
           setAiPrefetchStatus("done");
         })
-        .catch(() => setAiPrefetchStatus("error"));
+        .catch(() => setAiPrefetchStatus("error"))
+        .finally(() => window.clearTimeout(prefetchDeadline));
     }
     setPhase("day-calendar");
   };
@@ -209,19 +249,26 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
   const runVenueSearch = async (finalAnswers: Record<string, string>) => {
     setPhase("loading-venues");
     setAiError(null);
+    const memory: ScopriConstraintMemory = {
+      category: macro ?? "",
+      subcategory: subLabel ?? "",
+      giorno: finalAnswers.giorno,
+      prezzo: finalAnswers.prezzo,
+      mezzo: finalAnswers.mezzo,
+      areaDisegnata: finalAnswers.areaDisegnata,
+      zonaLabel: finalAnswers.zona,
+    };
+    let venueSearchTimedOut = false;
+    const venueSearchAc = new AbortController();
+    const venueSearchDeadline = window.setTimeout(() => {
+      venueSearchTimedOut = true;
+      venueSearchAc.abort();
+    }, 3000);
     try {
-      const memory: ScopriConstraintMemory = {
-        category: macro ?? "",
-        subcategory: subLabel ?? "",
-        giorno: finalAnswers.giorno,
-        prezzo: finalAnswers.prezzo,
-        mezzo: finalAnswers.mezzo,
-        areaDisegnata: finalAnswers.areaDisegnata,
-        zonaLabel: finalAnswers.zona,
-      };
       const resp = await fetch("/api/scopri/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: venueSearchAc.signal,
         body: JSON.stringify({
           category: macro,
           subcategory: subLabel,
@@ -244,9 +291,14 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
         setResults(generateResults(subLabel ?? "", finalAnswers));
       }
     } catch {
-      setAiError("Non riesco a connettermi all'AI. Mostro suggerimenti locali.");
+      setAiError(
+        venueSearchTimedOut
+          ? "L'AI ha impiegato oltre 3 secondi. Mostro suggerimenti locali."
+          : "Non riesco a connettermi all'AI. Mostro suggerimenti locali.",
+      );
       setResults(generateResults(subLabel ?? "", finalAnswers));
     } finally {
+      window.clearTimeout(venueSearchDeadline);
       setPhase("results");
     }
   };
@@ -432,7 +484,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
       {!embedded && (
         <div className="bg-white px-5 pt-12 pb-5">
           <div className="flex items-center gap-2 mb-1">
-            <Sparkles size={18} className="text-[#4A9BD9]" />
+            <Sparkles size={18} className="text-primary" />
             <h1 className="text-2xl font-bold text-gray-900">Scopri</h1>
           </div>
           <p className="text-sm text-gray-400">Cosa vuoi fare oggi?</p>
@@ -456,7 +508,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
                 borderRadius: radius,
                 height: cols >= 3 ? "108px" : cols === 1 ? "80px" : "88px",
               }}
-              className="flex flex-col items-center justify-center gap-2 bg-[#EBF5FB] text-black hover:bg-[#d6ecf7] transition-all active:scale-95"
+              className="flex flex-col items-center justify-center gap-2 bg-primary/10 text-black hover:bg-primary/15 transition-all active:scale-95"
             >
               <Icon size={cols >= 3 ? 28 : 22} strokeWidth={1.6} />
               <span className="text-xs font-semibold tracking-wide">{label}</span>
@@ -475,7 +527,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
           <ChevronLeft size={16} /> Indietro
         </button>
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 bg-[#EBF5FB]">
+          <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 bg-primary/10">
             <CategoryIcon size={22} className="text-gray-900" strokeWidth={1.6} />
           </div>
           <div>
@@ -493,7 +545,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
               type="button"
               data-testid={`subcategory-${sub.replace(/\s+/g, "-").toLowerCase()}`}
               onClick={() => void selectSub(sub)}
-              className="px-4 py-2 rounded-full text-sm font-medium bg-[#EBF5FB] text-black hover:bg-gray-200 transition-all active:scale-95"
+              className="px-4 py-2 rounded-full text-sm font-medium bg-primary/10 text-black hover:bg-gray-200 transition-all active:scale-95"
             >
               {sub}
             </button>
@@ -507,13 +559,10 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
   if (phase === "loading-venues") return (
     <div className="flex flex-col items-center justify-center min-h-full gap-4 bg-gray-50">
       <div className="relative">
-        <div
-          className="w-16 h-16 rounded-2xl flex items-center justify-center"
-          style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}
-        >
-          <MapPin size={30} className="text-white" strokeWidth={1.8} />
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-primary/75">
+          <MapPin size={30} className="text-primary-foreground" strokeWidth={1.8} />
         </div>
-        <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-[#4A9BD9] rounded-full flex items-center justify-center">
+        <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-primary rounded-full flex items-center justify-center">
           <Sparkles size={12} className="text-white animate-pulse" />
         </div>
       </div>
@@ -523,7 +572,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
       </div>
       <div className="flex gap-1.5 mt-2">
         {[0, 1, 2].map(i => (
-          <div key={i} className="w-2 h-2 rounded-full bg-[#4A9BD9] animate-bounce"
+          <div key={i} className="w-2 h-2 rounded-full bg-primary animate-bounce"
             style={{ animationDelay: `${i * 0.15}s` }} />
         ))}
       </div>
@@ -547,7 +596,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
           </button>
           <p className="text-sm font-bold text-gray-900">Che giorno vuoi uscire?</p>
           <p className="text-xs text-gray-500 mt-1">Primo clic seleziona, secondo clic conferma o crea un intervallo.</p>
-          <p className="text-[11px] text-[#4A9BD9] mt-2 font-semibold">
+          <p className="text-[11px] text-primary mt-2 font-semibold">
             {aiPrefetchStatus === "running" && "AI in pre-ricerca: sto gia filtrando luoghi coerenti con categoria e sottocategoria."}
             {aiPrefetchStatus === "done" && `Pre-ricerca completata: ${aiPrefetchCount} candidati iniziali pronti per il filtraggio finale.`}
             {aiPrefetchStatus === "error" && "Pre-ricerca momentaneamente non disponibile: continuo con ricerca completa a fine selezione."}
@@ -580,8 +629,8 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
                     onClick={() => handleCalendarClick(d)}
                     className={`h-9 rounded-lg text-sm font-semibold transition-all ${
                       isPast ? "text-gray-300" :
-                      isEdge ? "bg-[#4A9BD9] text-white" :
-                      isSelected ? "bg-[#EBF5FB] text-[#2e6f9f]" :
+                      isEdge ? "bg-primary text-white" :
+                      isSelected ? "bg-primary/10 text-primary" :
                       "bg-gray-50 text-gray-700"
                     }`}
                   >
@@ -592,8 +641,8 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
             </div>
           </div>
 
-          <div className="mt-3 rounded-xl border border-[#c7e3f4] bg-[#EBF5FB] px-3 py-2">
-            <p className="text-xs font-semibold text-[#2e6f9f]">
+          <div className="mt-3 rounded-xl border border-primary/35 bg-primary/10 px-3 py-2">
+            <p className="text-xs font-semibold text-primary">
               {isDayConfirmed && firstSelectedDate ? `Selezione confermata: ${getSelectedRangeLabel()}` : "Seleziona e conferma il giorno o il periodo."}
             </p>
           </div>
@@ -635,7 +684,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
         <div className="flex items-center gap-2 mb-5">
           <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
             <div
-              className="h-full bg-[#4A9BD9] rounded-full transition-all duration-500"
+              className="h-full bg-primary rounded-full transition-all duration-500"
               style={{ width: `${((qIdx + 1) / aiQuestions.length) * 100}%` }}
             />
           </div>
@@ -644,7 +693,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
 
         {/* Sottocategoria */}
         <div className="flex items-center gap-2 mb-4">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-[#EBF5FB]">
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-primary/10">
             <CategoryIcon size={14} className="text-gray-800" strokeWidth={1.6} />
           </div>
           <span className="text-sm font-semibold text-gray-600">{subLabel}</span>
@@ -652,9 +701,8 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
 
         {/* AI bubble */}
         <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-            style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}>
-            <Sparkles size={18} className="text-white" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/75">
+            <Sparkles size={18} className="text-primary-foreground" />
           </div>
           <div className="flex-1 bg-gray-50 rounded-2xl rounded-tl-sm px-4 py-3">
             <p className="text-gray-900 font-semibold text-sm leading-snug">{currentQ?.text}</p>
@@ -670,8 +718,8 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
             <button
               key={opt.key}
               data-testid={`answer-${opt.key}`}
-              onClick={() => answer(currentQ.id, opt.label)}
-              className="flex items-center justify-center p-4 rounded-2xl bg-white border-2 border-gray-100 active:border-[#4A9BD9] active:bg-[#EBF5FB] active:scale-[0.97] transition-all shadow-sm text-center min-h-[72px]"
+              onClick={() => answer(currentQ.id, opt.key)}
+              className="flex items-center justify-center p-4 rounded-2xl bg-white border-2 border-gray-100 active:border-primary active:bg-primary/10 active:scale-[0.97] transition-all shadow-sm text-center min-h-[72px]"
             >
               <span className="text-sm font-semibold text-gray-800 leading-snug">{opt.label}</span>
             </button>
@@ -711,7 +759,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
                     data-testid={`price-${opt.key}`}
                     onClick={() => setSelectedPrice(opt.key)}
                     className={`flex-1 min-h-[64px] min-w-0 rounded-2xl border-2 text-sm font-semibold transition-all ${
-                      selected ? "border-[#4A9BD9] bg-[#EBF5FB] text-[#2e6f9f]" : "border-gray-100 bg-white text-gray-800"
+                      selected ? "border-primary bg-primary/10 text-primary" : "border-gray-100 bg-white text-gray-800"
                     }`}
                   >
                     {opt.label}
@@ -751,7 +799,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
           <ChevronLeft size={16} /> Indietro
         </button>
         <div className="flex items-center gap-2 mb-1">
-          <MapPin size={16} className="text-[#4A9BD9]" />
+          <MapPin size={16} className="text-primary" />
           <p className="text-sm font-bold text-gray-900">Zona su Torino</p>
         </div>
         <p className="text-xs text-gray-500">
@@ -764,7 +812,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
         <div className="rounded-2xl border border-gray-100 bg-white p-3">
           <div
             ref={mapDrawRef}
-            className="relative h-[220px] rounded-xl overflow-hidden border border-[#c7e3f4] gpu-smooth"
+            className="relative h-[220px] rounded-xl overflow-hidden border border-primary/35 gpu-smooth"
           >
             <ScopriTorinoLeafletMap freezeInteraction={isAreaSelectionActive} />
             {isAreaSelectionActive && (
@@ -815,8 +863,8 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
               onClick={() => setIsAreaSelectionActive((prev) => !prev)}
               className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border active:scale-[0.99] ${
                 isAreaSelectionActive
-                  ? "text-white bg-[#4A9BD9] border-[#4A9BD9]"
-                  : "text-[#2e6f9f] bg-[#EBF5FB] border-[#c7e3f4]"
+                  ? "border-primary bg-primary text-white"
+                  : "text-primary bg-primary/10 border-primary/35"
               }`}
             >
               {isAreaSelectionActive ? "Strumento selezione attivo" : "Attiva strumento selezione"}
@@ -833,8 +881,8 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
       </div>
 
       <div className="flex-1 px-4 py-4">
-        <div className="rounded-xl border border-[#c7e3f4] bg-[#EBF5FB] p-3">
-          <p className="text-xs font-semibold text-[#2e6f9f]">
+        <div className="rounded-xl border border-primary/35 bg-primary/10 p-3">
+          <p className="text-xs font-semibold text-primary">
             {drawnPolygon.length > 2
               ? "Area selezionata: l'AI cercherà luoghi compatibili con questa zona sulla mappa."
               : "Attiva lo strumento e disegna sull'area della mappa, oppure salta il passaggio."}
@@ -898,7 +946,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
           value={userRequest}
           onChange={(e) => setUserRequest(e.target.value)}
           placeholder="Es. tavolo all'aperto, zona tranquilla, parcheggio vicino, senza glutine..."
-          className="w-full min-h-[140px] rounded-2xl bg-white border border-gray-100 px-3 py-3 text-sm text-gray-800 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-[#4A9BD9]/20"
+          className="w-full min-h-[140px] rounded-2xl bg-white border border-gray-100 px-3 py-3 text-sm text-gray-800 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-primary/20"
         />
       </div>
       <div className="px-6 py-4 shrink-0 border-t border-gray-100">
@@ -924,6 +972,8 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
   /* ── Phase: Results ── */
   if (phase === "results") {
     const isAi = aiVenues.length > 0;
+    const verifiedRows = aiVenues.filter((v) => v.scopriVerification !== "suggestion");
+    const ideaRows = aiVenues.filter((v) => v.scopriVerification === "suggestion");
     const aiNames = new Set(aiVenues.map((v) => v.name.toLowerCase()));
     const supplemental = isAi
       ? results.filter((v) => !aiNames.has(v.name.toLowerCase())).slice(0, Math.max(0, 5 - aiVenues.length))
@@ -936,9 +986,9 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-1.5 mb-0.5">
-                <Sparkles size={14} className="text-[#4A9BD9]" />
-                <p className="text-xs font-bold text-[#4A9BD9] uppercase tracking-wide">
-                  {isAi ? "Suggeriti dall'AI · Torino" : "Suggeriti per te"}
+                <Sparkles size={14} className="text-primary" />
+                <p className="text-xs font-bold text-primary uppercase tracking-wide">
+                  {isAi ? "Scopri Torino" : "Suggeriti per te"}
                 </p>
               </div>
               <h2 className="text-xl font-bold text-gray-900">{venueCount} risultati</h2>
@@ -956,7 +1006,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
           {/* Summary chips */}
           <div className="flex flex-wrap gap-1.5 mt-3">
             {subLabel && (
-              <span className="text-xs bg-[#EBF5FB] text-[#4A9BD9] font-semibold px-2.5 py-1 rounded-full">
+              <span className="text-xs bg-primary/10 text-primary font-semibold px-2.5 py-1 rounded-full">
                 {subLabel}
               </span>
             )}
@@ -965,9 +1015,14 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
                 {answers.giorno}
               </span>
             )}
+            {answers.chi && (
+              <span className="text-xs bg-gray-100 text-gray-600 font-medium px-2.5 py-1 rounded-full">
+                {CHI_LABEL[answers.chi] ?? answers.chi}
+              </span>
+            )}
             {answers.mezzo && (
               <span className="text-xs bg-gray-100 text-gray-600 font-medium px-2.5 py-1 rounded-full">
-                {answers.mezzo}
+                {MEZZO_LABEL[answers.mezzo] ?? answers.mezzo}
               </span>
             )}
             {answers.prezzo && (
@@ -984,10 +1039,19 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
 
         <div className="flex-1 px-4 py-4 space-y-3 pb-6">
 
-          {/* ── AI Venues ── */}
-          {isAi && aiVenues.map((venue, i) => (
+          {/* ── AI Venues (verificati prima, poi altre idee) ── */}
+          {isAi && verifiedRows.length > 0 && (
+            <div className="space-y-2 mb-1">
+              <p className="text-xs font-bold text-gray-800 px-1">Consigli verificati</p>
+              <p className="text-[11px] text-gray-500 px-1 leading-snug">
+                Catalogo LineUp o sito raggiungibile; se hai disegnato l’area, coordinate nella zona richiesta.
+              </p>
+            </div>
+          )}
+          {isAi &&
+            verifiedRows.map((venue, i) => (
             <div
-              key={`ai-${i}`}
+              key={`ai-v-${venue.name}-${i}`}
               data-testid={`result-${i}`}
               className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
             >
@@ -995,15 +1059,17 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
               <div className="p-4 pb-3">
                 <div className="flex items-start justify-between gap-2 mb-1">
                   <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                    <div
-                      className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-sm font-bold shrink-0"
-                      style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}
-                    >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/75 text-sm font-bold text-primary-foreground">
                       {i + 1}
                     </div>
                     <div className="min-w-0">
                       <h3 className="font-bold text-gray-900 leading-tight">{venue.name}</h3>
-                      <p className="text-[11px] text-gray-400 truncate">{venue.address}</p>
+                      {venue.quartiere?.trim() ? (
+                        <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-gray-500">
+                          <MapPin size={11} className="shrink-0" />
+                          {venue.quartiere.trim()}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                   <span className="text-xs font-semibold text-gray-500 bg-gray-50 px-2 py-0.5 rounded-lg shrink-0">
@@ -1016,7 +1082,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
                     <Star size={11} fill="currentColor" />{venue.rating}
                   </span>
                   {typeof venue.score === "number" && (
-                    <span className="text-[11px] font-semibold text-[#2e6f9f] bg-[#EBF5FB] px-2 py-0.5 rounded-lg">
+                    <span className="text-[11px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-lg">
                       Score {venue.score}
                     </span>
                   )}
@@ -1029,11 +1095,11 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
 
                 {/* AI description bubble */}
                 <div className="flex items-start gap-2 bg-gray-50 rounded-xl p-3">
-                  <Sparkles size={12} className="text-[#4A9BD9] mt-0.5 shrink-0" />
+                  <Sparkles size={12} className="text-primary mt-0.5 shrink-0" />
                   <div className="text-xs text-gray-600 leading-relaxed">
                     <p>{venue.description}</p>
                     {Array.isArray(venue.why) && venue.why.length > 0 && (
-                      <p className="mt-1 text-[11px] text-[#2e6f9f]">
+                      <p className="mt-1 text-[11px] text-primary">
                         {venue.why.slice(0, 2).join(" · ")}
                       </p>
                     )}
@@ -1068,8 +1134,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
                   target="_blank"
                   rel="noopener noreferrer"
                   data-testid={`button-book-${i}`}
-                  className="flex flex-col items-center gap-1 py-3 active:bg-blue-50 transition-colors"
-                  style={{ color: "#4A9BD9" }}
+                  className="flex flex-col items-center gap-1 py-3 text-primary transition-colors active:bg-primary/10"
                 >
                   <CalendarPlus size={15} />
                   <span className="text-[10px] font-semibold">Prenota</span>
@@ -1079,11 +1144,12 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
                 <div className="border-t border-gray-100 px-4 py-3">
                   <button
                     data-testid={`toggle-select-event-${i}`}
-                    onClick={() => toggleResultVenue({ name: venue.name, rating: venue.rating, distance: venue.address, discount: venue.priceRange })}
-                    className="w-full py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all border-2"
-                    style={selectedResultVenues.some((v) => v.name === venue.name)
-                      ? { color: "#2e6f9f", borderColor: "#4A9BD9", background: "#EBF5FB" }
-                      : { color: "#4b5563", borderColor: "#e5e7eb", background: "#fff" }}
+                    onClick={() => toggleResultVenue(venueOptionFromScopriAi(venue))}
+                    className={`flex w-full items-center justify-center gap-2 rounded-xl border-2 py-2.5 text-sm font-bold transition-all ${
+                      selectedResultVenues.some((v) => v.name === venue.name)
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-gray-200 bg-white text-gray-600"
+                    }`}
                   >
                     <CheckCircle2 size={15} />
                     {selectedResultVenues.some((v) => v.name === venue.name) ? "Luogo selezionato" : "Seleziona luogo"}
@@ -1093,6 +1159,127 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
             </div>
           ))}
 
+          {isAi && ideaRows.length > 0 && (
+            <div className="space-y-2 pt-2 mt-2 border-t border-gray-200">
+              <p className="text-xs font-bold text-gray-600 px-1">Altre idee</p>
+              <p className="text-[11px] text-gray-500 px-1 leading-snug">
+                Suggerimenti meno controllati automaticamente: controlla sempre indirizzo e sito prima di prenotare.
+              </p>
+            </div>
+          )}
+          {isAi &&
+            ideaRows.map((venue, j) => {
+              const i = verifiedRows.length + j;
+              return (
+            <div
+              key={`ai-s-${venue.name}-${j}`}
+              data-testid={`result-idea-${j}`}
+              className="bg-white rounded-2xl shadow-sm border border-dashed border-gray-200 overflow-hidden opacity-95"
+            >
+              <div className="p-4 pb-3">
+                <div className="flex items-start justify-between gap-2 mb-1">
+                  <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                    <div
+                      className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-sm font-bold shrink-0 bg-gray-400"
+                    >
+                      {i + 1}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-gray-900 leading-tight">{venue.name}</h3>
+                      {venue.quartiere?.trim() ? (
+                        <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-gray-500">
+                          <MapPin size={11} className="shrink-0" />
+                          {venue.quartiere.trim()}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-gray-500 bg-gray-50 px-2 py-0.5 rounded-lg shrink-0">
+                    {venue.priceRange}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 mb-3 mt-2">
+                  <span className="flex items-center gap-1 text-xs text-amber-500 font-semibold">
+                    <Star size={11} fill="currentColor" />{venue.rating}
+                  </span>
+                  {typeof venue.score === "number" && (
+                    <span className="text-[11px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-lg">
+                      Score {venue.score}
+                    </span>
+                  )}
+                  {venue.openStatus === "open" && (
+                    <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg">
+                      Aperto
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-start gap-2 bg-gray-50 rounded-xl p-3">
+                  <Sparkles size={12} className="text-gray-400 mt-0.5 shrink-0" />
+                  <div className="text-xs text-gray-600 leading-relaxed">
+                    <p>{venue.description}</p>
+                    {Array.isArray(venue.why) && venue.why.length > 0 && (
+                      <p className="mt-1 text-[11px] text-primary">
+                        {venue.why.slice(0, 2).join(" · ")}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-100 grid grid-cols-3 divide-x divide-gray-100">
+                <a
+                  href={venue.websiteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid={`button-website-idea-${j}`}
+                  className="flex flex-col items-center gap-1 py-3 text-gray-500 active:bg-gray-50 transition-colors"
+                >
+                  <ExternalLink size={15} />
+                  <span className="text-[10px] font-semibold">Sito</span>
+                </a>
+                <a
+                  href={venue.mapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${venue.name} ${venue.address}`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid={`button-maps-idea-${j}`}
+                  className="flex flex-col items-center gap-1 py-3 text-gray-500 active:bg-gray-50 transition-colors"
+                >
+                  <MapPin size={15} />
+                  <span className="text-[10px] font-semibold">Maps</span>
+                </a>
+                <a
+                  href={venue.bookingUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid={`button-book-idea-${j}`}
+                  className="flex flex-col items-center gap-1 py-3 text-primary transition-colors active:bg-primary/10"
+                >
+                  <CalendarPlus size={15} />
+                  <span className="text-[10px] font-semibold">Prenota</span>
+                </a>
+              </div>
+              {onCreateEvent && (
+                <div className="border-t border-gray-100 px-4 py-3">
+                  <button
+                    data-testid={`toggle-select-event-idea-${j}`}
+                    onClick={() => toggleResultVenue(venueOptionFromScopriAi(venue))}
+                    className={`flex w-full items-center justify-center gap-2 rounded-xl border-2 py-2.5 text-sm font-bold transition-all ${
+                      selectedResultVenues.some((v) => v.name === venue.name)
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-gray-200 bg-white text-gray-600"
+                    }`}
+                  >
+                    <CheckCircle2 size={15} />
+                    {selectedResultVenues.some((v) => v.name === venue.name) ? "Luogo selezionato" : "Seleziona luogo"}
+                  </button>
+                </div>
+              )}
+            </div>
+              );
+            })}
+
           {isAi && supplemental.map((venue, i) => (
             <div
               key={`supp-${venue.name}`}
@@ -1101,8 +1288,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
             >
               <div className="flex items-start justify-between gap-2 mb-2.5">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-sm font-bold shrink-0"
-                    style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}>
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/75 text-sm font-bold text-primary-foreground">
                     {aiVenues.length + i + 1}
                   </div>
                   <h3 className="font-bold text-gray-900">{venue.name}</h3>
@@ -1117,13 +1303,10 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
                 <span className="flex items-center gap-1 text-xs text-amber-500 font-semibold">
                   <Star size={11} fill="currentColor" />{venue.rating}
                 </span>
-                <span className="flex items-center gap-1 text-xs text-gray-400">
-                  <MapPin size={11} />{venue.distance}
-                </span>
               </div>
               {venue.reason && (
                 <div className="flex items-start gap-2 bg-gray-50 rounded-xl p-3 mb-3">
-                  <Sparkles size={12} className="text-[#4A9BD9] mt-0.5 shrink-0" />
+                  <Sparkles size={12} className="text-primary mt-0.5 shrink-0" />
                   <p className="text-xs text-gray-500 leading-relaxed">{venue.reason}</p>
                 </div>
               )}
@@ -1131,10 +1314,11 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
                 <button
                   data-testid={`toggle-select-supplemental-${i}`}
                   onClick={() => toggleResultVenue(venue)}
-                  className="w-full py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all border-2"
-                  style={selectedResultVenues.some((v) => v.name === venue.name)
-                    ? { color: "#2e6f9f", borderColor: "#4A9BD9", background: "#EBF5FB" }
-                    : { color: "#4b5563", borderColor: "#e5e7eb", background: "#fff" }}
+                  className={`flex w-full items-center justify-center gap-2 rounded-xl border-2 py-2.5 text-sm font-bold transition-all ${
+                    selectedResultVenues.some((v) => v.name === venue.name)
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-gray-200 bg-white text-gray-600"
+                  }`}
                 >
                   <CheckCircle2 size={15} />
                   {selectedResultVenues.some((v) => v.name === venue.name) ? "Luogo selezionato" : "Seleziona luogo"}
@@ -1152,10 +1336,7 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
             >
               <div className="flex items-start justify-between gap-2 mb-2.5">
                 <div className="flex items-center gap-2.5">
-                  <div
-                    className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-sm font-bold shrink-0"
-                    style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}
-                  >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/75 text-sm font-bold text-primary-foreground">
                     {i + 1}
                   </div>
                   <h3 className="font-bold text-gray-900">{venue.name}</h3>
@@ -1171,12 +1352,12 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
                   <Star size={11} fill="currentColor" />{venue.rating}
                 </span>
                 <span className="flex items-center gap-1 text-xs text-gray-400">
-                  <MapPin size={11} />{venue.distance}
+                  <MapPin size={11} />{venuePollSubtitle(venue)}
                 </span>
               </div>
               {venue.reason && (
                 <div className="flex items-start gap-2 bg-gray-50 rounded-xl p-3 mb-3">
-                  <Sparkles size={12} className="text-[#4A9BD9] mt-0.5 shrink-0" />
+                  <Sparkles size={12} className="text-primary mt-0.5 shrink-0" />
                   <p className="text-xs text-gray-500 leading-relaxed">{venue.reason}</p>
                 </div>
               )}
@@ -1184,10 +1365,11 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
                 <button
                   data-testid={`toggle-select-fallback-${i}`}
                   onClick={() => toggleResultVenue(venue)}
-                  className="w-full py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all border-2"
-                  style={selectedResultVenues.some((v) => v.name === venue.name)
-                    ? { color: "#2e6f9f", borderColor: "#4A9BD9", background: "#EBF5FB" }
-                    : { color: "#4b5563", borderColor: "#e5e7eb", background: "#fff" }}
+                  className={`flex w-full items-center justify-center gap-2 rounded-xl border-2 py-2.5 text-sm font-bold transition-all ${
+                    selectedResultVenues.some((v) => v.name === venue.name)
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-gray-200 bg-white text-gray-600"
+                  }`}
                 >
                   <CheckCircle2 size={14} />
                   {selectedResultVenues.some((v) => v.name === venue.name) ? "Luogo selezionato" : "Seleziona luogo"}
@@ -1203,8 +1385,11 @@ export default function AppScopri({ embedded = false, onCreateEvent }: {
               </div>
               <p className="font-semibold text-gray-700">Nessun posto trovato</p>
               <p className="text-sm text-gray-400 mt-1">Prova con altre preferenze</p>
-              <button onClick={reset} className="mt-4 px-6 py-2.5 rounded-xl text-sm font-semibold text-white"
-                style={{ background: "#4A9BD9" }}>
+              <button
+                type="button"
+                onClick={reset}
+                className="mt-4 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground"
+              >
                 Riprova
               </button>
             </div>

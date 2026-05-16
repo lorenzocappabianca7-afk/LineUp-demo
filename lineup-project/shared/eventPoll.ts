@@ -1,3 +1,5 @@
+import { parseSurveyMode, surveyBehavior, type SurveyModeId } from "./surveyModes";
+
 /** Voto minimale per controlli server/client. */
 export type PollVoteLike = { voterName: string; voteType: string };
 
@@ -25,9 +27,17 @@ export function senderCompletedVotablePoll(
   timeLen: number,
   venueLen: number,
   votes: PollVoteLike[],
+  surveyModeRaw?: unknown,
 ): boolean {
   if (eventStatus === "confirmed") return true;
   const needed = getVotablePollTypesFromCounts(dateLen, timeLen, venueLen);
-  if (needed.length === 0) return true;
-  return needed.every((t) => votes.some((v) => v.voterName === senderName && v.voteType === t));
+  if (needed.length > 0) {
+    return needed.every((t) => votes.some((v) => v.voterName === senderName && v.voteType === t));
+  }
+  const mode: SurveyModeId = parseSurveyMode(surveyModeRaw);
+  const { attendance } = surveyBehavior(mode);
+  if (attendance === "ternary") {
+    return votes.some((v) => v.voterName === senderName && v.voteType === "attendance");
+  }
+  return true;
 }

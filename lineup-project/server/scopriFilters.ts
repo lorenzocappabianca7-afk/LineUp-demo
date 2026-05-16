@@ -37,7 +37,7 @@ function normalizePriceRange(value: string): string {
 
 function looksFoodLike(v: SimpleVenue): boolean {
   const t = `${v.name} ${v.description}`.toLowerCase();
-  return /\b(ristor|tratt|oster|bistr|bar|caff|caf[eé]|pasticc|gelat|mercato)\b/.test(t);
+  return /\b(ristorante|ristorant|trattoria|tratt|osteria|oster|bistr|bar|caff|caf[eé]|pasticc|gelat|mercato)\b/.test(t);
 }
 
 function looksSportLike(v: SimpleVenue): boolean {
@@ -65,6 +65,29 @@ function isSpecificFoodVenueSubcategory(subcategory: string): boolean {
   return s.includes("colazione") || s.includes("brunch") || s.includes("spuntino") || s.includes("pranzo") || s.includes("cena") || s.includes("aperitivo");
 }
 
+function isMealLunchDinnerSubcategory(subcategory: string): boolean {
+  const s = String(subcategory).toLowerCase();
+  return s.includes("pranzo") || s.includes("cena");
+}
+
+function looksMealVenue(v: SimpleVenue): boolean {
+  const blob = `${v.name} ${v.description}`.toLowerCase();
+  return (
+    /\b(ristorant|trattoria|osteria|pizzeria|bistrot|brasser|taverna|sushi|grill|steakhouse|braceria|mercato centrale|hub gastronom|banco gastron|menu.degust|menù degust)\b/i.test(blob) ||
+    /\b(pranzo|cena)\b.{0,40}\b(menu|servizio al tavolo|tavoli|cart)\b/i.test(blob) ||
+    /\b(cucina|gastronomia|osteria con cucina)\b/i.test(blob)
+  );
+}
+
+function isPrimarilyCafeBarPastryGelatoForMeal(name: string, description: string): boolean {
+  const n = name.trim().toLowerCase();
+  const blob = `${n} ${description}`.toLowerCase();
+  if (/\b(ristorante|trattoria|osteria|pizzeria|bistrot|taverna)\b/i.test(n)) return false;
+  if (/^(caffe|caffè)\s/i.test(n) || /^pasticcer|^gelater|^bar\s/i.test(n)) return true;
+  if (/\bcaffè mulassano|caffè fiorio|baratti\s*&|bicerin|caffè platti|caffè san carlo\b/i.test(blob)) return true;
+  return false;
+}
+
 function detectIntent(category: string, subcategory: string): "food" | "sport" | "culture" | "nightlife" | "outdoor" | "generic" {
   const c = `${category} ${subcategory}`.toLowerCase();
   if (isDiscotecaSubcategory(subcategory)) return "nightlife";
@@ -82,7 +105,14 @@ export function venueMatchesIntent(venue: SimpleVenue, category: string, subcate
     const t = `${venue.name} ${venue.description}`.toLowerCase();
     if (!/\b(tennis|racchetta|circolo|club)\b/.test(t)) return false;
   }
-  if (intent === "food") return looksFoodLike(venue) && !isGenericNonSpecificFoodVenue(venue.name, venue.description);
+  if (intent === "food") {
+    if (!looksFoodLike(venue) || isGenericNonSpecificFoodVenue(venue.name, venue.description)) return false;
+    if (isMealLunchDinnerSubcategory(subcategory)) {
+      if (isPrimarilyCafeBarPastryGelatoForMeal(venue.name, venue.description)) return false;
+      if (!looksMealVenue(venue)) return false;
+    }
+    return true;
+  }
   if (intent === "sport") return looksSportLike(venue);
   if (intent === "culture") return looksCultureLike(venue);
   if (intent === "nightlife") return looksNightlifeLike(venue);

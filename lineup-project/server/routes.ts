@@ -4,16 +4,31 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
 import OpenAI from "openai";
+import { logAiExchange, logAiPipelineSummary } from "./aiLog";
+import { sendPianificaDemoFeedback } from "./pianificaDemoFeedback";
 import { buildUserPreferencesFromScopri } from "@shared/aiPrompts";
 import { generateSystemPrompt, generateUserPrompt } from "../client/src/lib/ai-provider";
 import {
   assertUserPreferencesForAi,
   expandScopriAiSuggestionToVenue,
+  filterAiSuggestionsByUserRequest,
   scopriVenuePipelineSchema as aiVenueSchema,
+  torinoVenueSearchItemSchema,
   validateScopriAiVenuesResponse,
   validateSuggestions,
+  venueTextMatchesUserRequest,
 } from "@shared/aiValidation";
 import { senderCompletedVotablePoll } from "@shared/eventPoll";
+import { allowsMemberProposals, parseSurveyMode, surveyBehavior } from "@shared/surveyModes";
+import { LINEUP_DEMO_CONTACTS } from "@shared/contacts";
+import { venueDisplayAddressLine } from "@shared/venueMapsAddress";
+
+/** Tempo massimo per una singola risposta del modello AI verso il client (ms). */
+const LINEUP_AI_MAX_RESPONSE_MS = 3000;
+/** Ricerca luoghi in creazione evento: budget leggermente più alto ma risposta rapida via catalogo. */
+const LINEUP_VENUE_AI_SEARCH_MS = 4500;
+/** Dopo l’LLM Scopri: budget totale (link + Places) prima di rispondere, per non far scadere il client (ms). */
+const LINEUP_SCOPRI_PIPELINE_BUDGET_MS = 14_000;
 
 type AiVenue = z.infer<typeof aiVenueSchema>;
 type SearchIntent = "food" | "sport" | "culture" | "nightlife" | "outdoor" | "generic";
@@ -32,6 +47,8 @@ type GeoVenue = AiVenue & {
   openStatus?: "open" | "closed" | "unknown";
   score?: number;
   why?: string[];
+  /** Solo in pipeline server: HEAD sul sito ufficiale riuscito. */
+  websiteReachable?: boolean;
 };
 
 const TORINO_FALLBACK_VENUES: AiVenue[] = [
@@ -125,6 +142,36 @@ const TORINO_FALLBACK_VENUES: AiVenue[] = [
     websiteUrl: "https://www.qcterme.com/it/torino/qc-termetorino",
     mapsUrl: "https://www.google.com/maps/search/?api=1&query=QC+Termetorino",
   },
+  {
+    name: "Palazzo Madama - Museo Civico d'Arte Antica",
+    address: "Piazza Castello, 10122 Torino",
+    description: "Museo in antico castello medievale-barocco: collezioni d'arte e vista panoramica sulla citta.",
+    rating: 4.7,
+    priceRange: "€€",
+    bookingUrl: "https://www.palazzomadamatorino.it/",
+    websiteUrl: "https://www.palazzomadamatorino.it/",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Palazzo+Madama+Torino",
+  },
+  {
+    name: "Teatro Regio Torino",
+    address: "Piazza Castello 215, 10124 Torino",
+    description: "Teatro lirico e di prosa nel centro storico; programma stagionale e visite quando aperte.",
+    rating: 4.8,
+    priceRange: "€€€",
+    bookingUrl: "https://www.teatroregio.torino.it/",
+    websiteUrl: "https://www.teatroregio.torino.it/",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Teatro+Regio+Torino",
+  },
+  {
+    name: "Pinacoteca Agnelli",
+    address: "Via Nizza 230, 10126 Torino",
+    description: "Galleria d'arte moderna e contemporanea sul tetto del Lingotto: mostre e vista sulla citta.",
+    rating: 4.6,
+    priceRange: "€€",
+    bookingUrl: "https://www.pinacoteca-agnelli.it/",
+    websiteUrl: "https://www.pinacoteca-agnelli.it/",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Pinacoteca+Agnelli+Torino",
+  },
 ];
 
 /** Bar, caffè storici, pasticcerie, hub gastronomici — mai piazze/verde generico come "luogo" per mangiare. */
@@ -209,6 +256,17 @@ const TORINO_CIBO_LOCALI_FALLBACK: AiVenue[] = [
     bookingUrl: "https://www.gelateriapepino.com/",
     websiteUrl: "https://www.gelateriapepino.com/",
     mapsUrl: "https://www.google.com/maps/search/?api=1&query=Gelateria+Pepino+Torino",
+  },
+  {
+    name: "Trapizzino",
+    address: "Piazza Carlo Emanuele II, Torino",
+    description:
+      "Street food romano: tramezzini farciti; sede torinese in piazza Carlo Emanuele II (centro).",
+    rating: 4.5,
+    priceRange: "€€",
+    bookingUrl: "https://www.trapizzino.it/",
+    websiteUrl: "https://www.trapizzino.it/",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Trapizzino+Torino",
   },
 ];
 
@@ -311,6 +369,250 @@ const TORINO_SPORT_FALLBACK: AiVenue[] = [
   },
 ];
 
+const TORINO_VENUE_SEARCH_FALLBACK_POOL: AiVenue[] = [
+  ...TORINO_FALLBACK_VENUES,
+  ...TORINO_CIBO_LOCALI_FALLBACK,
+  ...TORINO_DISCOTECHE_FALLBACK,
+  ...TORINO_SPORT_FALLBACK,
+];
+
+type ClientVenueSearchJson = {
+  name: string;
+  rating: number;
+  address: string;
+  distance: string;
+  mapsUrl: string;
+  websiteUrl: string;
+  instagramUrl?: string;
+  /** Zona / quartiere per anteprima (senza via completa). */
+  quartiere?: string;
+};
+
+const VENUE_AI_SEARCH_CACHE_TTL_MS = 120_000;
+const VENUE_AI_SEARCH_CACHE_MAX = 48;
+type VenueAiSearchCacheEntry = { at: number; venues: ClientVenueSearchJson[] };
+const venueAiSearchCache = new Map<string, VenueAiSearchCacheEntry>();
+
+function venueAiSearchCacheKey(q: string): string {
+  return `v4:${q.trim().toLowerCase().slice(0, 120)}`;
+}
+
+function getVenueAiSearchCached(q: string): ClientVenueSearchJson[] | null {
+  const k = venueAiSearchCacheKey(q);
+  const e = venueAiSearchCache.get(k);
+  if (!e || Date.now() - e.at > VENUE_AI_SEARCH_CACHE_TTL_MS) return null;
+  return e.venues;
+}
+
+function setVenueAiSearchCached(q: string, venues: ClientVenueSearchJson[]): void {
+  const k = venueAiSearchCacheKey(q);
+  if (venueAiSearchCache.size >= VENUE_AI_SEARCH_CACHE_MAX) {
+    const first = venueAiSearchCache.keys().next().value;
+    if (first !== undefined) venueAiSearchCache.delete(first);
+  }
+  venueAiSearchCache.set(k, { at: Date.now(), venues });
+}
+
+function mapsSearchUrlForTorinoPlaceName(name: string): string {
+  const q = `${String(name).trim()} Torino`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+}
+
+/** Query Maps orientata a un solo esercizio (nome tra virgolette + contesto Torino). */
+function googleMapsSearchSingleIntentUrl(placeName: string, quartiereOrZone?: string): string {
+  const name = String(placeName).trim();
+  const bits: string[] = [];
+  if (name) bits.push(`"${name}"`);
+  const z = quartiereOrZone?.trim();
+  if (z) bits.push(z);
+  bits.push("Torino");
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(bits.join(" "))}`;
+}
+
+function levenshteinDistance(aRaw: string, bRaw: string): number {
+  const a = searchNormForVenueMatch(aRaw).replace(/\s+/g, "");
+  const b = searchNormForVenueMatch(bRaw).replace(/\s+/g, "");
+  if (a === b) return 0;
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+    }
+  }
+  return dp[m][n]!;
+}
+
+/** Nomi dal catalogo Torino vicini al testo digitato (refusi, lettere mancanti). */
+function fuzzyCatalogVenueNamesForQuery(query: string, maxHints: number): string[] {
+  const qn = searchNormForVenueMatch(query).trim();
+  if (qn.length < 2) return [];
+  const maxDist = qn.length <= 4 ? 2 : qn.length <= 8 ? 3 : 4;
+  const scored: { name: string; d: number }[] = [];
+  for (const v of TORINO_VENUE_SEARCH_FALLBACK_POOL) {
+    const nn = searchNormForVenueMatch(v.name);
+    const blob = `${nn} ${searchNormForVenueMatch(v.description)}`;
+    if (nn.includes(qn) || qn.includes(nn) || blob.includes(qn)) {
+      scored.push({ name: v.name, d: 0 });
+      continue;
+    }
+    const d = levenshteinDistance(qn, nn);
+    if (d <= maxDist) scored.push({ name: v.name, d });
+  }
+  scored.sort((x, y) => x.d - y.d || x.name.localeCompare(y.name, "it"));
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const s of scored) {
+    const k = s.name.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(s.name);
+    if (out.length >= maxHints) break;
+  }
+  return out;
+}
+
+function normalizeClientVenueSearchJsonMaps(v: ClientVenueSearchJson): ClientVenueSearchJson {
+  return {
+    ...v,
+    mapsUrl: googleMapsSearchSingleIntentUrl(v.name, v.quartiere),
+  };
+}
+
+function mapTorinoVenueItemToClient(v: z.infer<typeof torinoVenueSearchItemSchema>): ClientVenueSearchJson {
+  const rawAddress = v.address.trim();
+  const qz = v.quartiere?.trim();
+  const safeMapsUrl = googleMapsSearchSingleIntentUrl(v.name, qz);
+  return {
+    name: v.name,
+    rating: Math.round(v.rating * 10) / 10,
+    address: venueDisplayAddressLine({
+      address: rawAddress,
+      mapsUrl: safeMapsUrl,
+      distance: "",
+      placeName: v.name,
+    }),
+    distance: "",
+    mapsUrl: safeMapsUrl,
+    websiteUrl: v.websiteUrl,
+    ...(v.instagramUrl ? { instagramUrl: v.instagramUrl } : {}),
+    ...(qz ? { quartiere: qz } : {}),
+  };
+}
+
+/** Accetta JSON parziale: scarta righe non valide invece di fallire tutta la risposta. */
+function parseTorinoVenueAiItemsLoose(raw: unknown): ClientVenueSearchJson[] {
+  if (raw === null || typeof raw !== "object") return [];
+  const venuesRaw = (raw as { venues?: unknown }).venues;
+  if (!Array.isArray(venuesRaw)) return [];
+  const out: ClientVenueSearchJson[] = [];
+  for (const item of venuesRaw) {
+    const one = torinoVenueSearchItemSchema.safeParse(item);
+    if (!one.success) continue;
+    out.push(normalizeClientVenueSearchJsonMaps(mapTorinoVenueItemToClient(one.data)));
+    if (out.length >= 5) break;
+  }
+  return out;
+}
+
+function aiVenueToClientSearchJson(v: AiVenue): ClientVenueSearchJson {
+  const addressText = v.address.trim();
+  const qz = v.quartiere?.trim();
+  const mapsUrl = googleMapsSearchSingleIntentUrl(v.name, qz);
+  return {
+    name: v.name,
+    rating: v.rating,
+    address: venueDisplayAddressLine({
+      address: addressText,
+      mapsUrl,
+      distance: "",
+      placeName: v.name,
+    }),
+    distance: "",
+    mapsUrl,
+    websiteUrl: v.websiteUrl,
+    ...(qz ? { quartiere: qz } : {}),
+  };
+}
+
+function searchNormForVenueMatch(s: string): string {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+function fallbackTorinoClientVenuesFromCatalog(query: string): ClientVenueSearchJson[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const qn = searchNormForVenueMatch(q);
+  const scored: { v: AiVenue; rank: number }[] = [];
+  const maxDist = qn.length <= 4 ? 2 : qn.length <= 8 ? 3 : 4;
+  for (const v of TORINO_VENUE_SEARCH_FALLBACK_POOL) {
+    const nn = searchNormForVenueMatch(v.name);
+    const addr = searchNormForVenueMatch(v.address);
+    const desc = searchNormForVenueMatch(v.description);
+    let rank = 99;
+    if (nn.includes(qn) || qn.includes(nn) || addr.includes(qn) || desc.includes(qn)) rank = 0;
+    else {
+      const d = Math.min(levenshteinDistance(qn, nn), levenshteinDistance(qn, addr.slice(0, 48)));
+      if (d <= maxDist) rank = d + 1;
+    }
+    if (rank >= 99) continue;
+    scored.push({ v, rank });
+  }
+  scored.sort((a, b) => a.rank - b.rank || a.v.name.localeCompare(b.v.name, "it"));
+  const out: ClientVenueSearchJson[] = [];
+  const used = new Set<string>();
+  for (const { v } of scored) {
+    const k = v.name.toLowerCase();
+    if (used.has(k)) continue;
+    used.add(k);
+    out.push(normalizeClientVenueSearchJsonMaps(aiVenueToClientSearchJson(v)));
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+/** Se il catalogo Torino matcha bene, evita la chiamata OpenAI (risposta immediata). */
+function tryInstantVenueCatalogOnly(query: string): ClientVenueSearchJson[] | null {
+  const hits = fallbackTorinoClientVenuesFromCatalog(query);
+  if (hits.length === 0) return null;
+  const qn = searchNormForVenueMatch(query);
+  if (qn.length < 2) return null;
+  const topName = searchNormForVenueMatch(hits[0]!.name);
+  if (topName.includes(qn) || qn.includes(topName)) return hits;
+  if (hits.length >= 3) return hits;
+  return null;
+}
+
+/** Match dal catalogo in testa, poi risultati AI (nomi deduplicati). */
+function mergeCatalogWithAi(
+  catalogHits: ClientVenueSearchJson[],
+  ai: ClientVenueSearchJson[],
+): ClientVenueSearchJson[] {
+  const seen = new Set<string>();
+  const out: ClientVenueSearchJson[] = [];
+  for (const v of catalogHits) {
+    const k = v.name.trim().toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(v);
+    if (out.length >= 8) return out;
+  }
+  for (const v of ai) {
+    const k = v.name.trim().toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(v);
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
 function isDiscotecaSubcategory(subcategory: string): boolean {
   const s = String(subcategory).toLowerCase();
   return s.includes("discotec") || s.includes("night club") || s.includes("nightclub");
@@ -344,6 +646,43 @@ function isSpecificFoodVenueSubcategory(subcategory: string): boolean {
   );
 }
 
+/** Pranzo o cena: pasto al tavolo, non bar/caffè da colazione. */
+function isMealLunchDinnerSubcategory(subcategory: string): boolean {
+  const s = String(subcategory).toLowerCase();
+  return s.includes("pranzo") || s.includes("cena");
+}
+
+function looksMealVenue(v: AiVenue): boolean {
+  const blob = `${v.name} ${v.description}`.toLowerCase();
+  return (
+    /\b(ristorant|trattoria|osteria|pizzeria|bistrot|brasser|taverna|sushi|grill|steakhouse|braceria|mercato centrale|hub gastronom|banco gastron|menu.degust|menù degust)\b/i.test(blob) ||
+    /\b(pranzo|cena)\b.{0,40}\b(menu|servizio al tavolo|tavoli|cart)\b/i.test(blob) ||
+    /\b(cucina|gastronomia|osteria con cucina)\b/i.test(blob)
+  );
+}
+
+/** Nome (e testo) da solo bar/caffè/pasticceria/gelateria — non adatto a pranzo/cena se non c'è anche ristorante nel nome. */
+function isPrimarilyCafeBarPastryGelatoForMeal(name: string, description: string): boolean {
+  const n = name.trim().toLowerCase();
+  const blob = `${n} ${description}`.toLowerCase();
+  if (/\b(ristorante|trattoria|osteria|pizzeria|bistrot|taverna)\b/i.test(n)) return false;
+  if (/^(caffe|caffè)\s/i.test(n) || /^pasticcer|^gelater|^bar\s/i.test(n)) return true;
+  if (/\bcaffè mulassano|caffè fiorio|baratti\s*&|bicerin|caffè platti|caffè san carlo\b/i.test(blob)) return true;
+  return false;
+}
+
+function filterAiSuggestionsForMealLunchDinner<T extends { name: string; explanation: string }>(
+  suggestions: T[],
+  subcategory: string,
+): T[] {
+  if (!isMealLunchDinnerSubcategory(subcategory)) return suggestions;
+  return suggestions.filter((s) => {
+    if (isPrimarilyCafeBarPastryGelatoForMeal(s.name, s.explanation)) return false;
+    const v = { name: s.name, description: s.explanation } as Pick<AiVenue, "name" | "description">;
+    return looksMealVenue(v as AiVenue);
+  });
+}
+
 export function detectIntent(category: string, subcategory: string): SearchIntent {
   const c = `${category} ${subcategory}`.toLowerCase();
   if (isDiscotecaSubcategory(subcategory)) return "nightlife";
@@ -356,7 +695,7 @@ export function detectIntent(category: string, subcategory: string): SearchInten
 
 function looksFoodLike(v: AiVenue): boolean {
   const t = `${v.name} ${v.description}`.toLowerCase();
-  return /\b(ristor|tratt|oster|bistr|bar|caff|caf[eé]|pasticc|gelat|mercato)\b/.test(t);
+  return /\b(ristorante|ristorant|trattoria|tratt|osteria|oster|bistr|bar|caff|caf[eé]|pasticc|gelat|mercato)\b/.test(t);
 }
 
 function looksSportLike(v: AiVenue): boolean {
@@ -386,7 +725,14 @@ export function venueMatchesIntent(venue: AiVenue, category: string, subcategory
     if (!/\b(padel|racchetta|club|circolo)\b/.test(t)) return false;
   }
 
-  if (intent === "food") return looksFoodLike(venue) && !isGenericNonSpecificFoodVenue(venue.name, venue.description);
+  if (intent === "food") {
+    if (!looksFoodLike(venue) || isGenericNonSpecificFoodVenue(venue.name, venue.description)) return false;
+    if (isMealLunchDinnerSubcategory(subcategory)) {
+      if (isPrimarilyCafeBarPastryGelatoForMeal(venue.name, venue.description)) return false;
+      if (!looksMealVenue(venue)) return false;
+    }
+    return true;
+  }
   if (intent === "sport") return looksSportLike(venue);
   if (intent === "culture") return looksCultureLike(venue);
   if (intent === "nightlife") return looksNightlifeLike(venue) && !looksLikePubOrCafeNotDisco(venue.name, venue.description);
@@ -428,10 +774,6 @@ function isTorinoAddress(address: string): boolean {
   return a.includes("torino");
 }
 
-function buildMapsUrl(name: string, address: string): string {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${name} ${address} Torino`)}`;
-}
-
 function sanitizeAiVenues(rawVenues: unknown[]): AiVenue[] {
   const unique = new Map<string, AiVenue>();
   for (const item of rawVenues) {
@@ -444,7 +786,7 @@ function sanitizeAiVenues(rawVenues: unknown[]): AiVenue[] {
     unique.set(key, {
       ...venue,
       priceRange: normalizePriceRange(venue.priceRange),
-      mapsUrl: venue.mapsUrl || buildMapsUrl(venue.name, venue.address),
+      mapsUrl: googleMapsSearchSingleIntentUrl(venue.name, venue.quartiere),
     });
   }
   return [...unique.values()];
@@ -514,7 +856,15 @@ function getFallbackVenuesForSubcategory(subcategory: string, category?: string)
   return merged.slice(0, 10);
 }
 
-const aiWarmupCache = new Map<string, { at: number; venues: AiVenue[] }>();
+type ScopriAiClientVenue = GeoVenue & { scopriVerification: "verified" | "suggestion"; safariUrl: string };
+
+type ScopriAiCachePayload = {
+  venues: ScopriAiClientVenue[];
+  venuesVerified: ScopriAiClientVenue[];
+  venuesMoreIdeas: ScopriAiClientVenue[];
+};
+
+const aiWarmupCache = new Map<string, { at: number; payload: ScopriAiCachePayload }>();
 const aiConstraintMemory = new Map<string, { at: number; constraints: ScopriConstraintMemory }>();
 
 function cacheKeyForSearch(category: string, subcategory: string): string {
@@ -557,7 +907,7 @@ async function isUrlReachable(url: string): Promise<boolean> {
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 3500);
+  const timeout = setTimeout(() => controller.abort(), 2200);
   try {
     const headResp = await fetch(url, {
       method: "HEAD",
@@ -581,26 +931,29 @@ async function isUrlReachable(url: string): Promise<boolean> {
   }
 }
 
-async function validateVenueLinks(venues: AiVenue[]): Promise<AiVenue[]> {
+async function validateVenueLinks(venues: AiVenue[]): Promise<GeoVenue[]> {
   const checks = await Promise.all(
     venues.map(async (venue) => {
+      const mapsFallback = googleMapsSearchSingleIntentUrl(venue.name, venue.quartiere);
       const websiteOk = await isUrlReachable(venue.websiteUrl);
       if (!websiteOk) {
         return {
           ...venue,
-          websiteUrl: venue.mapsUrl || buildMapsUrl(venue.name, venue.address),
-          bookingUrl: venue.mapsUrl || buildMapsUrl(venue.name, venue.address),
+          mapsUrl: mapsFallback,
+          websiteUrl: mapsFallback,
+          bookingUrl: mapsFallback,
+          websiteReachable: false,
         };
       }
-
-      const bookingOk = await isUrlReachable(venue.bookingUrl);
       return {
         ...venue,
-        bookingUrl: bookingOk ? venue.bookingUrl : venue.websiteUrl,
+        mapsUrl: mapsFallback,
+        bookingUrl: venue.websiteUrl,
+        websiteReachable: true,
       };
     }),
   );
-  return checks.filter((v): v is AiVenue => Boolean(v));
+  return checks as GeoVenue[];
 }
 
 const TORINO_GEO_BOUNDS = {
@@ -632,6 +985,55 @@ function isInsideBounds(v: GeoVenue, bounds: { minLat: number; maxLat: number; m
   return v.lat >= bounds.minLat && v.lat <= bounds.maxLat && v.lng >= bounds.minLng && v.lng <= bounds.maxLng;
 }
 
+function buildCuratedVenueNameSet(): Set<string> {
+  const s = new Set<string>();
+  for (const v of [
+    ...TORINO_FALLBACK_VENUES,
+    ...TORINO_CIBO_LOCALI_FALLBACK,
+    ...TORINO_DISCOTECHE_FALLBACK,
+    ...TORINO_SPORT_FALLBACK,
+  ]) {
+    s.add(v.name.trim().toLowerCase());
+  }
+  return s;
+}
+
+const CURATED_VENUE_NAMES = buildCuratedVenueNameSet();
+
+function isCuratedCatalogVenue(name: string): boolean {
+  return CURATED_VENUE_NAMES.has(name.trim().toLowerCase());
+}
+
+function isStrongGeoMatch(v: GeoVenue, bounds: ReturnType<typeof bboxToLatLngBounds>): boolean {
+  if (!bounds) return true;
+  if (typeof v.lat !== "number" || typeof v.lng !== "number") return false;
+  return isInsideBounds(v, bounds);
+}
+
+/** Catalogo curato, oppure sito raggiungibile + non chiuso + coordinate nella bbox se disegnata. */
+function isVerifiedStrongVenue(v: GeoVenue, bounds: ReturnType<typeof bboxToLatLngBounds>): boolean {
+  if (isCuratedCatalogVenue(v.name)) return true;
+  if (!v.websiteReachable) return false;
+  if (v.openStatus === "closed") return false;
+  return isStrongGeoMatch(v, bounds);
+}
+
+function toScopriVenueJson(
+  v: GeoVenue,
+  tier: "verified" | "suggestion",
+): GeoVenue & { scopriVerification: "verified" | "suggestion"; safariUrl: string } {
+  const withMaps = {
+    ...v,
+    mapsUrl: googleMapsSearchSingleIntentUrl(v.name, v.quartiere),
+  };
+  const { websiteReachable: _w, ...rest } = withMaps;
+  return {
+    ...rest,
+    safariUrl: rest.websiteUrl,
+    scopriVerification: tier,
+  };
+}
+
 function extractRequestedWeekdays(giorno?: string): number[] {
   if (!giorno) return [];
   const t = giorno.toLowerCase();
@@ -654,18 +1056,27 @@ function dayRuleMatches(openingText: string[] | undefined, weekdays: number[]): 
 async function enrichWithPlacesMeta(venue: GeoVenue, requestedWeekdays: number[]): Promise<GeoVenue> {
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
   if (!apiKey) return { ...venue, openStatus: "unknown" };
+  const placesFetchMs = 2200;
   try {
     const query = encodeURIComponent(`${venue.name} ${venue.address} Torino`);
-    const searchResp = await fetch(`https://maps.googleapis.com/maps/api/place/textsearch/json?query=${query}&key=${apiKey}`);
+    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${query}&key=${apiKey}`;
+    const searchResp = await withTimeout(fetch(url), placesFetchMs + 400, "place-textsearch");
+    if (!searchResp.ok) return { ...venue, openStatus: "unknown" };
     const searchJson: any = await searchResp.json();
     const first = searchJson?.results?.[0];
-    if (!first?.place_id) return { ...venue, openStatus: "unknown" };
-    const detailsResp = await fetch(`https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(first.place_id)}&fields=geometry,opening_hours&key=${apiKey}`);
-    const detailsJson: any = await detailsResp.json();
-    const loc = detailsJson?.result?.geometry?.location;
-    const opening = detailsJson?.result?.opening_hours;
-    const isOpenNow = typeof opening?.open_now === "boolean" ? opening.open_now : undefined;
+    if (!first) return { ...venue, openStatus: "unknown" };
+    const loc = first.geometry?.location;
+    const opening = first.opening_hours;
     const weekdayText: string[] | undefined = Array.isArray(opening?.weekday_text) ? opening.weekday_text : undefined;
+    if (!weekdayText || weekdayText.length === 0) {
+      return {
+        ...venue,
+        lat: typeof loc?.lat === "number" ? loc.lat : venue.lat,
+        lng: typeof loc?.lng === "number" ? loc.lng : venue.lng,
+        openStatus: "unknown",
+      };
+    }
+    const isOpenNow = typeof opening?.open_now === "boolean" ? opening.open_now : undefined;
     const dayMatches = dayRuleMatches(weekdayText, requestedWeekdays);
     return {
       ...venue,
@@ -729,6 +1140,7 @@ export async function registerRoutes(
         confirmedDate: requestedStatus === "confirmed" ? (body.confirmedDate || null) : null,
         confirmedTime: requestedStatus === "confirmed" ? (body.confirmedTime || null) : null,
         confirmedVenue: requestedStatus === "confirmed" ? (body.confirmedVenue || null) : null,
+        surveyMode: parseSurveyMode(body.surveyMode),
       });
       res.status(201).json(event);
     } catch (err) {
@@ -754,11 +1166,16 @@ export async function registerRoutes(
   app.post("/api/app/events/:id/options", async (req, res) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ message: "ID non valido" });
-    const { type, value } = req.body;
+    const { type, value, addedBy } = req.body;
     if (!type || !isNonEmptyString(value)) return res.status(400).json({ message: "Dati mancanti" });
     if (!["date", "time", "venue"].includes(type)) return res.status(400).json({ message: "Tipo non valido" });
+    const actor = typeof addedBy === "string" ? addedBy.trim() : "";
+    if (!actor) return res.status(400).json({ message: "addedBy obbligatorio" });
     const event = await storage.getAppEvent(id);
     if (!event) return res.status(404).json({ message: "Evento non trovato" });
+    if (actor !== String(event.createdBy).trim()) {
+      return res.status(403).json({ message: "Solo l'organizzatore può aggiungere opzioni dirette" });
+    }
 
     const safeJson = (v: any, fb: any) => { try { return typeof v === "string" ? JSON.parse(v) : (v ?? fb); } catch { return fb; } };
     const dateOpts: string[]   = safeJson(event.dateOptions,  []);
@@ -797,6 +1214,12 @@ export async function registerRoutes(
   app.put("/api/app/events/:id/unconfirm", async (req, res) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ message: "ID non valido" });
+    const event = await storage.getAppEvent(id);
+    if (!event) return res.status(404).json({ message: "Evento non trovato" });
+    const actorName = typeof req.body?.actorName === "string" ? req.body.actorName.trim() : "";
+    if (!actorName || actorName !== event.createdBy) {
+      return res.status(403).json({ message: "Solo il creatore può annullare la conferma" });
+    }
     const updated = await storage.updateAppEvent(id, {
       status: "planning",
       confirmedDate: null,
@@ -823,8 +1246,15 @@ export async function registerRoutes(
       return res.status(400).json({ message: "Dati voto mancanti" });
     }
 
-    // Attendance votes are mutually exclusive (yes/no): always clear previous attendance vote first
+    // Attendance votes are mutually exclusive (yes/no/maybe): always clear previous attendance vote first
     if (voteType === "attendance") {
+      const ev = await storage.getAppEvent(eventId);
+      if (!ev) return res.status(404).json({ message: "Evento non trovato" });
+      const attMode = surveyBehavior(parseSurveyMode((ev as { surveyMode?: string }).surveyMode)).attendance;
+      const allowed = attMode === "ternary" ? ["yes", "no", "maybe"] : ["yes", "no"];
+      if (!allowed.includes(String(voteValue))) {
+        return res.status(400).json({ message: "Valore presenza non valido per questa modalità" });
+      }
       const existing = await storage.getVotesByEvent(eventId);
       const oldAttendance = existing.find(v => v.voterName === voterName && v.voteType === "attendance");
       if (oldAttendance) {
@@ -838,13 +1268,24 @@ export async function registerRoutes(
     }
 
     // Standard toggle for date/time/venue
+    const eventForVote = await storage.getAppEvent(eventId);
+    if (!eventForVote) return res.status(404).json({ message: "Evento non trovato" });
+    const surveyMode = parseSurveyMode((eventForVote as { surveyMode?: string }).surveyMode);
+    const locked = surveyBehavior(surveyMode).lockSingleChoicePerCategory;
+
     const existing = await storage.getVotesByEvent(eventId);
     const alreadyVoted = existing.find(v =>
       v.voterName === voterName && v.voteType === voteType && v.voteValue === voteValue
     );
     if (alreadyVoted) {
+      if (locked && ["date", "time", "venue"].includes(voteType)) {
+        return res.status(403).json({ message: "In questa modalità il voto non è modificabile" });
+      }
       await storage.deleteVote(eventId, voterName, voteType, voteValue);
       return res.json({ toggled: false });
+    }
+    if (locked && ["date", "time", "venue"].includes(voteType)) {
+      await storage.deleteVotesByType(eventId, voterName, voteType);
     }
     const vote = await storage.createVote({ eventId, voterName, voteType, voteValue });
     res.status(201).json(vote);
@@ -868,6 +1309,12 @@ export async function registerRoutes(
     if (!["date", "time", "venue"].includes(proposalType)) {
       return res.status(400).json({ message: "Tipo proposta non valido" });
     }
+    const eventForProposal = await storage.getAppEvent(eventId);
+    if (!eventForProposal) return res.status(404).json({ message: "Evento non trovato" });
+    const mode = parseSurveyMode((eventForProposal as { surveyMode?: string }).surveyMode);
+    if (!allowsMemberProposals(mode) && String(proposerName).trim() !== String(eventForProposal.createdBy).trim()) {
+      return res.status(403).json({ message: "In questa modalità solo l'organizzatore può suggerire nuove opzioni" });
+    }
     const proposal = await storage.createProposal({
       eventId, proposerName,
       proposalType, proposalValue: proposalValue.trim(),
@@ -882,6 +1329,15 @@ export async function registerRoutes(
     const { status, creatorName } = req.body;
     if (!status || !["approved", "rejected"].includes(status)) {
       return res.status(400).json({ message: "Stato non valido" });
+    }
+    const actor = typeof creatorName === "string" ? creatorName.trim() : "";
+    if (!actor) return res.status(400).json({ message: "creatorName obbligatorio" });
+
+    const existingProposal = await storage.getProposalById(id);
+    if (!existingProposal) return res.status(404).json({ message: "Proposta non trovata" });
+    const evForProp = await storage.getAppEvent(existingProposal.eventId);
+    if (!evForProp || String(evForProp.createdBy).trim() !== actor) {
+      return res.status(403).json({ message: "Solo l'organizzatore può approvare o rifiutare" });
     }
 
     const updated = await storage.updateProposal(id, status);
@@ -954,6 +1410,7 @@ export async function registerRoutes(
       timeOpts.length,
       venueOpts.length,
       votes,
+      (event as { surveyMode?: string }).surveyMode,
     );
     if (!ok) {
       return res.status(403).json({
@@ -969,6 +1426,267 @@ export async function registerRoutes(
     if (isNaN(id)) return res.status(400).json({ message: "ID non valido" });
     await storage.deleteAppEvent(id);
     res.json({ ok: true });
+  });
+
+  // ── Friends ──
+  app.get("/api/app/friends/:ownerName", async (req, res) => {
+    const ownerName = decodeURIComponent(req.params.ownerName || "").trim();
+    if (!ownerName) return res.status(400).json({ message: "Nome mancante" });
+    const friends = await storage.getFriendsByOwner(ownerName);
+    res.json({ friends });
+  });
+
+  app.post("/api/app/friends", async (req, res) => {
+    const { ownerName, friendName } = req.body || {};
+    if (!ownerName || !friendName) return res.status(400).json({ message: "Dati mancanti" });
+    await storage.addFriend(String(ownerName).trim(), String(friendName).trim());
+    res.status(201).json({ ok: true });
+  });
+
+  app.delete("/api/app/friends/:ownerName/:friendName", async (req, res) => {
+    const ownerName = decodeURIComponent(req.params.ownerName || "").trim();
+    const friendName = decodeURIComponent(req.params.friendName || "").trim();
+    await storage.removeFriend(ownerName, friendName);
+    res.json({ ok: true });
+  });
+
+  app.post("/api/app/friends/seed-demo", async (req, res) => {
+    const { ownerName } = req.body || {};
+    if (!ownerName) return res.status(400).json({ message: "Nome mancante" });
+    const name = String(ownerName).trim();
+    for (const f of LINEUP_DEMO_CONTACTS) {
+      if (f !== name) await storage.addFriend(name, f);
+    }
+    const friends = await storage.getFriendsByOwner(name);
+    res.json({ friends });
+  });
+
+  const pianificaDemoRegisterSchema = z.object({
+    name: z.string().trim().min(2).max(80),
+    email: z.string().trim().email(),
+  });
+
+  const pianificaDemoFeedbackSchema = z.object({
+    name: z.string().trim().min(2).max(80),
+    email: z.string().trim().email(),
+    rating: z.number().int().min(1).max(5),
+    comment: z.string().trim().max(2000).optional(),
+  });
+
+  /** Feedback post-demo: voto stelle + commento → email (o log se SMTP assente). */
+  app.post("/api/app/pianifica-demo/feedback", async (req, res) => {
+    try {
+      const input = pianificaDemoFeedbackSchema.parse(req.body);
+      const result = await sendPianificaDemoFeedback({
+        name: input.name,
+        email: input.email,
+        rating: input.rating,
+        comment: input.comment,
+      });
+      void logAiPipelineSummary({
+        route: "POST /api/app/pianifica-demo/feedback",
+        lines: [
+          `name: ${input.name}`,
+          `email: ${input.email}`,
+          `rating: ${input.rating}/5`,
+          `channel: ${result.channel}`,
+        ],
+      });
+      return res.status(201).json({
+        ok: true,
+        delivered: result.delivered,
+        channel: result.channel,
+      });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0]?.message ?? "Dati non validi" });
+      }
+      console.error("pianifica-demo/feedback:", err);
+      return res.status(500).json({ message: "Invio feedback non riuscito" });
+    }
+  });
+
+  /** Registrazione accesso demo QR Pianifica (nome + email). */
+  app.post("/api/app/pianifica-demo/register", async (req, res) => {
+    try {
+      const input = pianificaDemoRegisterSchema.parse(req.body);
+      const existing = await storage.getSubscriberByEmail(input.email);
+      if (!existing) {
+        await storage.createSubscriber({ email: input.email });
+      }
+      void logAiPipelineSummary({
+        route: "POST /api/app/pianifica-demo/register",
+        lines: [`name: ${input.name}`, `email: ${input.email}`],
+      });
+      return res.status(201).json({ ok: true, name: input.name, email: input.email });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0]?.message ?? "Dati non validi" });
+      }
+      throw err;
+    }
+  });
+
+  /** Catalogo Torino istantaneo (senza OpenAI) per anteprima mentre l’AI affina. */
+  app.get("/api/app/venues/quick-search", (req, res) => {
+    const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    if (query.length < 2 || query.length > 120) {
+      return res.status(400).json({ message: "Query non valida (2–120 caratteri)" });
+    }
+    const cached = getVenueAiSearchCached(query);
+    if (cached) return res.json({ venues: cached, source: "cache" });
+    const venues = fallbackTorinoClientVenuesFromCatalog(query);
+    return res.json({ venues, source: "catalog" });
+  });
+
+  /** Ricerca luoghi a Torino (AI) per il passo “Dove” nella creazione evento. */
+  app.post("/api/app/venues/ai-search", async (req, res) => {
+    const query = typeof req.body?.query === "string" ? req.body.query.trim() : "";
+    if (query.length < 2 || query.length > 120) {
+      return res.status(400).json({ message: "Query non valida (2–120 caratteri)" });
+    }
+
+    const cached = getVenueAiSearchCached(query);
+    if (cached) return res.json({ venues: cached, source: "cache" });
+
+    const instant = tryInstantVenueCatalogOnly(query);
+    if (instant) {
+      setVenueAiSearchCached(query, instant);
+      return res.json({ venues: instant, source: "catalog" });
+    }
+
+    const catalogNameHints = fuzzyCatalogVenueNamesForQuery(query, 10);
+    const hintsBlock =
+      catalogNameHints.length > 0
+        ? `\nPossibili nomi nel nostro catalogo Torino (refusi / intento): ${catalogNameHints.map((n) => JSON.stringify(n)).join(", ")}. Preferisci questi se corrispondono all'intento dell'utente.`
+        : "";
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      const venues = fallbackTorinoClientVenuesFromCatalog(query);
+      setVenueAiSearchCached(query, venues);
+      return res.json({ venues });
+    }
+    try {
+      const openai = new OpenAI({ apiKey, timeout: LINEUP_VENUE_AI_SEARCH_MS });
+      const completion = await withTimeout(
+        openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          temperature: 0,
+          max_completion_tokens: 420,
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content:
+                'Rispondi solo con JSON: {"venues":[...]} max 5 elementi. Ogni elemento: name, address (area generica o vuota), quartiere (zona Torino, stringa breve; preferito per UI), rating 0-5, mapsUrl, websiteUrl, instagramUrl (URL o null). Regole: solo locali reali a Torino che esistono o sono noti; niente markdown. Se la query sembra un refuso, correggi usando nomi reali (non inventare locali generici tipo "Trive"). mapsUrl: URL maps valido con query= nome preciso + Torino (il server normalizza i link). NON inventare numeri civici.',
+            },
+            {
+              role: "user",
+              content: `Luoghi a Torino per: ${JSON.stringify(query)}${hintsBlock}`,
+            },
+          ],
+        }),
+        LINEUP_VENUE_AI_SEARCH_MS,
+        "venues-ai-search",
+      );
+      const text = completion.choices[0]?.message?.content;
+      if (!text) {
+        const venues = fallbackTorinoClientVenuesFromCatalog(query);
+        setVenueAiSearchCached(query, venues);
+        return res.json({ venues });
+      }
+      let raw: unknown;
+      try {
+        raw = JSON.parse(text);
+      } catch {
+        const venues = fallbackTorinoClientVenuesFromCatalog(query);
+        setVenueAiSearchCached(query, venues);
+        return res.json({ venues });
+      }
+      const aiParsed = parseTorinoVenueAiItemsLoose(raw);
+      const fb = fallbackTorinoClientVenuesFromCatalog(query);
+      const venues = mergeCatalogWithAi(fb, aiParsed);
+      if (venues.length === 0) {
+        void logAiPipelineSummary({
+          route: "POST /api/app/venues/ai-search",
+          lines: ["parse_fail", "no_venues_after_merge"],
+        });
+        setVenueAiSearchCached(query, []);
+        return res.json({ venues: [] });
+      }
+      setVenueAiSearchCached(query, venues);
+      return res.json({ venues });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      void logAiPipelineSummary({
+        route: "POST /api/app/venues/ai-search",
+        lines: ["error", msg],
+      });
+      const venues = fallbackTorinoClientVenuesFromCatalog(query);
+      setVenueAiSearchCached(query, venues);
+      return res.json({ venues });
+    }
+  });
+
+  app.get("/api/app/events/:id/join-requests", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "ID non valido" });
+    const forUser = typeof req.query.forUser === "string" ? req.query.forUser.trim() : "";
+    if (!forUser) return res.status(400).json({ message: "forUser richiesto" });
+    const event = await storage.getAppEvent(id);
+    if (!event) return res.status(404).json({ message: "Evento non trovato" });
+    if (event.createdBy !== forUser) return res.status(403).json({ message: "Non autorizzato" });
+    const list = await storage.getJoinRequestsByEvent(id);
+    res.json(list);
+  });
+
+  app.post("/api/app/events/:id/join-requests", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "ID non valido" });
+    const { requesterName } = req.body || {};
+    if (!requesterName) return res.status(400).json({ message: "requesterName mancante" });
+    const reqName = String(requesterName).trim();
+    const event = await storage.getAppEvent(id);
+    if (!event) return res.status(404).json({ message: "Evento non trovato" });
+    let parts: string[] = [];
+    try {
+      parts = JSON.parse(event.participants || "[]") as string[];
+    } catch {
+      parts = [];
+    }
+    if (parts.includes(reqName)) return res.status(409).json({ message: "Sei già partecipante" });
+    const existing = await storage.getJoinRequestsByEvent(id);
+    const pend = existing.find((j) => j.requesterName === reqName && j.status === "pending");
+    if (pend) return res.status(409).json({ message: "Richiesta già inviata", id: pend.id });
+    const jr = await storage.createJoinRequest({ eventId: id, requesterName: reqName, status: "pending" });
+    res.status(201).json(jr);
+  });
+
+  app.put("/api/app/join-requests/:jrId", async (req, res) => {
+    const jrId = parseInt(req.params.jrId);
+    if (isNaN(jrId)) return res.status(400).json({ message: "ID non valido" });
+    const { status, resolverName } = req.body || {};
+    if (!status || !resolverName) return res.status(400).json({ message: "Dati mancanti" });
+    if (status !== "accepted" && status !== "rejected") return res.status(400).json({ message: "Stato non valido" });
+    const jr = await storage.getJoinRequest(jrId);
+    if (!jr) return res.status(404).json({ message: "Richiesta non trovata" });
+    const event = await storage.getAppEvent(jr.eventId);
+    if (!event) return res.status(404).json({ message: "Evento non trovato" });
+    if (event.createdBy !== resolverName) return res.status(403).json({ message: "Solo il creatore risolve le richieste" });
+    if (jr.status !== "pending") return res.status(409).json({ message: "Richiesta già gestita" });
+    if (status === "accepted") {
+      let p: string[] = [];
+      try {
+        p = JSON.parse(event.participants || "[]") as string[];
+      } catch {
+        p = [];
+      }
+      if (!p.includes(jr.requesterName)) p.push(jr.requesterName);
+      await storage.updateAppEvent(jr.eventId, { participants: JSON.stringify(p) });
+    }
+    const updated = await storage.updateJoinRequest(jrId, status);
+    res.json(updated);
   });
 
   // ── Waitlist ──
@@ -1094,7 +1812,10 @@ export async function registerRoutes(
       return res.status(400).json({ error: "Dati mancanti" });
     }
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+      timeout: LINEUP_AI_MAX_RESPONSE_MS,
+    });
 
     const prompt = `Sei un assistente italiano esperto di eventi e locali a Torino.
 Un utente vuole fare: "${subcategory}" (categoria: ${category}).
@@ -1120,18 +1841,32 @@ Rispondi SOLO con questo JSON (nessun testo extra):
 }`;
 
     try {
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" },
-        max_tokens: 800,
-      });
+      const completion = await withTimeout(
+        openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [{ role: "user", content: prompt }],
+          response_format: { type: "json_object" },
+          max_tokens: 800,
+        }),
+        LINEUP_AI_MAX_RESPONSE_MS,
+        "scopri-questions",
+      );
 
       const content = completion.choices[0]?.message?.content ?? "{}";
+      await logAiExchange({
+        route: "POST /api/scopri/questions",
+        prompt,
+        response: content,
+      });
       const parsed = JSON.parse(content);
       res.json(parsed);
     } catch (err: any) {
       console.error("AI Questions error:", err?.message);
+      await logAiExchange({
+        route: "POST /api/scopri/questions",
+        prompt,
+        response: `ERROR: ${err?.message ?? String(err)}`,
+      });
       res.status(500).json({ error: "Errore AI", detail: err?.message });
     }
   });
@@ -1170,12 +1905,36 @@ Rispondi SOLO con questo JSON (nessun testo extra):
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      const fallbackOnly = getFallbackVenuesForSubcategory(subcategory, category)
+      const fallbackOnly: ScopriAiClientVenue[] = getFallbackVenuesForSubcategory(subcategory, category)
         .filter((v) => venueMatchesIntent(v, String(category), String(subcategory)))
-        .map((v) => ({ ...v, safariUrl: v.websiteUrl }));
-      return res.json({ venues: fallbackOnly });
+        .map((v) => ({
+          ...v,
+          safariUrl: v.websiteUrl,
+          scopriVerification: "verified" as const,
+        }));
+      void logAiPipelineSummary({
+        route: "POST /api/scopri/ai (no OpenAI key)",
+        lines: ["mode: catalog_only", `venueCount: ${fallbackOnly.length}`],
+      });
+      return res.json({
+        venues: fallbackOnly,
+        venuesVerified: fallbackOnly,
+        venuesMoreIdeas: [],
+        checks: {
+          category: String(category),
+          subcategory: String(subcategory),
+          price: String(mergedConstraints.prezzo ?? "Qualsiasi"),
+          day: String(mergedConstraints.giorno ?? ""),
+          transport: String(mergedConstraints.mezzo ?? ""),
+          area: String(mergedConstraints.areaDisegnata ?? ""),
+          strictIntentFilter: true,
+          hardReject: false,
+          geoBoundsApplied: false,
+          openingHoursApplied: false,
+        },
+      });
     }
-    const openai = new OpenAI({ apiKey });
+    const openai = new OpenAI({ apiKey, timeout: LINEUP_AI_MAX_RESPONSE_MS });
 
     const answersText = Object.entries(answers)
       .map(([q, a]) => `  - ${q}: ${a}`)
@@ -1196,16 +1955,31 @@ DISCOTECHE — definizione STRETTA (obbligatoria)
 `
       : "";
 
-    const foodConstraints = isSpecificFoodVenueSubcategory(String(subcategory))
-      ? `
+    const foodConstraintsMeal = `
 ══════════════════════════════════════════════════════════════════
-CIBO (colazione, brunch, spuntino, pranzo, cena, aperitivo) — locali PRECISI
+CIBO — PRANZO / CENA (pasto al tavolo, non snack da bar)
+══════════════════════════════════════════════════════════════════
+- Proponi SOLO luoghi dove si fa PRANZO o CENA al tavolo: ristorante, trattoria, osteria con cucina, pizzeria, bistrot con servizio pasti, brasserie, taverna, grill, sushi con sedute, mercato COPERTO con posti e banconi pasto (nome del mercato), hub gastronomico con sedute.
+- VIETATO: bar generici, caffè storici da tramezzino o colazione al banco, pasticcerie, gelaterie, wine bar solo aperitivo, locali la cui identità online è soprattutto "caffè" o "bar" senza menu pranzo/cena chiaro.
+- VIETATO proporre: intere piazze, parchi senza locale interno, monumenti senza ristorazione.
+- Il campo "name" deve essere un locale pasto (es. "Trattoria ...", "Ristorante ..."), MAI un caffè-pasticceria sostituto del ristorante.
+`;
+
+    const foodConstraintsGeneric = `
+══════════════════════════════════════════════════════════════════
+CIBO (colazione, brunch, spuntino, aperitivo, ecc.) — locali PRECISI
 ══════════════════════════════════════════════════════════════════
 - Suggerisci SOLO esercizi dove si mangia o beve con servizio: bar, caffè storici, pasticceria, bistrot, ristorante, trattoria, gelateria con sedute, mercato COPERTO con banconi (nome del mercato va bene), osteria con cucina.
 - VIETATO proporre: intere piazze (es. "Piazza Vittorio Veneto"), parchi/giardini senza nome di locale interno, lungofiumi generici, "zone" o quartieri, monumenti senza ristorazione, laghi o sagre generiche senza struttura precisa.
-- Il campo "name" deve essere il nome commerciale del locale (es. "Caffè Mulassano"), MAI solo il nome di una piazza o di un parco.
-`
-      : "";
+- Il campo "name" deve essere il nome commerciale del locale (es. "Trattoria ..."), MAI solo il nome di una piazza o di un parco.
+`;
+
+    const foodConstraints =
+      isSpecificFoodVenueSubcategory(String(subcategory))
+        ? isMealLunchDinnerSubcategory(String(subcategory))
+          ? foodConstraintsMeal
+          : foodConstraintsGeneric
+        : "";
 
     const scopriPrefs = buildUserPreferencesFromScopri({
       category: String(category),
@@ -1223,21 +1997,61 @@ ISTRUZIONI OPERATIVE (segui anche queste, oltre al blocco sopra)
 ══════════════════════════════════════════════════════════════════
 `;
 
+    const personalBlock = requestText
+      ? `
+══════════════════════════════════════════════════════════════════
+RICHIESTE PERSONALI (filtro severo — stesso peso di zona e prezzo)
+══════════════════════════════════════════════════════════════════
+Testo utente: "${requestText}"
+- Ogni locale in "venues" deve essere scelto SOLO se, oltre a categoria/sottocategoria, zona e prezzo, soddisfa in modo chiaro anche questo testo (menu, specialità, atmosfera, sito ufficiale).
+- In "explanation" devi esplicitare concretamente come il locale risponde a questa richiesta (non frasi generiche).
+- Se non trovi locali che rispettano anche questo testo insieme agli altri vincoli, restituisci meno risultati o "venues": [] — vietato proporre locali generici solo per riempire l'elenco.
+`
+      : "";
+
+    const antiWrongVenueTypeBlock =
+      /\b(pizzeria|pizza|pizze)\b/i.test(requestText) && /senza\s*glutine|gluten|celiac|celiachia|no\s*glutine/i.test(requestText)
+        ? `
+══════════════════════════════════════════════════════════════════
+PIZZERIA + SENZA GLUTINE (ordine assoluto)
+══════════════════════════════════════════════════════════════════
+- Solo pizzerie o ristoranti dove la PIZZA è proposta centrale e documentabile online, CON offerta senza glutine / celiachia / menu dedicato / marchio AIC o equivalente esplicito nel sito o nelle pagine ufficiali.
+- VIETATO: pasticcerie, bar, caffè storici, gelaterie, mercati generici, "locale accogliente" senza pizza e senza glutine dichiarati nel testo che scrivi.
+- Se non trovi nulla di verificabile, "venues": [].
+`
+        : /\b(pizzeria|pizza|pizze)\b/i.test(requestText)
+          ? `
+══════════════════════════════════════════════════════════════════
+RICHIESTA PIZZA / PIZZERIA
+══════════════════════════════════════════════════════════════════
+- Il nome o la descrizione del locale devono mostrare che è una PIZZERIA o che la pizza è il cuore dell'offerta (non un caffè o una pasticceria "dove si mangia anche una pizza" senza prova online).
+- VIETATO sostituire con pasticceria, gelateria o caffè storico salvo evidenza chiara di pizzeria nel nome o nel sito.
+`
+          : /senza\s*glutine|gluten|celiac|celiachia|no\s*glutine/i.test(requestText)
+            ? `
+══════════════════════════════════════════════════════════════════
+SENZA GLUTINE / CELIACHIA
+══════════════════════════════════════════════════════════════════
+- Ogni locale deve avere evidenza online di offerta senza glutine (menu, AIC, pagina dedicata, frase esplicita sul sito). Non bastano "cucina italiana" o "tradizione" generiche.
+`
+            : "";
+
     const searchPrompt = `${aiDirectorBlock}Sei un city concierge locale.
-Trova QUANTE PIU opzioni possibili (minimo 8, massimo 10) di luoghi REALMENTE ESISTENTI e attivi nell'area di TORINO CITTA (non fuori Torino) per "${subcategory}".
-${discoConstraints}${foodConstraints}
+Obiettivo: proponi SOLO luoghi REALMENTE ESISTENTI a TORINO CITTA (non fuori) per "${subcategory}" che verificano nel modo più stretto possibile TUTTE le richieste dell'utente sotto (categoria, sottocategoria, giorno, prezzo, mezzo, area mappa${requestText ? ", richieste personali" : ""}).
+Quantità: preferisci da 3 a 8 risultati eccellenti; MAI riempire con locali generici o solo vagamente adatti. Meglio pochi match totali che molti parziali.
+${discoConstraints}${foodConstraints}${personalBlock}${antiWrongVenueTypeBlock}
 Vincoli obbligatori:
 - Usa solo posti verificabili online (sito ufficiale, Google Maps, TheFork, ticket office ufficiale).
 - L'indirizzo deve essere completo con via e numero civico e contenere "Torino".
 - Niente luoghi inventati, generici o senza presenza online chiara.
-- Le opzioni DEVONO rispettare tutte le richieste dell'utente sotto, inclusa fascia prezzo (priceRange 1-4) e area mappa se indicate.
+- Le opzioni DEVONO rispettare tutte le richieste dell'utente sotto, inclusa fascia prezzo (priceRange 1-4), area mappa se indicata${requestText ? " e le richieste personali parola per parola nel loro significato" : ""}.
 
 Preferenze utente:
 ${answersText}
-${requestText ? `\nRichieste personali utente (OBBLIGATORIE):\n- ${requestText}\n` : ""}
+${requestText ? `\nRichieste personali utente (OBBLIGATORIE — ogni venue deve conformarsi):\n- ${requestText}\n` : ""}
 CRITICO:
 - La categoria richiesta e "${mergedConstraints.category ?? category}" e la sottocategoria richiesta e "${mergedConstraints.subcategory ?? subcategory}".
-- NON proporre luoghi fuori categoria/sottocategoria.
+${isMealLunchDinnerSubcategory(String(mergedConstraints.subcategory ?? subcategory)) ? `- Per PRANZO o CENA: è VIETATO proporre bar, caffè, pasticcerie o gelaterie salvo che il sito ufficiale dimostri chiaramente servizio di pasto completo al tavolo con quel nome commerciale.\n` : ""}- NON proporre luoghi fuori categoria/sottocategoria.
 - Giorno/intervallo selezionato: "${mergedConstraints.giorno ?? "non specificato"}".
 - Prezzo selezionato: "${mergedConstraints.prezzo ?? "Qualsiasi"}".
 - Mezzo selezionato: "${mergedConstraints.mezzo ?? "non specificato"}".
@@ -1245,6 +2059,7 @@ CRITICO:
 - Se giorno e selezionato, includi solo posti aperti in quel giorno/intervallo.
 - Se prezzo e diverso da "Qualsiasi", includi solo posti in quella fascia.
 - Se esiste area mappa, includi solo posti compatibili con la zona selezionata.
+- "matchScore" alto (≥85) solo se il locale rispetta insieme tutti i vincoli applicabili; altrimenti escludi il locale o abbassa il punteggio e non superare i migliori in lista se incoerenti.
 
 Dopo la ricerca, rispondi SOLO con un JSON valido (nessun testo fuori dal JSON) con questa struttura esatta:
 {
@@ -1253,7 +2068,7 @@ Dopo la ricerca, rispondi SOLO con un JSON valido (nessun testo fuori dal JSON) 
       "name": "Nome esatto del posto trovato online",
       "address": "Indirizzo completo con via e numero civico trovato online, Torino",
       "matchScore": 88,
-      "explanation": "Almeno due frasi in italiano su perché il locale rispetta ZONA, priceRange, trasporto e tema richiesti",
+      "explanation": "Almeno due frasi in italiano che dimostrano rispetto di ZONA, priceRange, trasporto, tema categoria/sottocategoria${requestText ? " e richieste personali dell'utente" : ""}",
       "estimatedPrice": "€ oppure €€ oppure €€€ coerente con la fascia richiesta"
     }
   ]
@@ -1264,29 +2079,72 @@ Dopo la ricerca, rispondi SOLO con un JSON valido (nessun testo fuori dal JSON) 
       const warm = aiWarmupCache.get(cacheKey);
       const warmValid = warm && Date.now() - warm.at < 5 * 60_000;
       if (prefetch && warmValid) {
-        return res.json({ venues: warm.venues.map((v) => ({ ...v, safariUrl: v.websiteUrl })), warmed: true });
+        return res.json({ ...warm.payload, warmed: true });
       }
 
-      // Prima prova: Responses API con ricerca web in tempo reale
+      const scopriPipelineMark = Date.now();
+
+      // Default: chat JSON (più veloce). Imposta LINEUP_SCOPRI_AI_WEB_FIRST=1 per provare prima la Responses API con web search.
       let rawText = "";
-      try {
-        const webResponse: any = await withTimeout((openai as any).responses.create({
-          model: "gpt-4o-mini",
-          tools: [{ type: "web_search_preview" }],
-          input: searchPrompt,
-        }), 12000, "responses");
-        rawText = webResponse.output_text ?? "";
-      } catch (webErr: any) {
-        console.warn("Web search non disponibile, uso gpt-4o standard:", webErr?.message);
-        // Fallback: gpt-4o senza ricerca web
-        const completion = await withTimeout(openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [{ role: "user", content: searchPrompt }],
-          response_format: { type: "json_object" },
-          max_tokens: 1800,
-        }), 12000, "chat.completions");
-        rawText = completion.choices[0]?.message?.content ?? "{}";
+      let usedOpenAiResponsesWeb = false;
+      const webFirst = process.env.LINEUP_SCOPRI_AI_WEB_FIRST === "1";
+      const runChatJson = () =>
+        withTimeout(
+          openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages: [{ role: "user", content: searchPrompt }],
+            response_format: { type: "json_object" },
+            max_tokens: 1000,
+          }),
+          LINEUP_AI_MAX_RESPONSE_MS,
+          "chat.completions",
+        );
+      const runWebSearch = () =>
+        withTimeout(
+          (openai as any).responses.create({
+            model: "gpt-4o-mini",
+            tools: [{ type: "web_search_preview" }],
+            input: searchPrompt,
+          }),
+          LINEUP_AI_MAX_RESPONSE_MS,
+          "responses",
+        );
+      if (webFirst) {
+        try {
+          const webResponse: any = await runWebSearch();
+          rawText = webResponse.output_text ?? "";
+          usedOpenAiResponsesWeb = true;
+        } catch (webErr: any) {
+          console.warn("Web search non disponibile, uso chat JSON:", webErr?.message);
+          const completion = await runChatJson();
+          rawText = completion.choices[0]?.message?.content ?? "{}";
+        }
+      } else {
+        try {
+          const completion = await runChatJson();
+          rawText = completion.choices[0]?.message?.content ?? "{}";
+        } catch (chatErr: any) {
+          console.warn("Chat JSON fallito, provo web search:", chatErr?.message);
+          try {
+            const webResponse: any = await runWebSearch();
+            rawText = webResponse.output_text ?? "";
+            usedOpenAiResponsesWeb = true;
+          } catch (webErr: any) {
+            await logAiExchange({
+              route: "POST /api/scopri/ai",
+              prompt: searchPrompt,
+              response: `ERROR chat: ${chatErr?.message ?? String(chatErr)}\nERROR web: ${webErr?.message ?? String(webErr)}`,
+            });
+            throw webErr;
+          }
+        }
       }
+
+      await logAiExchange({
+        route: "POST /api/scopri/ai",
+        prompt: searchPrompt,
+        response: rawText,
+      });
 
       // Estrai JSON dalla risposta (puo contenere testo extra se arriva da web search)
       const jsonMatch = rawText.match(/\{[\s\S]*"venues"[\s\S]*\}/);
@@ -1297,9 +2155,13 @@ Dopo la ricerca, rispondi SOLO con un JSON valido (nessun testo fuori dal JSON) 
         console.warn("Risposta AI Scopri non valida (schema venue):", parsedVenues.error);
       }
       const aiCandidates = parsedVenues.ok
-        ? validateSuggestions(parsedVenues.data.venues, scopriPrefs).map((s) =>
-            expandScopriAiSuggestionToVenue(s),
-          )
+        ? filterAiSuggestionsForMealLunchDinner(
+            filterAiSuggestionsByUserRequest(
+              validateSuggestions(parsedVenues.data.venues, scopriPrefs),
+              requestText,
+            ),
+            String(subcategory),
+          ).map((s) => expandScopriAiSuggestionToVenue(s))
         : [];
       const discoMode = isDiscotecaSubcategory(String(subcategory));
       const foodSpecificMode = isSpecificFoodVenueSubcategory(String(subcategory));
@@ -1337,10 +2199,28 @@ Dopo la ricerca, rispondi SOLO con un JSON valido (nessun testo fuori dal JSON) 
       if (discoMode) merged = filterStrictDiscotecheVenues(merged);
       if (foodSpecificMode) merged = filterFoodMustBeSpecificVenue(merged);
       merged = dedupeStrong(merged);
-      const candidates = merged.slice(0, 10);
-      const verified = await validateVenueLinks(candidates);
+      if (requestText.trim()) {
+        merged = merged.filter((v) => venueTextMatchesUserRequest(requestText, v.name, v.description));
+      }
+      const candidates = merged.slice(0, 5);
+      const venuesLinkChecked = await validateVenueLinks(candidates);
+      const elapsedSinceScopriStart = Date.now() - scopriPipelineMark;
+      const enrichBudgetMs = Math.max(0, LINEUP_SCOPRI_PIPELINE_BUDGET_MS - elapsedSinceScopriStart);
       const weekdays = extractRequestedWeekdays(mergedConstraints.giorno);
-      const withPlaces = await Promise.all(verified.map((v) => enrichWithPlacesMeta(v, weekdays)));
+      const perVenueEnrichMs =
+        venuesLinkChecked.length > 0
+          ? Math.max(900, Math.min(2600, Math.floor(enrichBudgetMs / venuesLinkChecked.length)))
+          : 0;
+      const withPlaces = await Promise.all(
+        venuesLinkChecked.map((v) =>
+          enrichBudgetMs < 500
+            ? Promise.resolve({ ...v, openStatus: "unknown" as const })
+            : withTimeout(enrichWithPlacesMeta(v, weekdays), perVenueEnrichMs, "enrich-place").catch(() => ({
+                ...v,
+                openStatus: "unknown" as const,
+              })),
+        ),
+      );
       const areaBounds = bboxToLatLngBounds(mergedConstraints.areaDisegnata);
       const geoFiltered = withPlaces.filter((v) => isInsideBounds(v, areaBounds));
       const openFiltered = geoFiltered.filter((v) => v.openStatus !== "closed");
@@ -1363,12 +2243,36 @@ Dopo la ricerca, rispondi SOLO con un JSON valido (nessun testo fuori dal JSON) 
         ranked.filter((v) => venueMatchesIntent(v, String(category), String(subcategory))),
         mergedConstraints.prezzo,
       ).slice(0, 10);
-      aiWarmupCache.set(cacheKey, { at: Date.now(), venues: finalVenues });
+
+      const venuesVerified = finalVenues
+        .filter((v) => isVerifiedStrongVenue(v, areaBounds))
+        .map((v) => toScopriVenueJson(v, "verified"));
+      const venuesMoreIdeas = finalVenues
+        .filter((v) => !isVerifiedStrongVenue(v, areaBounds))
+        .map((v) => toScopriVenueJson(v, "suggestion"));
+      const venuesOrdered: ScopriAiClientVenue[] = [...venuesVerified, ...venuesMoreIdeas].slice(0, 12);
+
+      const payload: ScopriAiCachePayload = {
+        venues: venuesOrdered,
+        venuesVerified,
+        venuesMoreIdeas,
+      };
+      aiWarmupCache.set(cacheKey, { at: Date.now(), payload });
+
+      void logAiPipelineSummary({
+        route: "POST /api/scopri/ai",
+        lines: [
+          `openaiApiKeyPresent: ${Boolean(process.env.OPENAI_API_KEY)}`,
+          `openaiResponsesWebUsed: ${usedOpenAiResponsesWeb}`,
+          `googleMapsApiKeyPresent: ${Boolean(process.env.GOOGLE_MAPS_API_KEY)}`,
+          `verifiedVenueCount: ${venuesVerified.length}`,
+          `moreIdeasVenueCount: ${venuesMoreIdeas.length}`,
+          `bboxActive: ${Boolean(areaBounds)}`,
+        ],
+      });
+
       res.json({
-        venues: finalVenues.map((v) => ({
-          ...v,
-          safariUrl: v.websiteUrl,
-        })),
+        ...payload,
         checks: {
           category: String(category),
           subcategory: String(subcategory),
@@ -1384,17 +2288,41 @@ Dopo la ricerca, rispondi SOLO con un JSON valido (nessun testo fuori dal JSON) 
       });
     } catch (err: any) {
       console.error("AI Scopri error:", err?.message);
-      const safeFallback = filterByRequestedPrice(
+      const safeFallbackRaw = filterByRequestedPrice(
         getFallbackVenuesForSubcategory(subcategory, category)
           .filter((v) => venueMatchesIntent(v, String(category), String(subcategory))),
         mergedConstraints.prezzo,
-      )
-        .map((v) => scoreVenue({ ...v, openStatus: "unknown" }, mergedConstraints, true))
-        .map((v) => ({
-          ...v,
-          safariUrl: v.websiteUrl,
-        }));
-      res.json({ venues: safeFallback });
+      ).map((v) => scoreVenue({ ...v, openStatus: "unknown" }, mergedConstraints, true));
+      const safeFallback: ScopriAiClientVenue[] = safeFallbackRaw.map((v) => ({
+        ...v,
+        safariUrl: v.websiteUrl,
+        scopriVerification: "verified" as const,
+      }));
+      void logAiPipelineSummary({
+        route: "POST /api/scopri/ai (fallback)",
+        lines: [
+          `error: ${err?.message ?? String(err)}`,
+          `openaiApiKeyPresent: ${Boolean(process.env.OPENAI_API_KEY)}`,
+          `catalogFallbackCount: ${safeFallback.length}`,
+        ],
+      });
+      res.json({
+        venues: safeFallback,
+        venuesVerified: safeFallback,
+        venuesMoreIdeas: [],
+        checks: {
+          category: String(category),
+          subcategory: String(subcategory),
+          price: String(mergedConstraints.prezzo ?? "Qualsiasi"),
+          day: String(mergedConstraints.giorno ?? ""),
+          transport: String(mergedConstraints.mezzo ?? ""),
+          area: String(mergedConstraints.areaDisegnata ?? ""),
+          strictIntentFilter: true,
+          hardReject: false,
+          geoBoundsApplied: false,
+          openingHoursApplied: false,
+        },
+      });
     }
   });
 

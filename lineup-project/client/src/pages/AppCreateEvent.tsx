@@ -1,14 +1,27 @@
-import { useState, useMemo } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Star, MapPin, Tag, ChevronRight, ChevronLeft, Users, User, Search, UtensilsCrossed, Landmark, Dumbbell, Ticket, Gamepad2, PenLine, ArrowLeft, Plus, X, MessageCircle, Sunrise, Sun, Sunset, Moon, Coffee, Link2, Copy, Check } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import {
   CONTACTS, GROUPS, ACTIVITIES, VENUES_BY_ACTIVITY,
-  getCurrentUser, getAvatarColor, getInitials, getMyContacts, getEventChatInviteUrl, type VenueOption, type ScopriToCreatePrefill
+  getCurrentUser, getAvatarColor, getInitials, getMyContacts, getEventChatInviteUrl, venuePollSubtitle, type VenueOption, type ScopriToCreatePrefill
 } from "@/lib/appUtils";
 import { PLAN_CATEGORIES, PLAN_SUBCATEGORIES, venuePoolKeyForPlanSubcategory } from "@/lib/planCategories";
+import { VenueExternalLinks } from "@/components/VenueExternalLinks";
+import { SurveyModePicker } from "@/components/SurveyModePicker";
+import { PianificaStepGuide } from "@/components/PianificaStepGuide";
+import {
+  PianificaPreviewCompletion,
+  type PreviewProfile,
+} from "@/components/PianificaPreviewCompletion";
+import { getPianificaPreviewGuide, type PreviewGuideId } from "@/lib/pianificaPreviewGuides";
+import {
+  DEFAULT_SURVEY_MODE,
+  recommendSurveyModeFromPlanning,
+  type SurveyModeId,
+} from "@shared/surveyModes";
 
 
 /* ─── Fasce orarie selezionabili (opzionali) ─── */
@@ -27,10 +40,26 @@ interface AppCreateEventProps {
   onClose: () => void;
   /** Se presente, il wizard salta scelta di categoria, sottocategoria e luoghi (già definiti in Scopri AI). */
   fromScopri?: ScopriToCreatePrefill;
+  /** Pagina / QR prova: dopo la creazione niente chat e niente link invito. */
+  previewMode?: boolean;
+  /** Nome e email raccolti in gate demo (per feedback finale). */
+  previewProfile?: PreviewProfile;
 }
 
-export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventProps) {
+export default function AppCreateEvent({
+  onClose,
+  fromScopri,
+  previewMode,
+  previewProfile,
+}: AppCreateEventProps) {
   const fromScopriFlow = Boolean(fromScopri && fromScopri.venues.length > 0);
+
+  const renderPreviewGuide = (id: PreviewGuideId) => {
+    if (!previewMode) return null;
+    const guide = getPianificaPreviewGuide(id, fromScopriFlow);
+    return <PianificaStepGuide {...guide} />;
+  };
+  const [surveyMode, setSurveyMode] = useState<SurveyModeId>(DEFAULT_SURVEY_MODE);
   const [step, setStep] = useState(0);
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
@@ -47,18 +76,31 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
     fromScopri ? [fromScopri.subcategoryLabel] : [],
   );
   const [venueSearch, setVenueSearch] = useState("");
+  const [aiVenueSuggestions, setAiVenueSuggestions] = useState<VenueOption[]>([]);
+  const [aiVenueLoading, setAiVenueLoading] = useState(false);
+  const [aiVenueRefining, setAiVenueRefining] = useState(false);
+  const [aiVenueError, setAiVenueError] = useState<string | null>(null);
+  const aiSearchAbortRef = useRef<AbortController | null>(null);
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customSubcategory, setCustomSubcategory] = useState("");
   const [done, setDone] = useState(false);
   const [createdEventId, setCreatedEventId] = useState<number | null>(null);
   const [inviteCopied, setInviteCopied] = useState(false);
-  const [contactSearch, setContactSearch] = useState("");
   const [calMonth, setCalMonth] = useState(() => new Date());
-
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const currentUser = getCurrentUser();
+
+  const { data: friendsRes } = useQuery<{ friends: string[] }>({
+    queryKey: ["/api/app/friends", currentUser],
+    queryFn: async () => {
+      const r = await fetch(`/api/app/friends/${encodeURIComponent(currentUser)}`);
+      if (!r.ok) return { friends: [] };
+      return r.json();
+    },
+  });
+  const friendsList = friendsRes?.friends ?? [];
 
   const inviteEventUrl = useMemo(
     () => getEventChatInviteUrl(createdEventId ?? 0),
@@ -109,6 +151,7 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
         confirmedDate,
         confirmedTime,
         confirmedVenue,
+        surveyMode,
       });
       return res.json();
     },
@@ -141,10 +184,30 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
     selectedContacts.length > 1 ? `${selectedContacts[0]} +${selectedContacts.length - 1}` : ""
   );
 
-  const venueKey = selectedSubcategories[0]
-    ? venuePoolKeyForPlanSubcategory(selectedSubcategories[0])
-    : null;
-  const allVenues = venueKey ? (VENUES_BY_ACTIVITY[venueKey] ?? VENUES_BY_ACTIVITY.altro) : [];
+  const timeOptionCount = useMemo(() => {
+    const fromDays = Object.values(selectedDayTimes).reduce((n, arr) => n + arr.length, 0);
+    return selectedTimeWindows.length + fromDays;
+  }, [selectedTimeWindows, selectedDayTimes]);
+
+  const surveyRecommendation = useMemo(
+    () =>
+      recommendSurveyModeFromPlanning({
+        isDirectPlan,
+        fromScopriFlow,
+        dateCount: selectedDates.length,
+        timeOptionCount,
+        venueCount: selectedVenues.length,
+      }),
+    [isDirectPlan, fromScopriFlow, selectedDates.length, timeOptionCount, selectedVenues.length],
+  );
+
+  const venueKeys = selectedSubcategories
+    .map((s) => venuePoolKeyForPlanSubcategory(s))
+    .filter((k): k is string => Boolean(k));
+  const allVenues =
+    venueKeys.length === 0
+      ? []
+      : venueKeys.flatMap((k) => VENUES_BY_ACTIVITY[k] ?? VENUES_BY_ACTIVITY.altro);
   const activityVenues = venueSearch.trim()
     ? allVenues.filter(v => v.name.toLowerCase().includes(venueSearch.toLowerCase()))
     : allVenues;
@@ -165,6 +228,107 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
     );
   };
 
+  useEffect(() => {
+    if (step !== 5) {
+      aiSearchAbortRef.current?.abort();
+      setAiVenueSuggestions([]);
+      setAiVenueLoading(false);
+      setAiVenueRefining(false);
+      setAiVenueError(null);
+    }
+  }, [step]);
+
+  useEffect(() => {
+    if (step !== 5 || done || fromScopriFlow) return;
+    const q = venueSearch.trim();
+    if (q.length < 2) {
+      aiSearchAbortRef.current?.abort();
+      setAiVenueSuggestions([]);
+      setAiVenueLoading(false);
+      setAiVenueRefining(false);
+      setAiVenueError(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      aiSearchAbortRef.current?.abort();
+      const ac = new AbortController();
+      aiSearchAbortRef.current = ac;
+      setAiVenueLoading(true);
+      setAiVenueRefining(false);
+      setAiVenueError(null);
+      void (async () => {
+        const AI_DEADLINE_MS = 5500;
+        let timedOut = false;
+        let quickCount = 0;
+        const deadline = window.setTimeout(() => {
+          timedOut = true;
+          ac.abort();
+        }, AI_DEADLINE_MS);
+
+        try {
+          const quickRes = await fetch(
+            `/api/app/venues/quick-search?q=${encodeURIComponent(q)}`,
+            { signal: ac.signal },
+          );
+          if (quickRes.ok) {
+            const quickData = (await quickRes.json()) as { venues?: VenueOption[] };
+            const quickVenues = quickData.venues ?? [];
+            quickCount = quickVenues.length;
+            if (!ac.signal.aborted && quickVenues.length > 0) {
+              setAiVenueSuggestions(quickVenues);
+              setAiVenueLoading(false);
+              setAiVenueRefining(true);
+            }
+          }
+        } catch {
+          /* anteprima catalogo opzionale */
+        }
+
+        try {
+          const r = await fetch("/api/app/venues/ai-search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: q }),
+            signal: ac.signal,
+          });
+          const rawText = await r.text();
+          let data: { venues?: VenueOption[]; message?: string };
+          try {
+            data = JSON.parse(rawText) as { venues?: VenueOption[]; message?: string };
+          } catch {
+            throw new Error(
+              "Il server ha inviato una risposta non JSON (spesso pagina HTML). Riavvia il terminale con cd lineup-project && npm run dev e ricarica la pagina.",
+            );
+          }
+          if (!r.ok) throw new Error(data?.message || "Ricerca non riuscita");
+          if (!ac.signal.aborted) setAiVenueSuggestions(data.venues ?? []);
+        } catch (e: unknown) {
+          const aborted =
+            (e instanceof DOMException && e.name === "AbortError") ||
+            (e instanceof Error && e.name === "AbortError");
+          if (aborted) {
+            if (timedOut && quickCount === 0) {
+              setAiVenueError("Ricerca lenta: prova un altro termine o scegli dalla lista sotto.");
+              setAiVenueSuggestions([]);
+            }
+            return;
+          }
+          if (!ac.signal.aborted) {
+            setAiVenueError(e instanceof Error ? e.message : "Errore ricerca");
+            if (quickCount === 0) setAiVenueSuggestions([]);
+          }
+        } finally {
+          window.clearTimeout(deadline);
+          if (!ac.signal.aborted) {
+            setAiVenueLoading(false);
+            setAiVenueRefining(false);
+          }
+        }
+      })();
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [venueSearch, step, done, fromScopriFlow]);
+
   // Step 0: Chi — demo contacts + contatti importati (senza duplicati)
   const importedContacts = getMyContacts();
   const importedNames = importedContacts
@@ -174,55 +338,47 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
     (name, index, arr) => arr.indexOf(name) === index,
   );
 
-  const filteredContacts = allContactNames
-    .sort((a, b) => a.localeCompare(b, "it"))
-    .filter(name => name.toLowerCase().includes(contactSearch.toLowerCase()));
+  const sortedContacts = [...allContactNames].sort((a, b) => a.localeCompare(b, "it"));
 
-  const filteredGroups = contactSearch.trim() === ""
-    ? [...GROUPS].sort((a, b) => a.name.localeCompare(b.name, "it"))
-    : [...GROUPS]
-        .sort((a, b) => a.name.localeCompare(b.name, "it"))
-        .filter(g => g.name.toLowerCase().includes(contactSearch.toLowerCase()));
+  const invitePoolForIndividuals =
+    friendsList.length > 0
+      ? sortedContacts.filter((n) => friendsList.includes(n))
+      : sortedContacts;
+
+  const sortedGroups = [...GROUPS].sort((a, b) => a.name.localeCompare(b.name, "it"));
 
   if (step === 0) return (
     <div className="flex flex-col h-full">
+      {renderPreviewGuide("step0")}
       {fromScopriFlow && (
-        <p className="text-xs text-[#4A9BD9] font-semibold px-6 pt-3 leading-relaxed">
+        <p className="text-xs text-primary font-semibold px-6 pt-3 leading-relaxed">
           {selectedSubcategories.join(", ")} · {selectedVenues.length}{" "}
           {selectedVenues.length === 1 ? "luogo già scelto" : "luoghi già scelti"} con Scopri AI. Indica chi vuoi invitare.
         </p>
       )}
-      <div className="px-6 pt-3 pb-2 shrink-0">
-        <div className="relative">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            data-testid="input-contact-search"
-            type="text"
-            placeholder="Cerca contatti o gruppi..."
-            value={contactSearch}
-            onChange={e => setContactSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-gray-100 text-sm text-gray-900 placeholder-gray-400 outline-none focus:ring-2 focus:ring-[#4A9BD9]/30"
-          />
-        </div>
-      </div>
-
+      {friendsList.length > 0 && (
+        <p className="text-[11px] text-gray-500 px-6 pt-2 leading-snug">
+          Puoi invitare solo i tuoi <span className="font-bold text-primary">friends</span>. Aggiungili o modificali dal{" "}
+          <span className="font-semibold text-gray-700">Profilo</span>.
+        </p>
+      )}
       <div className="px-6 py-3 flex-1 overflow-y-auto no-scrollbar min-h-0">
-        {filteredGroups.length > 0 && (
+        {sortedGroups.length > 0 && (
           <>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Gruppi</p>
             <div className="space-y-2 mb-5">
-              {filteredGroups.map(g => (
+              {sortedGroups.map(g => (
                 <button
                   key={g.name}
                   data-testid={`group-${g.name}`}
                   onClick={() => { setSelectedGroup(selectedGroup === g.name ? null : g.name); setSelectedContacts([]); }}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl border-2 transition-all ${
                     selectedGroup === g.name
-                      ? "border-[#4A9BD9] bg-[#EBF5FB]"
+                      ? "border-primary bg-primary/10"
                       : "border-gray-100 bg-white"
                   }`}
                 >
-                  <div className="w-8 h-8 rounded-full bg-[#4A9BD9] flex items-center justify-center shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0">
                     <Users size={15} className="text-white" />
                   </div>
                   <div className="text-left">
@@ -230,7 +386,7 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
                     <p className="text-xs text-gray-400">{g.count} persone</p>
                   </div>
                   {selectedGroup === g.name && (
-                    <CheckCircle2 size={16} className="text-[#4A9BD9] ml-auto" />
+                    <CheckCircle2 size={16} className="text-primary ml-auto" />
                   )}
                 </button>
               ))}
@@ -238,11 +394,11 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
           </>
         )}
 
-        {filteredContacts.length > 0 && (
+        {invitePoolForIndividuals.length > 0 && (
           <>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Contatti</p>
             <div className="space-y-2">
-              {filteredContacts.map(name => {
+              {invitePoolForIndividuals.map(name => {
                 const isImported = importedNames.includes(name);
                 const importedEntry = importedContacts.find(c => c.name === name);
                 return (
@@ -252,7 +408,7 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
                     onClick={() => toggleContact(name)}
                     className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl border-2 transition-all ${
                       selectedContacts.includes(name)
-                        ? "border-[#4A9BD9] bg-[#EBF5FB]"
+                        ? "border-primary bg-primary/10"
                         : "border-gray-100 bg-white"
                     }`}
                   >
@@ -269,7 +425,7 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
                       )}
                     </div>
                     {selectedContacts.includes(name)
-                      ? <CheckCircle2 size={16} className="text-[#4A9BD9] ml-auto shrink-0" />
+                      ? <CheckCircle2 size={16} className="text-primary ml-auto shrink-0" />
                       : isImported
                         ? <span className="text-[10px] text-gray-300 font-medium shrink-0">mio contatto</span>
                         : null
@@ -281,8 +437,8 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
           </>
         )}
 
-        {filteredGroups.length === 0 && filteredContacts.length === 0 && (
-          <p className="text-sm text-gray-400 text-center py-8">Nessun risultato per "{contactSearch}"</p>
+        {sortedGroups.length === 0 && invitePoolForIndividuals.length === 0 && (
+          <p className="text-sm text-gray-400 text-center py-8">Nessun gruppo o contatto disponibile.</p>
         )}
       </div>
 
@@ -307,6 +463,7 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
       {!selectedCategory && (
         <>
           <div className="px-5 pt-4 pb-3 flex-1 overflow-y-auto no-scrollbar min-h-0">
+            {renderPreviewGuide("step1-category")}
             <p className="text-sm text-gray-500 mb-4">Scegli una categoria per la tua proposta di attività.</p>
             <div className="grid grid-cols-5 gap-2">
               {PLAN_CATEGORIES.map(({ key, label, Icon, cols, radius }) => (
@@ -315,7 +472,7 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
                   data-testid={`category-${key}`}
                   onClick={() => { setSelectedCategory(key); setShowCustomInput(false); setCustomSubcategory(""); }}
                   style={{ gridColumn: `span ${cols}`, borderRadius: radius, height: cols >= 3 ? "108px" : cols === 1 ? "80px" : "88px" }}
-                  className="flex flex-col items-center justify-center gap-2 bg-[#EBF5FB] text-black hover:bg-[#d6ecf7] transition-all active:scale-95"
+                  className="flex flex-col items-center justify-center gap-2 bg-primary/10 text-black hover:bg-primary/15 transition-all active:scale-95"
                 >
                   <Icon size={cols >= 3 ? 28 : 22} strokeWidth={1.6} />
                   <span className="text-xs font-semibold tracking-wide">{label}</span>
@@ -344,6 +501,7 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
       {selectedCategory && (
         <>
           <div className="px-5 pt-4 pb-3 flex-1 overflow-y-auto no-scrollbar min-h-0">
+            {renderPreviewGuide("step1-sub")}
             {/* Header con categoria selezionata */}
             <button
               onClick={() => { setSelectedCategory(null); setShowCustomInput(false); setCustomSubcategory(""); }}
@@ -365,7 +523,7 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
                   className={`px-4 py-2 rounded-full text-sm font-medium transition-all active:scale-95 ${
                     selectedSubcategories.includes(sub)
                       ? "bg-black text-white"
-                      : "bg-[#EBF5FB] text-black hover:bg-gray-200"
+                      : "bg-primary/10 text-black hover:bg-gray-200"
                   }`}
                 >
                   {sub}
@@ -394,7 +552,7 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
                   onChange={e => setCustomSubcategory(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter" && customSubcategory.trim()) { toggleSubcategory(customSubcategory.trim()); setCustomSubcategory(""); } }}
                   placeholder="Scrivi la tua attività…"
-                  className="flex-1 px-4 py-2 rounded-xl bg-gray-100 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-[#4A9BD9]/30"
+                  className="flex-1 px-4 py-2 rounded-xl bg-gray-100 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-primary/30"
                 />
                 <button
                   onClick={() => { if (customSubcategory.trim()) { toggleSubcategory(customSubcategory.trim()); setCustomSubcategory(""); } }}
@@ -485,6 +643,7 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
     return (
       <div className="flex flex-col h-full">
         <div className="flex-1 overflow-y-auto no-scrollbar min-h-0">
+          {renderPreviewGuide("step2")}
 
           {/* Navigazione mese */}
           <div className="flex items-center justify-between px-5 pt-4 pb-2">
@@ -567,6 +726,7 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
     return (
       <div className="flex flex-col h-full">
         <div className="px-6 pt-4 pb-2 flex-1 overflow-y-auto no-scrollbar min-h-0">
+          {renderPreviewGuide("step3")}
           <p className="text-sm text-gray-500 mb-4">
             Vuoi indicare una fascia oraria? Puoi anche saltare.
           </p>
@@ -580,12 +740,12 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
                   data-testid={`time-window-${key}`}
                   onClick={() => toggleWindow(label)}
                   className={`p-4 rounded-2xl border-2 text-left transition-all active:scale-[0.99] ${
-                    sel ? "border-[#4A9BD9] bg-[#EBF5FB]" : "border-gray-100 bg-white"
+                    sel ? "border-primary bg-primary/10" : "border-gray-100 bg-white"
                   }`}
                 >
                   <div className="flex items-center gap-2">
                     <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                      sel ? "bg-[#4A9BD9] text-white" : "bg-gray-100 text-gray-500"
+                      sel ? "bg-primary text-white" : "bg-gray-100 text-gray-500"
                     }`}>
                       <Icon size={18} />
                     </div>
@@ -595,7 +755,7 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
                         {sel ? "Selezionata" : "Opzionale"}
                       </p>
                     </div>
-                    {sel && <CheckCircle2 size={18} className="text-[#4A9BD9] ml-auto shrink-0" />}
+                    {sel && <CheckCircle2 size={18} className="text-primary ml-auto shrink-0" />}
                   </div>
                 </button>
               );
@@ -655,6 +815,7 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
     return (
       <div className="flex flex-col h-full">
         <div className="px-6 pt-4 pb-2 flex-1 overflow-y-auto no-scrollbar min-h-0 space-y-3">
+          {renderPreviewGuide("step4")}
           <p className="text-sm text-gray-500">
             Vuoi indicare un orario per i giorni selezionati? Puoi anche saltare.
           </p>
@@ -673,11 +834,10 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
                   <button
                     data-testid={`button-add-time-${day}`}
                     onClick={() => addTimeForDay(day)}
-                    className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                    style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/75"
                     title="Aggiungi orario"
                   >
-                    <Plus size={18} className="text-white" strokeWidth={2.5} />
+                    <Plus size={18} className="text-primary-foreground" strokeWidth={2.5} />
                   </button>
                 </div>
 
@@ -707,7 +867,7 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
                       {times.slice().sort().map((t) => (
                         <span
                           key={t}
-                          className="flex items-center gap-1 text-xs font-semibold bg-[#EBF5FB] text-[#4A9BD9] px-2.5 py-1 rounded-full"
+                          className="flex items-center gap-1 text-xs font-semibold bg-primary/10 text-primary px-2.5 py-1 rounded-full"
                         >
                           {t}
                           <button
@@ -770,34 +930,30 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
               type="checkbox"
               checked={isDirectPlan}
               onChange={(e) => setIsDirectPlan(e.target.checked)}
-              className="rounded border-gray-300 text-[#4A9BD9] focus:ring-[#4A9BD9]/30"
+              className="rounded border-gray-300 text-primary focus:ring-primary/30"
             />
             Evento già definito (senza votazione)
           </label>
           <button
-            data-testid="button-create-confirm"
+            data-testid="button-step-venue-to-survey"
             type="button"
-            onClick={() => createEvent()}
+            onClick={() => setStep(6)}
             disabled={!canProceed5}
-            className={`w-full py-3.5 rounded-xl font-semibold text-white disabled:opacity-40 ${isPending ? "pointer-events-none" : "active:opacity-80 transition-opacity"}`}
-            style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}
+            className="w-full rounded-xl bg-gradient-to-br from-primary to-primary/75 py-3.5 font-semibold text-primary-foreground transition-opacity active:opacity-80 disabled:opacity-40"
           >
-            {isPending ? "Creando..." : (isDirectPlan ? "Crea evento diretto" : "Crea evento")}
+            Tipo di sondaggio
           </button>
         </div>
       </div>
     );
 
     const banner = (
-      <div
-        className="rounded-xl p-3 mb-1 flex items-center gap-3"
-        style={{ background: "linear-gradient(135deg, #EBF5FB, #D6EAF8)" }}
-      >
-        <div className="w-9 h-9 rounded-full bg-[#4A9BD9]/20 flex items-center justify-center shrink-0">
-          <MapPin size={16} className="text-[#4A9BD9]" />
+      <div className="mb-1 flex items-center gap-3 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 p-3">
+        <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+          <MapPin size={16} className="text-primary" />
         </div>
         <div>
-          <p className="text-xs font-bold text-[#4A9BD9]">
+          <p className="text-xs font-bold text-primary">
             {selectedSubcategories.length > 0 ? selectedSubcategories.join(" / ") : "Dove"} · {catLabelForBanner} · {groupLabel}
           </p>
           <p className="text-xs text-gray-500">
@@ -811,6 +967,7 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
       return (
         <div className="flex flex-col h-full">
           <div className="px-6 pt-4 pb-2 flex-1 overflow-y-auto no-scrollbar space-y-3">
+            {renderPreviewGuide("step5")}
             {banner}
             <p className="text-sm text-gray-500">
               Categoria e luoghi arrivano da Scopri AI. Puoi tornare indietro per modificare date e orari.
@@ -819,13 +976,13 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
               <div
                 key={venue.name}
                 data-testid={`venue-scopri-summary-${venue.name}`}
-                className="w-full p-4 rounded-2xl border-2 border-[#4A9BD9]/30 bg-[#EBF5FB]/40 text-left"
+                className="w-full p-4 rounded-2xl border-2 border-primary/30 bg-primary/10 text-left"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">
                     <div className="flex items-center gap-1.5">
                       <p className="font-semibold text-gray-900">{venue.name}</p>
-                      <CheckCircle2 size={14} className="text-[#4A9BD9]" />
+                      <CheckCircle2 size={14} className="text-primary" />
                     </div>
                     <div className="flex items-center gap-3 mt-1">
                       <span className="flex items-center gap-0.5 text-xs text-amber-500 font-semibold">
@@ -834,9 +991,10 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
                       </span>
                       <span className="flex items-center gap-0.5 text-xs text-gray-400">
                         <MapPin size={10} />
-                        {venue.distance}
+                        {venuePollSubtitle(venue)}
                       </span>
                     </div>
+                    <VenueExternalLinks venue={venue} className="mt-2" />
                   </div>
                   {venue.discount && (
                     <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg shrink-0">
@@ -856,7 +1014,22 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
     return (
       <div className="flex flex-col h-full">
         <div className="px-6 pt-4 pb-2 flex-1 overflow-y-auto no-scrollbar space-y-3">
+          {renderPreviewGuide("step5")}
           {banner}
+
+          {selectedVenues.some((v) => v.mapsUrl || v.websiteUrl || v.instagramUrl) && (
+            <div className="rounded-xl border border-primary/25 bg-white px-3 py-2.5 space-y-2">
+              <p className="text-[10px] font-bold text-primary uppercase tracking-wide">Link luoghi scelti</p>
+              {selectedVenues
+                .filter((v) => v.mapsUrl || v.websiteUrl || v.instagramUrl)
+                .map((v) => (
+                  <div key={v.name}>
+                    <p className="text-[11px] font-semibold text-gray-700 truncate">{v.name}</p>
+                    <VenueExternalLinks venue={v} compact className="mt-1.5" />
+                  </div>
+                ))}
+            </div>
+          )}
 
           {/* Ricerca */}
           <div className="relative">
@@ -864,18 +1037,89 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
             <input
               data-testid="input-venue-search"
               type="text"
-              placeholder="Cerca un posto..."
+              placeholder="Cerca a Torino (min. 2 caratteri)…"
               value={venueSearch}
               onChange={e => setVenueSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-gray-100 text-sm text-gray-900 placeholder-gray-400 outline-none focus:ring-2 focus:ring-[#4A9BD9]/30"
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-gray-100 text-sm text-gray-900 placeholder-gray-400 outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
 
-          {activityVenues.length === 0 && (
-            <p className="text-sm text-gray-400 text-center py-6">Nessun posto trovato</p>
+          {venueSearch.trim().length >= 2 && (
+            <div className="space-y-2">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Suggerimenti a Torino</p>
+              {aiVenueLoading && aiVenueSuggestions.length === 0 && (
+                <p className="text-xs text-gray-400 text-center py-3">Ricerca in corso…</p>
+              )}
+              {aiVenueRefining && (
+                <p className="text-xs text-primary/80 text-center py-1">Affinamento suggerimenti…</p>
+              )}
+              {aiVenueError && !aiVenueLoading && (
+                <p className="text-xs text-red-500 text-center py-1">{aiVenueError}</p>
+              )}
+              {!aiVenueLoading &&
+                aiVenueSuggestions.map((venue) => {
+                  const isVenueSelected = selectedVenues.some((v) => v.name === venue.name);
+                  return (
+                    <button
+                      key={`ai-${venue.name}`}
+                      type="button"
+                      data-testid={`venue-ai-${venue.name}`}
+                      onClick={() => toggleVenue(venue)}
+                      className={`w-full p-4 rounded-2xl border-2 text-left transition-all active:scale-[0.99] ${
+                        isVenueSelected
+                          ? "border-primary bg-primary/10"
+                          : "border-gray-100 bg-white shadow-sm"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-semibold text-gray-900">{venue.name}</p>
+                            {isVenueSelected && <CheckCircle2 size={14} className="text-primary shrink-0" />}
+                          </div>
+                          <div className="flex items-center gap-3 mt-1 flex-wrap">
+                            <span className="flex items-center gap-0.5 text-xs text-amber-500 font-semibold">
+                              <Star size={10} fill="currentColor" />
+                              {venue.rating}
+                            </span>
+                            <span className="flex items-center gap-0.5 text-xs text-gray-500 min-w-0">
+                              <MapPin size={10} className="shrink-0" />
+                              <span className="truncate">{venuePollSubtitle(venue)}</span>
+                            </span>
+                          </div>
+                          <VenueExternalLinks venue={venue} className="mt-2.5" />
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              {!aiVenueLoading &&
+                venueSearch.trim().length >= 2 &&
+                aiVenueSuggestions.length === 0 &&
+                !aiVenueError && (
+                  <p className="text-xs text-gray-400 text-center py-2">
+                    Nessun risultato dall&apos;AI. Prova un altro nome o scegli dalla lista sotto.
+                  </p>
+                )}
+            </div>
           )}
 
-          {activityVenues.map((venue) => {
+          <div
+            className={
+              venueSearch.trim().length >= 2 ? "pt-3 mt-1 border-t border-gray-100 space-y-2" : "space-y-2"
+            }
+          >
+            {venueSearch.trim().length >= 2 && (
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Dalla tua categoria</p>
+            )}
+            {activityVenues.length === 0 && venueSearch.trim().length < 2 && (
+              <p className="text-sm text-gray-400 text-center py-6">Nessun posto in lista per questa categoria</p>
+            )}
+            {activityVenues.length === 0 && venueSearch.trim().length >= 2 && (
+              <p className="text-xs text-gray-400 text-center py-2">Nessuna corrispondenza nella lista locale.</p>
+            )}
+
+            {activityVenues.map((venue) => {
             const isVenueSelected = selectedVenues.some(v => v.name === venue.name);
             return (
             <button
@@ -885,7 +1129,7 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
               onClick={() => toggleVenue(venue)}
               className={`w-full p-4 rounded-2xl border-2 text-left transition-all ${
                 isVenueSelected
-                  ? "border-[#4A9BD9] bg-[#EBF5FB]"
+                  ? "border-primary bg-primary/10"
                   : "border-gray-100 bg-white"
               }`}
             >
@@ -894,7 +1138,7 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
                   <div className="flex items-center gap-1.5">
                     <p className="font-semibold text-gray-900">{venue.name}</p>
                     {isVenueSelected && (
-                      <CheckCircle2 size={14} className="text-[#4A9BD9]" />
+                      <CheckCircle2 size={14} className="text-primary" />
                     )}
                   </div>
                   <div className="flex items-center gap-3 mt-1">
@@ -904,9 +1148,10 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
                     </span>
                     <span className="flex items-center gap-0.5 text-xs text-gray-400">
                       <MapPin size={10} />
-                      {venue.distance}
+                      {venuePollSubtitle(venue)}
                     </span>
                   </div>
+                  <VenueExternalLinks venue={venue} className="mt-2" />
                 </div>
                 {venue.discount && (
                   <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg shrink-0">
@@ -918,6 +1163,7 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
             </button>
             );
           })}
+          </div>
         </div>
 
         {createFooter}
@@ -925,21 +1171,59 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
     );
   }
 
+  // Step 6: tipo di sondaggio (dopo la scelta dei luoghi), poi creazione evento
+  if (step === 6 && !done) {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        {renderPreviewGuide("step6")}
+        <div className="flex shrink-0 items-center gap-3 border-b border-gray-100 px-5 py-3">
+          <button
+            type="button"
+            onClick={() => setStep(5)}
+            className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900"
+          >
+            <ChevronLeft size={16} className="text-gray-500" />
+            Indietro ai luoghi
+          </button>
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <SurveyModePicker
+            value={surveyMode}
+            onChange={setSurveyMode}
+            onContinue={() => createEvent()}
+            isSubmitting={isPending}
+            recommendedId={surveyRecommendation.mode}
+            recommendationReason={surveyRecommendation.reason}
+            onApplyRecommendation={() => setSurveyMode(surveyRecommendation.mode)}
+          />
+        </div>
+      </div>
+    );
+  }
+
   // Success
-  if (done) return (
+  if (done) {
+    if (previewMode) {
+      return (
+        <PianificaPreviewCompletion
+          profile={previewProfile ?? { name: "", email: "" }}
+          onClose={onClose}
+        />
+      );
+    }
+
+    return (
     <div className="flex flex-col items-stretch justify-start min-h-0 h-full py-6 px-4 text-center w-full max-w-md mx-auto overflow-y-auto no-scrollbar">
       <div className="w-20 h-20 rounded-full bg-emerald-50 flex items-center justify-center mb-4 mx-auto shrink-0 animate-in zoom-in duration-300">
         <CheckCircle2 size={40} className="text-emerald-500" />
       </div>
       <h3 className="text-xl font-bold text-gray-900">Proposta di evento inviata!</h3>
-      <p className="text-sm text-gray-400 mt-2 px-1">
-        {groupLabel} riceverà la notifica per votare
-      </p>
+      <p className="text-sm text-gray-600 mt-2 px-1">{groupLabel} riceverà la notifica per votare</p>
 
       {inviteEventUrl && (
         <div className="mt-6 text-left w-full min-w-0 rounded-2xl border border-gray-100 bg-gray-50/80 p-3 shrink-0">
           <div className="flex items-center gap-2 mb-1.5">
-            <Link2 size={14} className="text-[#4A9BD9] shrink-0" />
+            <Link2 size={14} className="text-primary shrink-0" />
             <p className="text-xs font-bold text-gray-800">Link per LineUp</p>
           </div>
           <p className="text-[11px] text-gray-500 leading-snug mb-2">
@@ -956,7 +1240,7 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
               type="button"
               data-testid="button-copy-invite-link"
               onClick={copyInviteLink}
-              className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white bg-[#4A9BD9] active:scale-[0.98]"
+              className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white bg-primary active:scale-[0.98]"
             >
               {inviteCopied ? <Check size={14} /> : <Copy size={14} />}
               {inviteCopied ? "Fatto" : "Copia"}
@@ -965,6 +1249,10 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
         </div>
       )}
 
+      <p className="mt-5 text-xs text-center text-gray-400 px-2">
+        Dopo la conferma, nella chat dell&apos;evento (tab Voto) potrai togliere dal calendario con il pulsante verde.
+      </p>
+
       <button
         data-testid="button-close-success"
         type="button"
@@ -972,14 +1260,14 @@ export default function AppCreateEvent({ onClose, fromScopri }: AppCreateEventPr
           onClose();
           if (createdEventId) navigate(`/events/${createdEventId}/chat`);
         }}
-        className="mt-6 flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-white w-full shrink-0"
-        style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}
+        className="mt-6 flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-primary to-primary/75 px-8 py-3.5 font-semibold text-primary-foreground"
       >
         <MessageCircle size={18} />
         Vai alla chat
       </button>
     </div>
-  );
+    );
+  }
 
   return null;
 }

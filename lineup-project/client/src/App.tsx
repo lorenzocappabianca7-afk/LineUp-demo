@@ -11,11 +11,11 @@ import AppEventDetail from "@/pages/AppEventDetail";
 import AppChatList from "@/pages/AppChatList";
 import AppChatDetail from "@/pages/AppChatDetail";
 import AppProfile from "@/pages/AppProfile";
-import AppScopriRoute from "@/pages/AppScopriRoute";
 import AppImpostazioni from "@/pages/AppImpostazioni";
 import Admin from "@/pages/Admin";
 import Analytics from "@/pages/Analytics";
 import AppAddContact from "@/pages/AppAddContact";
+import AppPianificaDemo from "@/pages/AppPianificaDemo";
 import NotFound from "@/pages/not-found";
 
 function AppRouter() {
@@ -29,12 +29,12 @@ function AppRouter() {
           <Switch>
             <Route path="/" component={AppHome} />
             <Route path="/calendar" component={AppCalendar} />
-            <Route path="/scopri" component={AppScopriRoute} />
             <Route path="/impostazioni" component={AppImpostazioni} />
             <Route path="/events/:id/chat" component={AppChatDetail} />
             <Route path="/events/:id" component={AppEventDetail} />
             <Route path="/chat" component={AppChatList} />
             <Route path="/profile" component={AppProfile} />
+            <Route path="/prova-pianifica" component={AppPianificaDemo} />
             <Route component={NotFound} />
           </Switch>
         </AppShell>

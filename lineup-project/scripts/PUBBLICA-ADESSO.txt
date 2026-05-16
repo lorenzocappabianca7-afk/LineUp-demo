@@ -1,0 +1,62 @@
+PUBBLICAZIONE DEMO LINEUP — Link e QR
+=====================================
+
+LINK DA CONDIVIDERE (dopo il deploy):
+  https://TUO-SERVIZIO.onrender.com/prova-pianifica
+
+Il QR code deve puntare a quell'URL (stesso link).
+
+
+PASSO 1 — GitHub (una volta)
+----------------------------
+1. Vai su https://github.com/new
+2. Nome repo esempio: lineup-demo
+3. Crea repository VUOTO (senza README)
+4. Nel terminale:
+
+   cd /Users/lorenzocappabianca/Desktop/Lineup
+   git add lineup-project
+   git commit -m "Pubblica demo Pianifica con feedback e deploy Render"
+   git remote add origin https://github.com/TUO-USERNAME/lineup-demo.git
+   git push -u origin main
+
+   (Se origin esiste già: git push)
+
+
+PASSO 2 — Render (senza Replit)
+-------------------------------
+1. https://dashboard.render.com → Sign up (con GitHub)
+2. New + → Blueprint
+3. Seleziona il repo lineup-demo
+4. Render chiede le variabili — incolla:
+
+   DATABASE_URL = (connection string Neon, già nel tuo .env locale)
+   OPENAI_API_KEY = (chiave OpenAI, se ce l'hai)
+
+   Opzionale per email feedback:
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_USER=...
+   SMTP_PASS=...
+   SMTP_FROM=LineUp Demo <...>
+
+5. Apply / Deploy — attendi 5-10 minuti
+6. Copia l'URL del servizio (es. https://lineup-demo-xxxx.onrender.com)
+
+
+PASSO 3 — Link e QR per gli utenti
+----------------------------------
+Link demo:
+  https://lineup-demo-xxxx.onrender.com/prova-pianifica
+
+QR:
+  - Apri quel link sul telefono e conmotion.divi, oppure
+  - Usa https://www.qr-code-generator.com/ e incolla l'URL, oppure
+  - Nell'app locale Home → "QR prova Pianifica" (dopo deploy usa l'URL pubblico)
+
+
+NOTA rootDir in render.yaml
+---------------------------
+Il file render.yaml ha rootDir: lineup-project perché il repo è la cartella Lineup.
+Se hai creato un repo che contiene SOLO il contenuto di lineup-project,
+apri render.yaml e RIMUOVI la riga rootDir.

@@ -158,7 +158,7 @@ export default function AppCalendar() {
                       isToday
                         ? "bg-red-500 text-white"
                         : isSelected
-                        ? "bg-[#4A9BD9] text-white"
+                        ? "bg-primary text-primary-foreground"
                         : "text-gray-700"
                     }`}
                   >
@@ -178,7 +178,7 @@ export default function AppCalendar() {
                           ? "#d1d5db"
                           : isConfirmed
                           ? "#10b981"
-                          : "#4A9BD9";
+                          : "var(--primary)";
                         return (
                           <div
                             key={idx}

@@ -3,6 +3,9 @@ import {
   senderCompletedVotablePoll,
   type PollVoteLike,
 } from "@shared/eventPoll";
+import { parseSurveyMode, type SurveyModeId } from "@shared/surveyModes";
+import { LINEUP_DEMO_CONTACTS } from "@shared/contacts";
+import { venueDisplayAddressLine } from "@shared/venueMapsAddress";
 
 /* ─── Contatti importati ─── */
 export interface MyContact {
@@ -36,8 +39,75 @@ export function removeMyContact(id: string): void {
 export interface VenueOption {
   name: string;
   rating: number;
+  /** Distanza indicativa (liste demo) o etichetta breve se non c’è indirizzo stradale. */
   distance: string;
+  /** Quartiere / zona (anteprima liste e sondaggi; preferito all’indirizzo lungo). */
+  quartiere?: string;
+  /** Indirizzo stradale completo (es. da AI / ricerca Torino). Ha priorità in anteprima. */
+  address?: string;
   discount?: string;
+  /** Link Google Maps (ricerca AI / Scopri). */
+  mapsUrl?: string;
+  /** Sito ufficiale o pagina affidabile. */
+  websiteUrl?: string;
+  /** Profilo Instagram ufficiale, se noto. */
+  instagramUrl?: string;
+}
+
+/** Riga sotto il nome: indirizzo curato prima della query Maps (evita vie inventate nell’URL). */
+export function venueLocationPreview(venue: {
+  name?: string;
+  address?: string;
+  distance?: string;
+  mapsUrl?: string;
+}): string {
+  return venueDisplayAddressLine({
+    address: venue.address,
+    mapsUrl: venue.mapsUrl,
+    distance: venue.distance,
+    placeName: venue.name,
+  });
+}
+
+/** Riga secondaria sotto il nome del locale: quartiere se noto, altrimenti anteprima indirizzo. */
+export function venuePollSubtitle(venue: {
+  name?: string;
+  quartiere?: string;
+  address?: string;
+  distance?: string;
+  mapsUrl?: string;
+}): string {
+  const q = venue.quartiere?.trim();
+  if (q) return q;
+  return venueLocationPreview(venue);
+}
+
+/** Converte un luogo Scopri/AI (con indirizzo reale) in `VenueOption` per creazione evento. */
+export function venueOptionFromScopriAi(venue: {
+  name: string;
+  address: string;
+  rating: number;
+  priceRange: string;
+  mapsUrl: string;
+  websiteUrl: string;
+  quartiere?: string;
+}): VenueOption {
+  const qz = venue.quartiere?.trim();
+  return {
+    name: venue.name,
+    rating: venue.rating,
+    ...(qz ? { quartiere: qz } : {}),
+    address: venueDisplayAddressLine({
+      address: venue.address.trim(),
+      mapsUrl: venue.mapsUrl,
+      distance: "",
+      placeName: venue.name,
+    }),
+    distance: "",
+    mapsUrl: venue.mapsUrl,
+    websiteUrl: venue.websiteUrl,
+    discount: venue.priceRange,
+  };
 }
 
 /** Dati passati da Scopri AI → creazione evento (salta categoria/sottocategoria/luoghi nel wizard). */
@@ -60,12 +130,15 @@ export interface ParsedEvent {
   confirmedDate?: string;
   confirmedTime?: string;
   confirmedVenue?: string;
+  /** Modalità sondaggio (persistita). */
+  surveyMode?: SurveyModeId;
   createdAt: string;
 }
 
 export function parseEvent(raw: any): ParsedEvent {
   return {
     ...raw,
+    surveyMode: parseSurveyMode(raw?.surveyMode),
     participants: safeParseJson(raw.participants, []),
     dateOptions: safeParseJson(raw.dateOptions, []),
     timeOptions: safeParseJson(raw.timeOptions, []),
@@ -95,6 +168,7 @@ export function userHasCompletedVotablePoll(
     event.timeOptions.length,
     event.venueOptions.length,
     votes,
+    event.surveyMode,
   );
 }
 
@@ -113,7 +187,7 @@ function safeParseJson<T>(val: any, fallback: T): T {
 }
 
 export const ACTIVITIES: Record<string, { label: string; emoji: string; color: string; bg: string }> = {
-  aperitivo:  { label: "Aperitivo",  emoji: "🍸", color: "#4A9BD9", bg: "#EBF5FB" },
+  aperitivo:  { label: "Aperitivo",  emoji: "🍸", color: "#8ABFE8", bg: "#EBF5FB" },
   padel:      { label: "Padel",      emoji: "🎾", color: "#10b981", bg: "#D1FAE5" },
   cena:       { label: "Cena",       emoji: "🍽️", color: "#f97316", bg: "#FEF3C7" },
   pizza:      { label: "Pizza",      emoji: "🍕", color: "#ef4444", bg: "#FEE2E2" },
@@ -143,7 +217,7 @@ export function getActivity(key: string) {
 }
 
 export const AVATAR_COLORS: Record<string, string> = {
-  Io: "#4A9BD9",
+  Io: "#8ABFE8",
   Giovanni: "#f97316",
   Elena: "#10b981",
   Marco: "#8b5cf6",
@@ -160,7 +234,7 @@ export function getInitials(name: string) {
   return name.slice(0, 2).toUpperCase();
 }
 
-export const CONTACTS = ["Giovanni", "Elena", "Marco", "Luca", "Mary"];
+export const CONTACTS: string[] = [...LINEUP_DEMO_CONTACTS];
 export const GROUPS = [
   { name: "Calcetto Sabato", count: 6 },
   { name: "Gruppo Classe", count: 12 },

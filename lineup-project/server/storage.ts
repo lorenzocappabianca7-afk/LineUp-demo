@@ -2,6 +2,7 @@ import { db } from "./db";
 import {
   subscribers, pageViews,
   appEvents, appVotes, appMessages, appBanners, appProposals,
+  appFriends, appEventPublications, appPublicationViews, appJoinRequests,
   type InsertSubscriber, type Subscriber,
   type InsertPageView, type PageView,
   type AppEvent, type InsertAppEvent,
@@ -9,8 +10,30 @@ import {
   type AppMessage, type InsertAppMessage,
   type AppBanner, type InsertAppBanner,
   type AppProposal, type InsertAppProposal,
+  type AppEventPublication, type InsertAppEventPublication,
+  type AppJoinRequest, type InsertAppJoinRequest,
 } from "@shared/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, inArray } from "drizzle-orm";
+import { LINEUP_DEMO_CONTACTS } from "@shared/contacts";
+
+/** Se non hai ancora salvato friends, l’app assume i contatti demo (stesso elenco del client). */
+function friendsWithDemoFallback(ownerName: string, fromDb: string[]): string[] {
+  const unique = [...new Set(fromDb)].sort((a, b) => a.localeCompare(b, "it"));
+  if (unique.length > 0) return unique;
+  return [...LINEUP_DEMO_CONTACTS]
+    .filter((n) => n !== ownerName)
+    .sort((a, b) => a.localeCompare(b, "it"));
+}
+
+export type FeedNoteRow = {
+  publicationId: number;
+  eventId: number;
+  publishedBy: string;
+  title: string;
+  activity: string;
+  participantsPreview: string[];
+  viewed: boolean;
+};
 
 export interface IStorage {
   createSubscriber(subscriber: InsertSubscriber): Promise<Subscriber>;
@@ -38,9 +61,21 @@ export interface IStorage {
   deleteBanner(id: number): Promise<void>;
   // Proposals
   getProposalsByEvent(eventId: number): Promise<AppProposal[]>;
+  getProposalById(id: number): Promise<AppProposal | undefined>;
   createProposal(proposal: InsertAppProposal): Promise<AppProposal>;
   updateProposal(id: number, status: string): Promise<AppProposal>;
   deleteProposalsByEvent(eventId: number): Promise<void>;
+  // Friends & feed notes
+  getFriendsByOwner(ownerName: string): Promise<string[]>;
+  addFriend(ownerName: string, friendName: string): Promise<void>;
+  removeFriend(ownerName: string, friendName: string): Promise<void>;
+  createPublication(row: InsertAppEventPublication): Promise<AppEventPublication>;
+  getFeedNotesForViewer(viewerName: string): Promise<FeedNoteRow[]>;
+  markPublicationViewed(publicationId: number, viewerName: string): Promise<void>;
+  createJoinRequest(row: InsertAppJoinRequest): Promise<AppJoinRequest>;
+  getJoinRequest(id: number): Promise<AppJoinRequest | undefined>;
+  getJoinRequestsByEvent(eventId: number): Promise<AppJoinRequest[]>;
+  updateJoinRequest(id: number, status: string): Promise<AppJoinRequest | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -118,6 +153,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteAppEvent(id: number): Promise<void> {
+    const pubs = await db
+      .select({ pid: appEventPublications.id })
+      .from(appEventPublications)
+      .where(eq(appEventPublications.eventId, id));
+    const pubIds = pubs.map((p) => p.pid);
+    if (pubIds.length > 0) {
+      await db.delete(appPublicationViews).where(inArray(appPublicationViews.publicationId, pubIds));
+    }
+    await db.delete(appEventPublications).where(eq(appEventPublications.eventId, id));
+    await db.delete(appJoinRequests).where(eq(appJoinRequests.eventId, id));
     await db.delete(appMessages).where(eq(appMessages.eventId, id));
     await db.delete(appVotes).where(eq(appVotes.eventId, id));
     await db.delete(appProposals).where(eq(appProposals.eventId, id));
@@ -142,6 +187,10 @@ export class DatabaseStorage implements IStorage {
       .where(eq(appProposals.eventId, eventId))
       .orderBy(appProposals.createdAt);
   }
+  async getProposalById(id: number): Promise<AppProposal | undefined> {
+    const [row] = await db.select().from(appProposals).where(eq(appProposals.id, id));
+    return row;
+  }
   async createProposal(proposal: InsertAppProposal): Promise<AppProposal> {
     const [created] = await db.insert(appProposals).values(proposal).returning();
     return created;
@@ -153,6 +202,106 @@ export class DatabaseStorage implements IStorage {
   async deleteProposalsByEvent(eventId: number): Promise<void> {
     await db.delete(appProposals).where(eq(appProposals.eventId, eventId));
   }
+
+  async getFriendsByOwner(ownerName: string): Promise<string[]> {
+    const rows = await db.select().from(appFriends).where(eq(appFriends.ownerName, ownerName));
+    return friendsWithDemoFallback(ownerName, rows.map((r) => r.friendName));
+  }
+
+  async addFriend(ownerName: string, friendName: string): Promise<void> {
+    if (ownerName === friendName) return;
+    const existing = await db
+      .select()
+      .from(appFriends)
+      .where(and(eq(appFriends.ownerName, ownerName), eq(appFriends.friendName, friendName)));
+    if (existing.length > 0) return;
+    await db.insert(appFriends).values({ ownerName, friendName });
+  }
+
+  async removeFriend(ownerName: string, friendName: string): Promise<void> {
+    await db.delete(appFriends).where(and(eq(appFriends.ownerName, ownerName), eq(appFriends.friendName, friendName)));
+  }
+
+  async createPublication(row: InsertAppEventPublication): Promise<AppEventPublication> {
+    await db.delete(appEventPublications).where(eq(appEventPublications.eventId, row.eventId));
+    const [created] = await db.insert(appEventPublications).values(row).returning();
+    return created;
+  }
+
+  async getFeedNotesForViewer(viewerName: string): Promise<FeedNoteRow[]> {
+    const pubs = await db.select().from(appEventPublications).orderBy(desc(appEventPublications.createdAt));
+    const pubIds = pubs.map((p) => p.id);
+    const viewedSet = new Set<number>();
+    if (pubIds.length > 0) {
+      const views = await db
+        .select()
+        .from(appPublicationViews)
+        .where(and(eq(appPublicationViews.viewerName, viewerName), inArray(appPublicationViews.publicationId, pubIds)));
+      for (const v of views) viewedSet.add(v.publicationId);
+    }
+    const out: FeedNoteRow[] = [];
+    for (const pub of pubs) {
+      if (pub.publishedBy === viewerName) continue;
+      const friendSet = new Set(await this.getFriendsByOwner(pub.publishedBy));
+      let eligible = false;
+      if (pub.audience === "all") {
+        eligible = friendSet.has(viewerName);
+      } else if (pub.audience === "selected") {
+        try {
+          const names = JSON.parse(pub.friendNames || "[]") as string[];
+          eligible = Array.isArray(names) && names.includes(viewerName);
+        } catch {
+          eligible = false;
+        }
+      }
+      if (!eligible) continue;
+      const event = await this.getAppEvent(pub.eventId);
+      if (!event || event.status !== "confirmed") continue;
+      let participants: string[] = [];
+      try {
+        participants = JSON.parse(event.participants || "[]") as string[];
+      } catch {
+        participants = [];
+      }
+      const preview = participants.filter((p) => p !== pub.publishedBy).slice(0, 4);
+      out.push({
+        publicationId: pub.id,
+        eventId: pub.eventId,
+        publishedBy: pub.publishedBy,
+        title: event.title,
+        activity: event.activity,
+        participantsPreview: preview,
+        viewed: viewedSet.has(pub.id),
+      });
+    }
+    return out;
+  }
+
+  async markPublicationViewed(publicationId: number, viewerName: string): Promise<void> {
+    await db
+      .insert(appPublicationViews)
+      .values({ publicationId, viewerName })
+      .onConflictDoNothing({ target: [appPublicationViews.publicationId, appPublicationViews.viewerName] });
+  }
+
+  async createJoinRequest(row: InsertAppJoinRequest): Promise<AppJoinRequest> {
+    const [created] = await db.insert(appJoinRequests).values(row).returning();
+    return created;
+  }
+
+  async getJoinRequest(id: number): Promise<AppJoinRequest | undefined> {
+    const [r] = await db.select().from(appJoinRequests).where(eq(appJoinRequests.id, id));
+    return r;
+  }
+
+  async getJoinRequestsByEvent(eventId: number): Promise<AppJoinRequest[]> {
+    return await db.select().from(appJoinRequests).where(eq(appJoinRequests.eventId, eventId)).orderBy(appJoinRequests.createdAt);
+  }
+
+  async updateJoinRequest(id: number, status: string): Promise<AppJoinRequest | undefined> {
+    const [updated] = await db.update(appJoinRequests).set({ status }).where(eq(appJoinRequests.id, id)).returning();
+    return updated;
+  }
 }
 
 class MemoryStorage implements IStorage {
@@ -163,6 +312,10 @@ class MemoryStorage implements IStorage {
   private appMessagesData: AppMessage[] = [];
   private appBannersData: AppBanner[] = [];
   private appProposalsData: AppProposal[] = [];
+  private appFriendsData: { id: number; ownerName: string; friendName: string }[] = [];
+  private appPublicationsData: AppEventPublication[] = [];
+  private appPublicationViewsData: { publicationId: number; viewerName: string }[] = [];
+  private appJoinRequestsData: AppJoinRequest[] = [];
 
   private subscriberId = 1;
   private pageViewId = 1;
@@ -171,6 +324,9 @@ class MemoryStorage implements IStorage {
   private messageId = 1;
   private bannerId = 1;
   private proposalId = 1;
+  private friendRowId = 1;
+  private publicationRowId = 1;
+  private joinRequestRowId = 1;
 
   async createSubscriber(insertSubscriber: InsertSubscriber): Promise<Subscriber> {
     const created: Subscriber = {
@@ -217,6 +373,7 @@ class MemoryStorage implements IStorage {
       confirmedDate: event.confirmedDate ?? null,
       confirmedTime: event.confirmedTime ?? null,
       confirmedVenue: event.confirmedVenue ?? null,
+      surveyMode: event.surveyMode ?? "flexible_voting",
       createdAt: new Date(),
     };
     this.appEventsData.push(created);
@@ -236,10 +393,136 @@ class MemoryStorage implements IStorage {
     return updated;
   }
   async deleteAppEvent(id: number): Promise<void> {
+    const oldPubIds = this.appPublicationsData.filter((p) => p.eventId === id).map((p) => p.id);
+    this.appPublicationViewsData = this.appPublicationViewsData.filter(
+      (v) => !oldPubIds.includes(v.publicationId),
+    );
+    this.appPublicationsData = this.appPublicationsData.filter((p) => p.eventId !== id);
+    this.appJoinRequestsData = this.appJoinRequestsData.filter((j) => j.eventId !== id);
     this.appMessagesData = this.appMessagesData.filter((m) => m.eventId !== id);
     this.appVotesData = this.appVotesData.filter((v) => v.eventId !== id);
     this.appProposalsData = this.appProposalsData.filter((p) => p.eventId !== id);
     this.appEventsData = this.appEventsData.filter((e) => e.id !== id);
+  }
+
+  async getFriendsByOwner(ownerName: string): Promise<string[]> {
+    const names = this.appFriendsData.filter((f) => f.ownerName === ownerName).map((f) => f.friendName);
+    return friendsWithDemoFallback(ownerName, names);
+  }
+
+  async addFriend(ownerName: string, friendName: string): Promise<void> {
+    if (ownerName === friendName) return;
+    const dup = this.appFriendsData.some(
+      (f) => f.ownerName === ownerName && f.friendName === friendName,
+    );
+    if (dup) return;
+    this.appFriendsData.push({ id: this.friendRowId++, ownerName, friendName });
+  }
+
+  async removeFriend(ownerName: string, friendName: string): Promise<void> {
+    this.appFriendsData = this.appFriendsData.filter(
+      (f) => !(f.ownerName === ownerName && f.friendName === friendName),
+    );
+  }
+
+  async createPublication(row: InsertAppEventPublication): Promise<AppEventPublication> {
+    const oldIds = this.appPublicationsData.filter((p) => p.eventId === row.eventId).map((p) => p.id);
+    this.appPublicationViewsData = this.appPublicationViewsData.filter(
+      (v) => !oldIds.includes(v.publicationId),
+    );
+    this.appPublicationsData = this.appPublicationsData.filter((p) => p.eventId !== row.eventId);
+    const created: AppEventPublication = {
+      id: this.publicationRowId++,
+      eventId: row.eventId,
+      publishedBy: row.publishedBy,
+      audience: row.audience,
+      friendNames: row.friendNames ?? "[]",
+      createdAt: new Date(),
+    };
+    this.appPublicationsData.push(created);
+    return created;
+  }
+
+  async getFeedNotesForViewer(viewerName: string): Promise<FeedNoteRow[]> {
+    const viewedSet = new Set(
+      this.appPublicationViewsData.filter((v) => v.viewerName === viewerName).map((v) => v.publicationId),
+    );
+    const pubs = [...this.appPublicationsData].sort(
+      (a, b) => +new Date(b.createdAt ?? 0) - +new Date(a.createdAt ?? 0),
+    );
+    const out: FeedNoteRow[] = [];
+    for (const pub of pubs) {
+      if (pub.publishedBy === viewerName) continue;
+      const friendSet = new Set(await this.getFriendsByOwner(pub.publishedBy));
+      let eligible = false;
+      if (pub.audience === "all") {
+        eligible = friendSet.has(viewerName);
+      } else if (pub.audience === "selected") {
+        try {
+          const names = JSON.parse(pub.friendNames || "[]") as string[];
+          eligible = Array.isArray(names) && names.includes(viewerName);
+        } catch {
+          eligible = false;
+        }
+      }
+      if (!eligible) continue;
+      const event = this.appEventsData.find((e) => e.id === pub.eventId);
+      if (!event || event.status !== "confirmed") continue;
+      let participants: string[] = [];
+      try {
+        participants = JSON.parse(event.participants || "[]") as string[];
+      } catch {
+        participants = [];
+      }
+      const preview = participants.filter((p) => p !== pub.publishedBy).slice(0, 4);
+      out.push({
+        publicationId: pub.id,
+        eventId: pub.eventId,
+        publishedBy: pub.publishedBy,
+        title: event.title,
+        activity: event.activity,
+        participantsPreview: preview,
+        viewed: viewedSet.has(pub.id),
+      });
+    }
+    return out;
+  }
+
+  async markPublicationViewed(publicationId: number, viewerName: string): Promise<void> {
+    const exists = this.appPublicationViewsData.some(
+      (v) => v.publicationId === publicationId && v.viewerName === viewerName,
+    );
+    if (!exists) this.appPublicationViewsData.push({ publicationId, viewerName });
+  }
+
+  async createJoinRequest(row: InsertAppJoinRequest): Promise<AppJoinRequest> {
+    const created: AppJoinRequest = {
+      id: this.joinRequestRowId++,
+      eventId: row.eventId,
+      requesterName: row.requesterName,
+      status: row.status ?? "pending",
+      createdAt: new Date(),
+    };
+    this.appJoinRequestsData.push(created);
+    return created;
+  }
+
+  async getJoinRequest(id: number): Promise<AppJoinRequest | undefined> {
+    return this.appJoinRequestsData.find((j) => j.id === id);
+  }
+
+  async getJoinRequestsByEvent(eventId: number): Promise<AppJoinRequest[]> {
+    return this.appJoinRequestsData
+      .filter((j) => j.eventId === eventId)
+      .sort((a, b) => +new Date(a.createdAt ?? 0) - +new Date(b.createdAt ?? 0));
+  }
+
+  async updateJoinRequest(id: number, status: string): Promise<AppJoinRequest | undefined> {
+    const idx = this.appJoinRequestsData.findIndex((j) => j.id === id);
+    if (idx < 0) return undefined;
+    const updated = { ...this.appJoinRequestsData[idx], status };
+    this.appJoinRequestsData[idx] = updated;
+    return updated;
   }
 
   async getVotesByEvent(eventId: number): Promise<AppVote[]> {
@@ -308,6 +591,9 @@ class MemoryStorage implements IStorage {
     return this.appProposalsData
       .filter((p) => p.eventId === eventId)
       .sort((a, b) => +new Date(a.createdAt ?? 0) - +new Date(b.createdAt ?? 0));
+  }
+  async getProposalById(id: number): Promise<AppProposal | undefined> {
+    return this.appProposalsData.find((p) => p.id === id);
   }
   async createProposal(proposal: InsertAppProposal): Promise<AppProposal> {
     const created: AppProposal = {
@@ -422,6 +708,9 @@ class ResilientStorage implements IStorage {
   getProposalsByEvent(eventId: number): Promise<AppProposal[]> {
     return this.run("getProposalsByEvent", () => this.dbStorage.getProposalsByEvent(eventId), () => this.memoryStorage.getProposalsByEvent(eventId));
   }
+  getProposalById(id: number): Promise<AppProposal | undefined> {
+    return this.run("getProposalById", () => this.dbStorage.getProposalById(id), () => this.memoryStorage.getProposalById(id));
+  }
   createProposal(proposal: InsertAppProposal): Promise<AppProposal> {
     return this.run("createProposal", () => this.dbStorage.createProposal(proposal), () => this.memoryStorage.createProposal(proposal));
   }
@@ -430,6 +719,40 @@ class ResilientStorage implements IStorage {
   }
   deleteProposalsByEvent(eventId: number): Promise<void> {
     return this.run("deleteProposalsByEvent", () => this.dbStorage.deleteProposalsByEvent(eventId), () => this.memoryStorage.deleteProposalsByEvent(eventId));
+  }
+  getFriendsByOwner(ownerName: string): Promise<string[]> {
+    return this.run("getFriendsByOwner", () => this.dbStorage.getFriendsByOwner(ownerName), () => this.memoryStorage.getFriendsByOwner(ownerName));
+  }
+  addFriend(ownerName: string, friendName: string): Promise<void> {
+    return this.run("addFriend", () => this.dbStorage.addFriend(ownerName, friendName), () => this.memoryStorage.addFriend(ownerName, friendName));
+  }
+  removeFriend(ownerName: string, friendName: string): Promise<void> {
+    return this.run("removeFriend", () => this.dbStorage.removeFriend(ownerName, friendName), () => this.memoryStorage.removeFriend(ownerName, friendName));
+  }
+  createPublication(row: InsertAppEventPublication): Promise<AppEventPublication> {
+    return this.run("createPublication", () => this.dbStorage.createPublication(row), () => this.memoryStorage.createPublication(row));
+  }
+  getFeedNotesForViewer(viewerName: string): Promise<FeedNoteRow[]> {
+    return this.run("getFeedNotesForViewer", () => this.dbStorage.getFeedNotesForViewer(viewerName), () => this.memoryStorage.getFeedNotesForViewer(viewerName));
+  }
+  markPublicationViewed(publicationId: number, viewerName: string): Promise<void> {
+    return this.run(
+      "markPublicationViewed",
+      () => this.dbStorage.markPublicationViewed(publicationId, viewerName),
+      () => this.memoryStorage.markPublicationViewed(publicationId, viewerName),
+    );
+  }
+  createJoinRequest(row: InsertAppJoinRequest): Promise<AppJoinRequest> {
+    return this.run("createJoinRequest", () => this.dbStorage.createJoinRequest(row), () => this.memoryStorage.createJoinRequest(row));
+  }
+  getJoinRequest(id: number): Promise<AppJoinRequest | undefined> {
+    return this.run("getJoinRequest", () => this.dbStorage.getJoinRequest(id), () => this.memoryStorage.getJoinRequest(id));
+  }
+  getJoinRequestsByEvent(eventId: number): Promise<AppJoinRequest[]> {
+    return this.run("getJoinRequestsByEvent", () => this.dbStorage.getJoinRequestsByEvent(eventId), () => this.memoryStorage.getJoinRequestsByEvent(eventId));
+  }
+  updateJoinRequest(id: number, status: string): Promise<AppJoinRequest | undefined> {
+    return this.run("updateJoinRequest", () => this.dbStorage.updateJoinRequest(id, status), () => this.memoryStorage.updateJoinRequest(id, status));
   }
 }
 

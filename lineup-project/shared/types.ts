@@ -12,6 +12,8 @@ export interface UserPreferences {
 export interface AISuggestion {
   name: string;
   address: string;
+  /** Quartiere o zona (per anteprima senza indirizzo completo). */
+  quartiere?: string;
   matchScore: number; // Percentuale di coerenza (0-100)
   explanation: string; // Perché rispetta i criteri dell'utente
   estimatedPrice: string;

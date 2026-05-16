@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRoute, Link, useLocation } from "wouter";
-import { ArrowLeft, Send, ChevronDown, ChevronUp, MapPin, Clock, Star, Tag, ThumbsUp, Pencil, Check as CheckIcon, CalendarDays, Building2, UserMinus, UserCheck, CalendarPlus, CheckCircle2, X, Shield, Flag, ChevronRight, ChevronLeft, Search, Trash2, Plus, CalendarSearch, Timer, MapPinned, Bell, AlertCircle, Link2, Copy } from "lucide-react";
+import { ArrowLeft, Send, ChevronDown, ChevronUp, MapPin, Clock, Star, Tag, ThumbsUp, Pencil, Check as CheckIcon, CalendarDays, Building2, UserMinus, UserCheck, CalendarPlus, CheckCircle2, X, Shield, Flag, ChevronRight, ChevronLeft, Search, Trash2, Plus, CalendarSearch, Timer, MapPinned, Bell, AlertCircle, Link2, Copy, CalendarX } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -17,8 +17,20 @@ import {
   userHasCompletedVotablePoll,
   getVotablePollTypesForEvent,
   getEventChatInviteUrl,
+  venuePollSubtitle,
   type VenueOption,
 } from "@/lib/appUtils";
+import {
+  allowsMemberProposals,
+  parseSurveyMode,
+  surveyBehavior,
+} from "@shared/surveyModes";
+import { VenueExternalLinks } from "@/components/VenueExternalLinks";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PollOptionButton } from "@/components/poll/PollOptionButton";
 
 /* ─── LocalStorage helpers for contact nicknames ─── */
 const LS_CONTACTS = "lineup-contact-names";
@@ -122,10 +134,10 @@ function UserProfileModal({
                   value={nickname}
                   onChange={e => setNickname(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") handleSaveNickname(); if (e.key === "Escape") { setNickname(contactNames[name] ?? name); setEditingNick(false); } }}
-                  className="flex-1 text-center font-bold text-gray-900 text-base bg-gray-100 rounded-xl px-3 py-1.5 outline-none border border-[#4A9BD9]"
+                  className="flex-1 text-center font-bold text-gray-900 text-base bg-gray-100 rounded-xl px-3 py-1.5 outline-none border border-primary"
                   maxLength={30}
                 />
-                <button onClick={handleSaveNickname} className="w-7 h-7 rounded-full bg-[#4A9BD9] flex items-center justify-center shrink-0">
+                <button onClick={handleSaveNickname} className="w-7 h-7 rounded-full bg-primary flex items-center justify-center shrink-0">
                   <CheckIcon size={13} className="text-white" />
                 </button>
               </div>
@@ -152,7 +164,7 @@ function UserProfileModal({
             {planningCount > 0 && (
               <div className="text-right">
                 <p className="text-xs text-gray-500">In pianificazione</p>
-                <p className="text-2xl font-bold text-[#4A9BD9]">{planningCount}</p>
+                <p className="text-2xl font-bold text-primary">{planningCount}</p>
               </div>
             )}
           </div>
@@ -275,7 +287,7 @@ function CreatorOptionsSheet({
   onConfirm: (opts: Array<{ type: string; value: string }>) => void;
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState<"date" | "time" | "venue">("date");
+  const [tab, setTab] = useState<"date" | "time" | "venue">("venue");
 
   // ── Date multi-select ──
   const [calMonth, setCalMonth] = useState(() => new Date());
@@ -334,21 +346,21 @@ function CreatorOptionsSheet({
 
   const handleSave = () => {
     const opts: Array<{ type: string; value: string }> = [
-      ...newDates.map(d => ({ type: "date", value: d })),
-      ...newTimes.map(t => ({ type: "time", value: t })),
-      ...newVenues.map(vn => {
-        const full = allVenues.find(v => v.name === vn);
+      ...newVenues.map((vn) => {
+        const full = allVenues.find((v) => v.name === vn);
         return { type: "venue", value: full ? JSON.stringify(full) : vn };
       }),
+      ...newDates.map((d) => ({ type: "date", value: d })),
+      ...newTimes.map((t) => ({ type: "time", value: t })),
     ];
     if (opts.length > 0) onConfirm(opts);
     else onClose();
   };
 
   const TABS: { key: "date" | "time" | "venue"; label: string }[] = [
+    { key: "venue", label: "Luoghi" },
     { key: "date",  label: "Date" },
     { key: "time",  label: "Orari" },
-    { key: "venue", label: "Luoghi" },
   ];
 
   return (
@@ -357,30 +369,30 @@ function CreatorOptionsSheet({
       <div className="relative z-10 bg-white rounded-t-3xl shadow-2xl flex flex-col max-h-[88vh]" onClick={e => e.stopPropagation()}>
         <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-1 shrink-0" />
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0">
-          <h3 className="font-bold text-gray-900 text-base">Aggiungi opzioni al sondaggio</h3>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100">
-            <X size={16} className="text-gray-500" />
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 shrink-0">
+          <h3 className="font-bold text-gray-900 text-sm">Aggiungi opzioni al sondaggio</h3>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full bg-gray-100">
+            <X size={14} className="text-gray-500" />
           </button>
         </div>
         {/* Tabs */}
-        <div className="flex px-4 pt-3 pb-0 gap-1 shrink-0">
+        <div className="flex px-3 pt-2 pb-0 gap-1 shrink-0">
           {TABS.map(t => {
             const count = t.key === "date" ? newDates.length : t.key === "time" ? newTimes.length : newVenues.length;
             return (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                   tab === t.key
-                    ? "bg-[#4A9BD9] text-white"
+                    ? "bg-primary text-white"
                     : "bg-gray-100 text-gray-500"
                 }`}
               >
                 {t.label}
                 {count > 0 && (
-                  <span className={`text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center ${
-                    tab === t.key ? "bg-white text-[#4A9BD9]" : "bg-[#4A9BD9] text-white"
+                  <span className={`text-[9px] font-bold min-w-[1rem] h-4 px-0.5 rounded-full flex items-center justify-center ${
+                    tab === t.key ? "bg-white text-primary" : "bg-primary text-white"
                   }`}>{count}</span>
                 )}
               </button>
@@ -422,8 +434,8 @@ function CreatorOptionsSheet({
                     <button key={i} onClick={() => toggleDay(day)} disabled={past || exists}
                       className={`mx-auto flex items-center justify-center w-9 h-9 rounded-full text-sm font-medium transition-all ${
                         past || exists ? "text-gray-300 cursor-default" :
-                        sel  ? "bg-[#4A9BD9] text-white" :
-                        tod  ? "ring-2 ring-[#4A9BD9] text-[#4A9BD9]" :
+                        sel  ? "bg-primary text-white" :
+                        tod  ? "ring-2 ring-primary text-primary" :
                         "text-gray-800 active:bg-gray-100"
                       }`}>
                       {day}
@@ -434,7 +446,7 @@ function CreatorOptionsSheet({
               {selectedDays.length > 0 && (
                 <div className="px-4 pb-3 flex flex-wrap gap-1.5">
                   {selectedDays.map(d => (
-                    <span key={d} className="flex items-center gap-1 text-xs font-semibold bg-[#EBF5FB] text-[#4A9BD9] px-2.5 py-1 rounded-full">
+                    <span key={d} className="flex items-center gap-1 text-xs font-semibold bg-primary/10 text-primary px-2.5 py-1 rounded-full">
                       {d}
                       <button onClick={() => setSelectedDays(prev => prev.filter(x => x !== d))}>
                         <X size={10} />
@@ -464,14 +476,14 @@ function CreatorOptionsSheet({
               <button
                 onClick={addTime}
                 disabled={existingTimes.has(idxToTime(timeIdx)) || selectedTimes.includes(idxToTime(timeIdx))}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-[#4A9BD9] text-[#4A9BD9] text-sm font-semibold disabled:opacity-40 active:bg-[#EBF5FB] transition-colors"
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-primary text-sm text-primary font-semibold disabled:opacity-40 active:bg-primary/15 transition-colors"
               >
                 <Plus size={15} /> Aggiungi {idxToTime(timeIdx)}
               </button>
               {selectedTimes.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {selectedTimes.map(t => (
-                    <span key={t} className="flex items-center gap-1 text-xs font-semibold bg-[#EBF5FB] text-[#4A9BD9] px-2.5 py-1 rounded-full">
+                    <span key={t} className="flex items-center gap-1 text-xs font-semibold bg-primary/10 text-primary px-2.5 py-1 rounded-full">
                       {t}
                       <button onClick={() => setSelectedTimes(prev => prev.filter(x => x !== t))}>
                         <X size={10} />
@@ -490,7 +502,7 @@ function CreatorOptionsSheet({
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input type="text" placeholder="Cerca un posto..."
                   value={venueSearch} onChange={e => setVenueSearch(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-gray-100 text-sm text-gray-900 placeholder-gray-400 outline-none focus:ring-2 focus:ring-[#4A9BD9]/30" />
+                  className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-gray-100 text-sm text-gray-900 placeholder-gray-400 outline-none focus:ring-2 focus:ring-primary/30" />
               </div>
               {filteredVenues.length === 0 && (
                 <p className="text-sm text-gray-400 text-center py-6">Nessun posto trovato</p>
@@ -505,13 +517,13 @@ function CreatorOptionsSheet({
                   }}
                     className={`w-full p-4 rounded-2xl border-2 text-left transition-all ${
                       exists ? "border-gray-100 bg-gray-50 opacity-40 cursor-default" :
-                      sel ? "border-[#4A9BD9] bg-[#EBF5FB]" : "border-gray-100 bg-white active:bg-gray-50"
+                      sel ? "border-primary bg-primary/10" : "border-gray-100 bg-white active:bg-gray-50"
                     }`}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1">
                         <div className="flex items-center gap-1.5">
                           <p className="font-semibold text-gray-900">{venue.name}</p>
-                          {sel && <CheckCircle2 size={14} className="text-[#4A9BD9]" />}
+                          {sel && <CheckCircle2 size={14} className="text-primary" />}
                           {exists && <span className="text-[10px] text-gray-400 font-medium">già presente</span>}
                         </div>
                         <div className="flex items-center gap-3 mt-1">
@@ -519,7 +531,7 @@ function CreatorOptionsSheet({
                             <Star size={10} fill="currentColor" />{venue.rating}
                           </span>
                           <span className="flex items-center gap-0.5 text-xs text-gray-400">
-                            <MapPin size={10} />{venue.distance}
+                            <MapPin size={10} />{venuePollSubtitle(venue)}
                           </span>
                         </div>
                       </div>
@@ -541,8 +553,7 @@ function CreatorOptionsSheet({
           <button
             onClick={handleSave}
             disabled={total === 0}
-            className="w-full py-3.5 rounded-xl font-semibold text-white disabled:opacity-40"
-            style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}
+            className="w-full rounded-xl bg-gradient-to-br from-primary to-primary/75 py-3.5 font-semibold text-primary-foreground disabled:opacity-40"
           >
             {total === 0 ? "Seleziona almeno un'opzione" : `Aggiungi ${total} ${total === 1 ? "opzione" : "opzioni"}`}
           </button>
@@ -726,7 +737,7 @@ function ProposeOptionSheet({
                   placeholder="Cerca un posto..."
                   value={venueSearch}
                   onChange={e => setVenueSearch(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-gray-100 text-sm text-gray-900 placeholder-gray-400 outline-none focus:ring-2 focus:ring-[#4A9BD9]/30"
+                  className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-gray-100 text-sm text-gray-900 placeholder-gray-400 outline-none focus:ring-2 focus:ring-primary/30"
                 />
               </div>
 
@@ -741,14 +752,14 @@ function ProposeOptionSheet({
                     key={venue.name}
                     onClick={() => setSelectedVenue(isSel ? null : venue)}
                     className={`w-full p-4 rounded-2xl border-2 text-left transition-all ${
-                      isSel ? "border-[#4A9BD9] bg-[#EBF5FB]" : "border-gray-100 bg-white"
+                      isSel ? "border-primary bg-primary/10" : "border-gray-100 bg-white"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1">
                         <div className="flex items-center gap-1.5">
                           <p className="font-semibold text-gray-900">{venue.name}</p>
-                          {isSel && <CheckCircle2 size={14} className="text-[#4A9BD9]" />}
+                          {isSel && <CheckCircle2 size={14} className="text-primary" />}
                         </div>
                         <div className="flex items-center gap-3 mt-1">
                           <span className="flex items-center gap-0.5 text-xs text-amber-500 font-semibold">
@@ -757,7 +768,7 @@ function ProposeOptionSheet({
                           </span>
                           <span className="flex items-center gap-0.5 text-xs text-gray-400">
                             <MapPin size={10} />
-                            {venue.distance}
+                            {venuePollSubtitle(venue)}
                           </span>
                         </div>
                       </div>
@@ -780,8 +791,7 @@ function ProposeOptionSheet({
           <button
             onClick={handleConfirm}
             disabled={!canConfirm}
-            className="w-full py-3.5 rounded-xl font-semibold text-white transition-opacity disabled:opacity-40"
-            style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}
+            className="w-full rounded-xl bg-gradient-to-br from-primary to-primary/75 py-3.5 font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
           >
             Conferma proposta
           </button>
@@ -793,7 +803,7 @@ function ProposeOptionSheet({
 
 /* ─── Recap Banner ─── */
 function RecapBanner({
-  event, votes, expanded, onToggle, onVote, onOpenPropose, currentUser, alwaysExpanded,
+  event, votes, expanded, onToggle, onVote, onOpenPropose, currentUser, alwaysExpanded, isCreator,
 }: {
   event: ReturnType<typeof parseEvent>;
   votes: Vote[];
@@ -803,7 +813,11 @@ function RecapBanner({
   onOpenPropose: (type: string) => void;
   currentUser: string;
   alwaysExpanded?: boolean;
+  isCreator: boolean;
 }) {
+  const surveyMode = parseSurveyMode(event.surveyMode);
+  const behavior = surveyBehavior(surveyMode);
+  const showPollPropose = isCreator || behavior.memberProposals !== "off";
   const isPlanning = event.status === "planning";
   const topDate = isPlanning
     ? getMostVoted(votes, "date") ?? (event.dateOptions.length === 1 ? event.dateOptions[0] ?? null : null)
@@ -818,245 +832,262 @@ function RecapBanner({
   const myVote = (type: string, val: string) =>
     votes.some(v => v.voterName === currentUser && v.voteType === type && v.voteValue === val);
 
+  const venueMetaForName = (name: string | null | undefined) =>
+    name ? event.venueOptions.find((v) => v.name === name) : undefined;
+
+  const summaryInner = (
+    <div
+      className={
+        isPlanning
+          ? "flex min-w-0 flex-1 items-center gap-3 text-left text-blue-50"
+          : "flex min-w-0 flex-1 items-center gap-3 text-left"
+      }
+    >
+      {!topVenue && !topDate && !topTime ? (
+        <span
+          className={
+            isPlanning ? "text-xs italic text-blue-200" : "text-xs text-muted-foreground italic"
+          }
+        >
+          Nessun voto ancora — tocca per votare
+        </span>
+      ) : (
+        <>
+          {topVenue && (
+            <span
+              className={
+                isPlanning
+                  ? "flex min-w-0 items-center gap-1 truncate text-xs font-semibold text-white"
+                  : "flex min-w-0 items-center gap-1 truncate text-xs font-semibold text-foreground"
+              }
+            >
+              <MapPin size={11} className={isPlanning ? "text-blue-200" : "text-emerald-500"} />
+              {topVenue}
+            </span>
+          )}
+          {topDate && (
+            <span
+              className={
+                isPlanning
+                  ? "flex shrink-0 items-center gap-1 text-xs font-semibold text-white"
+                  : "flex shrink-0 items-center gap-1 text-xs font-semibold text-foreground"
+              }
+            >
+              <Clock size={11} className={isPlanning ? "text-blue-200" : "text-emerald-500"} />
+              {topDate}{topTime ? ` · ${topTime}` : ""}
+            </span>
+          )}
+          {isPlanning && (
+            <span className="shrink-0 rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+              più votato
+            </span>
+          )}
+          {!isPlanning && (
+            <span className="shrink-0 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+              confermato ✓
+            </span>
+          )}
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div
-      className="border-b border-gray-100 overflow-hidden"
-      style={{ background: isPlanning ? "linear-gradient(135deg, #F8FBFF, #EBF5FB)" : "#F0FDF4" }}
+      className={
+        isPlanning
+          ? "border-b border-blue-800/35 bg-blue-600"
+          : "border-b border-border bg-gradient-to-b from-emerald-500/[0.08] to-background"
+      }
     >
-      {/* Collapsed row */}
-      <button
-        data-testid="button-toggle-banner"
-        onClick={alwaysExpanded ? undefined : onToggle}
-        className="w-full flex items-center gap-2 px-4 py-2.5"
-      >
-        <div className="flex-1 flex items-center gap-3 min-w-0 text-left">
-          {!topVenue && !topDate && !topTime ? (
-            <span className="text-xs text-gray-400 italic">Nessun voto ancora — tocca per votare</span>
-          ) : (
-            <>
-              {topDate && (
-                <span className="flex items-center gap-1 text-xs font-semibold text-gray-700 shrink-0">
-                  <Clock size={11} className={isPlanning ? "text-[#4A9BD9]" : "text-emerald-500"} />
-                  {topDate}{topTime ? ` · ${topTime}` : ""}
-                </span>
-              )}
-              {topVenue && (
-                <span className="flex items-center gap-1 text-xs font-semibold text-gray-700 truncate">
-                  <MapPin size={11} className={isPlanning ? "text-[#4A9BD9]" : "text-emerald-500"} />
-                  {topVenue}
-                </span>
-              )}
-              {isPlanning && (
-                <span className="text-[10px] bg-[#4A9BD9]/10 text-[#4A9BD9] px-1.5 py-0.5 rounded-full font-semibold shrink-0">
-                  più votato
-                </span>
-              )}
-              {!isPlanning && (
-                <span className="text-[10px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full font-semibold shrink-0">
-                  confermato ✓
-                </span>
-              )}
-            </>
-          )}
-        </div>
-        {isPlanning && !alwaysExpanded && (
-          expanded
-            ? <ChevronUp size={16} className="text-[#4A9BD9] shrink-0" />
-            : <ChevronDown size={16} className="text-gray-400 shrink-0" />
-        )}
-      </button>
+      {/* Riga riepilogo: niente <button> se il pannello è sempre aperto (evita conflitti con i voti sotto). */}
+      {alwaysExpanded ? (
+        <div className="flex w-full items-center gap-2 px-3 py-2">{summaryInner}</div>
+      ) : (
+        <button
+          data-testid="button-toggle-banner"
+          type="button"
+          onClick={onToggle}
+          className="flex w-full items-center gap-2 px-3 py-2"
+        >
+          {summaryInner}
+          {isPlanning &&
+            (expanded ? (
+              <ChevronUp size={16} className="shrink-0 text-blue-200" />
+            ) : (
+              <ChevronDown size={16} className="shrink-0 text-blue-200/80" />
+            ))}
+        </button>
+      )}
+      {(() => {
+        const vm = venueMetaForName(topVenue);
+        if (!vm || (!vm.mapsUrl && !vm.websiteUrl && !vm.instagramUrl)) return null;
+        return (
+          <div className={isPlanning ? "mx-3 mb-1 rounded-lg bg-white/10 px-3 py-2" : "px-4 pb-2 pt-0"}>
+            <VenueExternalLinks venue={vm} compact />
+          </div>
+        );
+      })()}
 
-      {/* Expanded voting */}
+      {/* Expanded voting — sfondo blu, opzioni su riquadri bianchi */}
       {(expanded || alwaysExpanded) && isPlanning && (
-        <div className="pb-1">
+        <div className="px-2 pb-2.5 pt-0.5">
           {[
+            {
+              label: "Dove?",
+              type: "venue",
+              options: event.venueOptions.map((v) => ({
+                key: v.name,
+                label: v.name,
+                venue: v,
+                sub: [
+                  { icon: <Star size={8} fill="currentColor" className="text-amber-400" />, text: String(v.rating) },
+                  { icon: <MapPin size={8} className="text-muted-foreground" />, text: venuePollSubtitle(v) },
+                  ...(v.discount ? [{ icon: <Tag size={8} className="text-emerald-500" />, text: v.discount }] : []),
+                ],
+              })),
+            },
             { label: "Che giorno?", type: "date", options: event.dateOptions.map(d => ({ key: d, label: d, sub: null as null })) },
             { label: "Che ora?",    type: "time", options: event.timeOptions.map(t => ({ key: t, label: t, sub: null as null })) },
-            { label: "Dove?",       type: "venue", options: event.venueOptions.map(v => ({
-                key: v.name, label: v.name,
-                sub: [
-                  { icon: <Star size={9} fill="currentColor" className="text-amber-400" />, text: String(v.rating) },
-                  { icon: <MapPin size={9} className="text-gray-400" />, text: v.distance },
-                  ...(v.discount ? [{ icon: <Tag size={9} className="text-emerald-500" />, text: v.discount }] : []),
-                ],
-              }))
-            },
           ].map(section => {
             if (!section.options.length) return null;
             const isVotable = section.options.length > 1;
 
             if (!isVotable) {
               return (
-                <div key={section.type} className="mb-1">
-                  <div className="flex items-center gap-2 px-4 pt-3 pb-2 flex-wrap">
-                    <span className="text-sm font-bold text-gray-800">{section.label}</span>
-                    <span className="text-[10px] font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">
+                <Card key={section.type} className="mb-2 border-0 bg-transparent text-white shadow-none">
+                  <CardHeader className="flex flex-row flex-wrap items-center gap-1.5 space-y-0 p-0 px-1 py-2 pb-1.5">
+                    <CardTitle className="text-xs font-bold text-white">{section.label}</CardTitle>
+                    <Badge variant="secondary" className="border-0 bg-white/20 text-[9px] font-semibold text-white px-1.5 py-0">
                       Predefinito dall&apos;organizzatore
-                    </span>
-                  </div>
-                  <div className="px-3 space-y-1.5 pb-1">
+                    </Badge>
+                  </CardHeader>
+                  <CardContent className="space-y-1.5 p-0 px-1 pb-2 pt-0">
                     {section.options.map((opt) => (
                       <div
                         key={opt.key}
-                        className="w-full rounded-2xl px-4 py-3 text-left bg-gray-50 border-2 border-gray-100"
+                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-left shadow-sm"
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-gray-200">
-                            <CheckCircle2 size={14} className="text-gray-500" strokeWidth={2.5} />
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-100">
+                            <CheckCircle2 size={12} className="text-gray-500" strokeWidth={2.5} />
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <span className="text-sm font-bold leading-tight text-gray-800">{opt.label}</span>
+                          <div className="min-w-0 flex-1">
+                            <span className="text-xs font-bold leading-tight text-gray-900">{opt.label}</span>
                             {opt.sub && (
-                              <div className="flex items-center gap-2 mt-0.5">
+                              <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
                                 {opt.sub.map((s, i) => (
-                                  <span key={i} className="flex items-center gap-0.5 text-xs text-gray-400 font-medium">
+                                  <span key={i} className="flex items-center gap-0.5 text-[11px] font-medium text-gray-500">
                                     {s.icon}{s.text}
                                   </span>
                                 ))}
                               </div>
                             )}
+                            {section.type === "venue" && "venue" in opt && opt.venue && (
+                              <VenueExternalLinks venue={opt.venue} compact className="mt-1.5" />
+                            )}
                           </div>
                         </div>
                       </div>
                     ))}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onOpenPropose(section.type)}
-                    className="w-full flex items-center gap-2 px-4 py-3 text-sm font-semibold text-[#4A9BD9] border-t border-gray-100/80 active:bg-gray-50 transition-colors"
-                  >
-                    <div className="w-5 h-5 rounded-full border border-[#4A9BD9]/50 flex items-center justify-center shrink-0">
-                      <span className="text-sm leading-none">+</span>
-                    </div>
-                    Proponi un&apos;altra opzione (attiva il voto)
-                  </button>
-                </div>
+                  </CardContent>
+                  {showPollPropose && (
+                    <CardFooter className="rounded-b-lg border-t border-gray-200 bg-white p-0">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-9 w-full justify-start gap-1.5 rounded-none px-3 text-xs font-semibold text-primary hover:bg-gray-50"
+                        onClick={() => onOpenPropose(section.type)}
+                      >
+                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-primary/40 text-xs leading-none">
+                          +
+                        </span>
+                        Proponi un&apos;altra opzione (attiva il voto)
+                      </Button>
+                    </CardFooter>
+                  )}
+                </Card>
               );
             }
 
             const myVotedHere = section.options.some((o) => myVote(section.type, o.key));
             const maxVoters = Math.max(...section.options.map((o) => getVoters(votes, section.type, o.key).length), 0);
+            const totalBallots = section.options.reduce(
+              (s, o) => s + getVoters(votes, section.type, o.key).length,
+              0,
+            );
 
             return (
-              <div key={section.type} className="mb-1">
-                {/* Section header */}
-                <div className="flex items-center gap-2 px-4 pt-3 pb-2">
-                  <span className="text-sm font-bold text-gray-800">{section.label}</span>
-                  {!myVotedHere && (
-                    <span className="text-xs text-[#4A9BD9] font-medium ml-auto">tocca per votare</span>
+              <Card key={section.type} className="mb-2 border-0 bg-transparent text-white shadow-none">
+                <CardHeader className="flex flex-row flex-wrap items-center gap-1.5 space-y-0 p-0 px-1 py-2 pb-1.5">
+                  <CardTitle className="text-xs font-bold text-white">{section.label}</CardTitle>
+                  {behavior.compactTwoOptionsHint && section.options.length > 1 && (
+                    <Badge variant="outline" className="h-4 border-white/40 bg-white/10 px-1 py-0 text-[8px] font-semibold text-white">
+                      max 2 preferenze
+                    </Badge>
                   )}
-                </div>
-
-                {/* Options */}
-                <div className="px-3 space-y-1.5 pb-1">
+                  {!myVotedHere && (
+                    <span className="ml-auto text-[10px] font-medium text-blue-100">tocca per votare</span>
+                  )}
+                </CardHeader>
+                <CardContent className="space-y-1.5 p-0 px-1 pb-2 pt-0">
                   {section.options.map((opt) => {
                     const voters = getVoters(votes, section.type, opt.key);
                     const mine = myVote(section.type, opt.key);
                     const isTop = voters.length > 0 && voters.length === maxVoters;
-                    const pct = maxVoters > 0 ? Math.round((voters.length / maxVoters) * 100) : 0;
+                    const sub =
+                      opt.sub != null ? (
+                        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                          {opt.sub.map((s, i) => (
+                            <span key={i} className="flex items-center gap-0.5 text-[11px] font-medium text-gray-500">
+                              {s.icon}
+                              {s.text}
+                            </span>
+                          ))}
+                        </div>
+                      ) : undefined;
 
                     return (
-                      <button
+                      <div
                         key={opt.key}
-                        type="button"
-                        data-testid={`banner-vote-${section.type}-${opt.key}`}
-                        aria-pressed={mine}
-                        onClick={() => onVote(section.type, opt.key)}
-                        className={`w-full rounded-2xl px-4 py-3 text-left transition-all active:scale-[0.98] relative overflow-hidden ${
-                          mine ? "bg-[#4A9BD9]/10 border-2 border-[#4A9BD9]/30" : "bg-white border-2 border-gray-100"
-                        }`}
+                        className="overflow-hidden rounded-lg border border-gray-200/90 bg-white shadow-sm"
                       >
-                        {/* Progress bar */}
-                        {voters.length > 0 && (
-                          <div
-                            className="absolute inset-y-0 left-0 rounded-l-2xl transition-all duration-500"
-                            style={{
-                              width: `${pct}%`,
-                              background: mine ? "#4A9BD9" + "14" : "#F3F4F6",
-                            }}
-                          />
+                        <PollOptionButton
+                          variant="onBlue"
+                          label={opt.label}
+                          sub={sub}
+                          voters={voters}
+                          totalBallots={totalBallots}
+                          selected={mine}
+                          onClick={() => onVote(section.type, opt.key)}
+                          data-testid={`banner-vote-${section.type}-${opt.key}`}
+                          showTopBadge={isTop && voters.length > 0}
+                        />
+                        {section.type === "venue" && "venue" in opt && opt.venue && (
+                          <div className="border-t border-gray-100 bg-white px-2.5 py-1.5">
+                            <VenueExternalLinks venue={opt.venue} compact />
+                          </div>
                         )}
-
-                        <div className="relative flex items-center gap-3">
-                          {/* Left: check or empty circle */}
-                          <div
-                            className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-all ${
-                              mine ? "bg-[#4A9BD9]" : "bg-gray-100"
-                            }`}
-                          >
-                            {mine ? (
-                              <CheckCircle2 size={16} className="text-white" strokeWidth={2.5} />
-                            ) : (
-                              <div className="w-2.5 h-2.5 rounded-full bg-gray-300" />
-                            )}
-                          </div>
-
-                          {/* Label + sub */}
-                          <div className="flex-1 min-w-0">
-                            <span
-                              className={`text-sm font-bold leading-tight ${
-                                mine ? "text-[#4A9BD9]" : isTop && voters.length > 0 ? "text-gray-900" : "text-gray-700"
-                              }`}
-                            >
-                              {opt.label}
-                            </span>
-                            {opt.sub && (
-                              <div className="flex items-center gap-2 mt-0.5">
-                                {opt.sub.map((s, i) => (
-                                  <span key={i} className="flex items-center gap-0.5 text-xs text-gray-400 font-medium">
-                                    {s.icon}
-                                    {s.text}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Right: voters + top badge */}
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {voters.length > 0 && (
-                              <>
-                                <div className="flex -space-x-1.5">
-                                  {voters.slice(0, 3).map((v) => (
-                                    <div
-                                      key={v}
-                                      title={v}
-                                      className="w-5 h-5 rounded-full border-2 border-white flex items-center justify-center text-[7px] font-bold text-white"
-                                      style={{ backgroundColor: getAvatarColor(v) }}
-                                    >
-                                      {getInitials(v)}
-                                    </div>
-                                  ))}
-                                </div>
-                                <span className={`text-xs font-bold ${mine ? "text-[#4A9BD9]" : "text-gray-400"}`}>
-                                  {voters.length}
-                                </span>
-                              </>
-                            )}
-                            {isTop && voters.length > 0 && (
-                              <span className="text-[10px] font-bold text-[#4A9BD9] bg-[#4A9BD9]/10 px-1.5 py-0.5 rounded-full shrink-0">
-                                top
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </button>
+                      </div>
                     );
                   })}
-                </div>
-
-                {/* ─── Proponi una nuova opzione ─── */}
-                <button
-                  type="button"
-                  onClick={() => onOpenPropose(section.type)}
-                  className="w-full flex items-center gap-2 px-4 py-3 text-sm font-semibold text-[#4A9BD9] border-t border-gray-100/80 active:bg-gray-50 transition-colors"
-                >
-                  <div className="w-5 h-5 rounded-full border border-[#4A9BD9]/50 flex items-center justify-center shrink-0">
-                    <span className="text-sm leading-none">+</span>
-                  </div>
-                  Proponi un&apos;opzione
-                </button>
-              </div>
+                </CardContent>
+                {showPollPropose && (
+                  <CardFooter className="rounded-b-lg border-t border-gray-200 bg-white p-0">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-9 w-full justify-start gap-1.5 rounded-none px-3 text-xs font-semibold text-primary hover:bg-gray-50"
+                      onClick={() => onOpenPropose(section.type)}
+                    >
+                      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-primary/40 text-xs leading-none">
+                        +
+                      </span>
+                      Proponi un&apos;opzione
+                    </Button>
+                  </CardFooter>
+                )}
+              </Card>
             );
           })}
         </div>
@@ -1082,7 +1113,7 @@ function EventSwitcher({
 }) {
   if (events.length === 0) return null;
   return (
-    <div className="bg-white border-b border-gray-100 overflow-x-auto">
+    <div className="overflow-x-auto border-b border-border bg-card">
       <div className="flex items-center gap-2 px-4 py-2" style={{ minWidth: "max-content" }}>
         {events.map(e => {
           const active = e.id === activeId;
@@ -1096,17 +1127,17 @@ function EventSwitcher({
               key={e.id}
               data-testid={`event-tab-${e.id}`}
               onClick={() => onChange(e.id)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 shrink-0 transition-all ${
+              className={`flex shrink-0 items-center gap-2 rounded-xl border-2 px-3 py-2 transition-all ${
                 active
-                  ? "border-black bg-black"
-                  : "border-gray-200 bg-white"
+                  ? "border-foreground bg-foreground shadow-sm"
+                  : "border-border bg-background hover:border-primary/35"
               }`}
             >
               <div className="text-left">
-                <p className={`text-xs font-bold leading-tight ${active ? "text-white" : "text-gray-900"}`}>
+                <p className={`text-xs font-bold leading-tight ${active ? "text-background" : "text-foreground"}`}>
                   {formatActivityLabel(e.activity)}
                 </p>
-                <p className={`text-[10px] leading-tight ${active ? "text-gray-300" : "text-gray-400"}`}>{label}</p>
+                <p className={`text-[10px] leading-tight ${active ? "text-white/90" : "text-muted-foreground"}`}>{label}</p>
               </div>
             </button>
           );
@@ -1129,6 +1160,7 @@ export default function AppChatDetail() {
   const [nameInput, setNameInput] = useState("");
   const [chatNames, setChatNames] = useState<Record<string, string>>(loadChatNames);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showUnconfirmCalendar, setShowUnconfirmCalendar] = useState(false);
   const [profileUser, setProfileUser] = useState<string | null>(null);
   const [showVoteBanner, setShowVoteBanner] = useState(false);
   const voteBannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1266,6 +1298,13 @@ export default function AppChatDetail() {
       }
       queryClient.invalidateQueries({ queryKey: ["/api/app/events", activeEventId, "votes"] });
     },
+    onError: (err: Error) => {
+      toast({
+        title: "Voto non registrato",
+        description: err.message || "Controlla la connessione e riprova.",
+        variant: "destructive",
+      });
+    },
   });
 
   // Delete event
@@ -1294,7 +1333,7 @@ export default function AppChatDetail() {
   // Proposta nuova opzione di voto diretta (creatore)
   const { mutate: proposeOption } = useMutation({
     mutationFn: ({ type, value }: { type: string; value: string }) =>
-      apiRequest("POST", `/api/app/events/${activeEventId}/options`, { type, value }),
+      apiRequest("POST", `/api/app/events/${activeEventId}/options`, { type, value, addedBy: currentUser }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/app/events", activeEventId] });
       queryClient.invalidateQueries({ queryKey: ["/api/app/events"] });
@@ -1323,7 +1362,7 @@ export default function AppChatDetail() {
 
   const { mutate: respondProposal } = useMutation({
     mutationFn: ({ id, status }: { id: number; status: "approved" | "rejected" }) =>
-      apiRequest("PUT", `/api/app/proposals/${id}`, { status }),
+      apiRequest("PUT", `/api/app/proposals/${id}`, { status, creatorName: currentUser }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/app/events", activeEventId, "proposals"] });
       queryClient.invalidateQueries({ queryKey: ["/api/app/events", activeEventId] });
@@ -1341,6 +1380,57 @@ export default function AppChatDetail() {
   // Solo il creatore può confermare l'evento
   const isCreator = currentUser === activeEvent?.createdBy;
   const isConfirmed = activeEvent?.status === "confirmed";
+
+  type AppJoinRequestRow = {
+    id: number;
+    eventId: number;
+    requesterName: string;
+    status: string;
+    createdAt?: string;
+  };
+
+  const { data: joinRequests = [] } = useQuery<AppJoinRequestRow[]>({
+    queryKey: ["/api/app/events", activeEventId, "join-requests", currentUser],
+    queryFn: () =>
+      safeFetch(
+        `/api/app/events/${activeEventId}/join-requests?forUser=${encodeURIComponent(currentUser)}`,
+      ),
+    enabled:
+      Boolean(activeEventId) &&
+      Boolean(activeEvent && currentUser === activeEvent.createdBy),
+    refetchInterval: 8000,
+  });
+
+  const { mutate: resolveJoinRequest } = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: "accepted" | "rejected" }) =>
+      apiRequest("PUT", `/api/app/join-requests/${id}`, { status, resolverName: currentUser }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/app/events", activeEventId, "join-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/app/events", activeEventId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/app/events"] });
+      toast({ title: "Richiesta aggiornata" });
+    },
+    onError: () => {
+      toast({ title: "Operazione non riuscita", variant: "destructive" });
+    },
+  });
+
+  const { mutate: unconfirmFromCalendar, isPending: unconfirmingCalendar } = useMutation({
+    mutationFn: () =>
+      apiRequest("PUT", `/api/app/events/${activeEventId}/unconfirm`, { actorName: currentUser }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/app/events", activeEventId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/app/events"] });
+      setShowUnconfirmCalendar(false);
+      toast({
+        title: "Rimosso dal calendario",
+        description: "L'evento è tornato in pianificazione: potete votare di nuovo.",
+      });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Operazione non riuscita", description: e.message, variant: "destructive" });
+    },
+  });
 
   const canUseChat = useMemo(() => {
     if (!activeEvent) return false;
@@ -1485,15 +1575,12 @@ export default function AppChatDetail() {
   );
 
   return (
-    <div className="flex flex-col min-h-full bg-[#F5F7FA]">
+    <div className="flex min-h-full flex-col bg-muted/40">
 
       {/* ─── Voto confermato banner ─── */}
       {showVoteBanner && (
         <div className="fixed top-[72px] left-1/2 -translate-x-1/2 z-[200] pointer-events-none">
-          <div
-            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl shadow-lg"
-            style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}
-          >
+          <div className="flex items-center gap-2 rounded-2xl bg-gradient-to-br from-primary to-primary/75 px-4 py-2.5 shadow-lg">
             <CheckIcon size={14} className="text-white shrink-0" />
             <span className="text-sm font-semibold text-white">Voto confermato</span>
           </div>
@@ -1535,14 +1622,13 @@ export default function AppChatDetail() {
                   value={nameInput}
                   onChange={e => setNameInput(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") confirmName(); if (e.key === "Escape") setEditingName(false); }}
-                  className="flex-1 text-sm font-bold text-gray-900 bg-gray-100 rounded-lg px-2 py-1 outline-none border border-[#4A9BD9] min-w-0"
+                  className="flex-1 text-sm font-bold text-gray-900 bg-gray-100 rounded-lg px-2 py-1 outline-none border border-primary min-w-0"
                   maxLength={40}
                 />
                 <button
                   data-testid="button-confirm-name"
                   onClick={confirmName}
-                  className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
-                  style={{ background: "#4A9BD9" }}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary"
                 >
                   <CheckIcon size={13} className="text-white" strokeWidth={3} />
                 </button>
@@ -1554,7 +1640,7 @@ export default function AppChatDetail() {
                 className="flex items-center gap-1.5 group max-w-full"
               >
                 <p className="font-bold text-gray-900 truncate">{headerName}</p>
-                <Pencil size={12} className="text-gray-300 group-hover:text-[#4A9BD9] transition-colors shrink-0" />
+                <Pencil size={12} className="text-gray-300 group-hover:text-primary transition-colors shrink-0" />
               </button>
             )}
             {!isOneToOne && !editingName && (
@@ -1572,10 +1658,48 @@ export default function AppChatDetail() {
           onChange={switchEvent}
         />
 
+        {isCreator &&
+          activeEvent &&
+          joinRequests.filter((j) => j.status === "pending").length > 0 && (
+            <div className="px-3 pb-2 space-y-2" data-testid="join-requests-panel">
+              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">
+                Richieste di partecipazione
+              </p>
+              {joinRequests
+                .filter((j) => j.status === "pending")
+                .map((j) => (
+                  <div
+                    key={j.id}
+                    className="flex items-center justify-between gap-2 rounded-xl bg-primary/10 border border-primary/25 px-3 py-2.5"
+                  >
+                    <span className="text-sm font-semibold text-gray-900 truncate">{j.requesterName}</span>
+                    <div className="flex gap-2 shrink-0">
+                      <button
+                        type="button"
+                        data-testid={`join-accept-${j.id}`}
+                        onClick={() => resolveJoinRequest({ id: j.id, status: "accepted" })}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-primary"
+                      >
+                        Accetta
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`join-reject-${j.id}`}
+                        onClick={() => resolveJoinRequest({ id: j.id, status: "rejected" })}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold text-gray-600 bg-gray-100"
+                      >
+                        Rifiuta
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+
         {inviteChatUrl ? (
           <div className="px-3 pb-2 shrink-0 w-full max-w-full box-border" data-testid="row-chat-invite-link">
             <div className="flex items-center gap-2 rounded-xl bg-gray-50 border border-gray-100 px-2.5 py-2 min-w-0">
-              <Link2 size={14} className="text-[#4A9BD9] shrink-0" aria-hidden />
+              <Link2 size={14} className="text-primary shrink-0" aria-hidden />
               <p className="text-[11px] text-gray-600 flex-1 min-w-0 leading-tight truncate" title={inviteChatUrl}>
                 Link per invitare al gruppo
               </p>
@@ -1596,50 +1720,44 @@ export default function AppChatDetail() {
           </div>
         ) : null}
 
-        {/* ─── Tab switcher: Voto | Chat ─── */}
-        <div className="flex border-b border-gray-100">
-          <button
-            data-testid="tab-vote"
-            type="button"
-            onClick={() => {
-              setShowChatLockedBanner(false);
-              setView("vote");
-            }}
-            className={`flex-1 py-3.5 text-base font-bold transition-colors ${
-              view === "vote"
-                ? "text-black border-b-[3px] border-black"
-                : "text-gray-400"
-            }`}
-          >
-            Voto
-          </button>
-          <button
-            data-testid="tab-chat"
-            type="button"
-            onClick={() => {
-              if (!canUseChat) {
-                showChatLockedNotice();
-                return;
-              }
-              setShowChatLockedBanner(false);
-              setView("chat");
-            }}
-            className={`flex-1 py-3.5 text-base font-bold transition-colors ${
-              view === "chat"
-                ? "text-black border-b-[3px] border-black"
-                : canUseChat
-                  ? "text-gray-400"
-                  : "text-gray-300"
-            }`}
-          >
-            Chat
-            {messages.length > 0 && view !== "chat" && (
-              <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold text-white" style={{ background: "#4A9BD9" }}>
-                {messages.length > 9 ? "9+" : messages.length}
-              </span>
-            )}
-          </button>
-        </div>
+        {/* ─── Tab switcher: Voto | Chat (shadcn Tabs) ─── */}
+        <Tabs
+          value={view}
+          onValueChange={(v) => {
+            const next = v as "vote" | "chat";
+            if (next === "chat" && !canUseChat) {
+              showChatLockedNotice();
+              return;
+            }
+            setShowChatLockedBanner(false);
+            setView(next);
+          }}
+          className="w-full shrink-0 border-b border-border"
+        >
+          <TabsList className="grid h-12 w-full grid-cols-2 gap-0 rounded-none border-0 bg-muted/40 p-0">
+            <TabsTrigger
+              data-testid="tab-vote"
+              value="vote"
+              className="h-full rounded-none border-0 border-b-2 border-transparent py-0 text-base font-bold shadow-none data-[state=active]:border-primary data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground"
+            >
+              Voto
+            </TabsTrigger>
+            <TabsTrigger
+              data-testid="tab-chat"
+              value="chat"
+              className={`relative h-full rounded-none border-0 border-b-2 border-transparent py-0 text-base font-bold shadow-none data-[state=active]:border-primary data-[state=active]:bg-background data-[state=active]:text-foreground ${
+                canUseChat ? "data-[state=inactive]:text-muted-foreground" : "text-muted-foreground/60"
+              }`}
+            >
+              Chat
+              {messages.length > 0 && view !== "chat" && (
+                <Badge className="ml-2 h-5 min-w-5 border-0 bg-primary px-1.5 text-[11px] font-bold text-primary-foreground">
+                  {messages.length > 9 ? "9+" : messages.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         {showChatLockedBanner && !canUseChat && (
           <div className="px-3 pb-2 shrink-0 w-full max-w-full box-border" data-testid="banner-chat-locked">
@@ -1695,17 +1813,17 @@ export default function AppChatDetail() {
           <div className="absolute inset-0 bg-black/40" />
           <div className="relative z-10 bg-white rounded-t-3xl shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-1" />
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-              <h3 className="font-bold text-gray-900 text-base">Cosa vuoi proporre?</h3>
-              <button onClick={() => setShowProposalTypeChooser(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100">
-                <X size={16} className="text-gray-500" />
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
+              <h3 className="font-bold text-gray-900 text-sm">Cosa vuoi proporre?</h3>
+              <button onClick={() => setShowProposalTypeChooser(false)} className="w-7 h-7 flex items-center justify-center rounded-full bg-gray-100">
+                <X size={14} className="text-gray-500" />
               </button>
             </div>
-            <div className="px-4 py-4 grid grid-cols-3 gap-3 pb-6">
+            <div className="px-3 py-3 grid grid-cols-3 gap-2 pb-5">
               {[
+                { key: "venue", label: "Luogo",  Icon: MapPinned },
                 { key: "date",  label: "Data",   Icon: CalendarSearch },
                 { key: "time",  label: "Orario", Icon: Timer },
-                { key: "venue", label: "Luogo",  Icon: MapPinned },
               ].map(({ key, label, Icon }) => (
                 <button
                   key={key}
@@ -1714,10 +1832,10 @@ export default function AppChatDetail() {
                     setShowProposalTypeChooser(false);
                     setProposalSheetType(key as "date" | "time" | "venue");
                   }}
-                  className="flex flex-col items-center gap-2 py-5 rounded-2xl bg-[#EBF5FB] text-[#4A9BD9] active:scale-95 transition-transform"
+                  className="flex flex-col items-center gap-1.5 py-3.5 rounded-xl bg-primary/10 text-primary active:scale-95 transition-transform"
                 >
-                  <Icon size={22} />
-                  <span className="text-sm font-bold">{label}</span>
+                  <Icon size={18} />
+                  <span className="text-xs font-bold">{label}</span>
                 </button>
               ))}
             </div>
@@ -1752,7 +1870,11 @@ export default function AppChatDetail() {
                 const participants = activeEvent.participants;
                 const yesCount = participants.filter(p => attendanceByUser(p) === "yes").length;
                 const noCount  = participants.filter(p => attendanceByUser(p) === "no").length;
+                const maybeCount = participants.filter(p => attendanceByUser(p) === "maybe").length;
                 const showRsvpYes = getVotablePollTypesForEvent(activeEvent).length === 0;
+                const rsvpMode = surveyBehavior(parseSurveyMode(activeEvent.surveyMode));
+                const showMaybe = rsvpMode.attendance === "ternary";
+                const canRsvpPropose = !isCreator && allowsMemberProposals(parseSurveyMode(activeEvent.surveyMode));
 
                 return (
                   <div className="px-4 pt-5 pb-4 border-b border-gray-100">
@@ -1762,21 +1884,24 @@ export default function AppChatDetail() {
                         {yesCount > 0 && (
                           <span className="font-semibold text-emerald-600">{yesCount} sì</span>
                         )}
+                        {maybeCount > 0 && (
+                          <span className="font-semibold text-amber-600">{maybeCount} forse</span>
+                        )}
                         {noCount > 0 && (
                           <span className="font-semibold text-red-400">{noCount} no</span>
                         )}
                       </div>
                     </div>
 
-                    {/* RSVP: "Sì ci sono" solo se non ci sono sondaggi (giorno/ora/luogo tutti predefiniti singoli) */}
-                    <div className="flex gap-2 mb-4">
+                    {/* RSVP: "Sì ci sono" se non ci sono sondaggi votabili; "Forse" se la modalità lo prevede */}
+                    <div className="flex flex-wrap gap-2 mb-4">
                       {showRsvpYes && (
                         <button
                           data-testid="button-rsvp-yes"
                           type="button"
                           aria-pressed={myAttendance === "yes"}
                           onClick={() => castVote({ voteType: "attendance", voteValue: "yes" })}
-                          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                          className={`min-w-[28%] flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 ${
                             myAttendance === "yes"
                               ? "bg-emerald-500 text-white shadow-sm"
                               : "bg-emerald-50 text-emerald-600 border border-emerald-200"
@@ -1786,12 +1911,27 @@ export default function AppChatDetail() {
                           Sì ci sono
                         </button>
                       )}
+                      {showMaybe && (
+                        <button
+                          data-testid="button-rsvp-maybe"
+                          type="button"
+                          aria-pressed={myAttendance === "maybe"}
+                          onClick={() => castVote({ voteType: "attendance", voteValue: "maybe" })}
+                          className={`min-w-[28%] flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                            myAttendance === "maybe"
+                              ? "bg-amber-500 text-white shadow-sm"
+                              : "bg-amber-50 text-amber-800 border border-amber-200"
+                          }`}
+                        >
+                          Forse
+                        </button>
+                      )}
                       <button
                         data-testid="button-rsvp-no"
                         type="button"
                         aria-pressed={myAttendance === "no"}
                         onClick={() => castVote({ voteType: "attendance", voteValue: "no" })}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                        className={`min-w-[28%] flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 ${
                           myAttendance === "no"
                             ? "bg-red-500 text-white shadow-sm"
                             : "bg-red-50 text-red-500 border border-red-200"
@@ -1800,11 +1940,11 @@ export default function AppChatDetail() {
                         <UserMinus size={15} />
                         No
                       </button>
-                      {!isCreator && (
+                      {canRsvpPropose && (
                         <button
                           data-testid="button-rsvp-propose"
                           onClick={() => setShowProposalTypeChooser(true)}
-                          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold bg-[#EBF5FB] text-[#4A9BD9] border border-[#4A9BD9]/30 active:scale-95 transition-all"
+                          className="min-w-[28%] flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold bg-primary/10 text-primary border border-primary/30 active:scale-95 transition-all"
                         >
                           <Plus size={15} />
                           Proponi
@@ -1822,6 +1962,7 @@ export default function AppChatDetail() {
                             key={name}
                             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border ${
                               att === "yes" ? "bg-emerald-50 border-emerald-100" :
+                              att === "maybe" ? "bg-amber-50 border-amber-100" :
                               att === "no"  ? "bg-red-50 border-red-100" :
                               "bg-gray-50 border-gray-100"
                             }`}
@@ -1834,11 +1975,12 @@ export default function AppChatDetail() {
                             </div>
                             <span className={`text-xs font-semibold ${
                               att === "yes" ? "text-emerald-600" :
+                              att === "maybe" ? "text-amber-700" :
                               att === "no"  ? "text-red-400" :
                               "text-gray-400"
                             }`}>{displayName}</span>
                             <span className="text-xs">
-                              {att === "yes" ? "✓" : att === "no" ? "✗" : "–"}
+                              {att === "yes" ? "✓" : att === "no" ? "✗" : att === "maybe" ? "?" : "–"}
                             </span>
                           </div>
                         );
@@ -1932,20 +2074,39 @@ export default function AppChatDetail() {
                   }
                 }}
                 currentUser={currentUser}
+                isCreator={isCreator}
               />
+
+              {surveyBehavior(parseSurveyMode(activeEvent.surveyMode)).creatorTiebreakHint && (
+                <p className="px-4 pb-2 text-[10px] leading-snug text-muted-foreground">
+                  Pareggio: di solito l&apos;organizzatore propone lo spareggio finale col gruppo.
+                </p>
+              )}
 
               {/* ─── Action Strip ─── */}
               <div className="px-4 py-4 border-t border-gray-100 space-y-2.5">
                 <div className="flex gap-2 items-center">
                   {isConfirmed ? (
-                    <div className="flex items-center gap-2 flex-1 justify-center py-2.5 rounded-xl text-sm font-semibold bg-green-50 text-green-600 border border-green-200">
-                      <CheckCircle2 size={15} />Nel calendario
-                    </div>
+                    isCreator ? (
+                      <button
+                        type="button"
+                        data-testid="button-in-calendar-toggle"
+                        onClick={() => setShowUnconfirmCalendar(true)}
+                        className="flex items-center gap-2 flex-1 justify-center py-2.5 rounded-xl text-sm font-semibold bg-green-50 text-green-700 border border-green-200 active:scale-[0.98] transition-transform"
+                      >
+                        <CheckCircle2 size={15} />
+                        Nel calendario
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2 flex-1 justify-center py-2.5 rounded-xl text-sm font-semibold bg-green-50 text-green-600 border border-green-200">
+                        <CheckCircle2 size={15} />Nel calendario
+                      </div>
+                    )
                   ) : isCreator ? (
                     <button
                       data-testid="button-add-calendar"
                       onClick={handleConfirmEvent}
-                      className="flex items-center flex-1 justify-center py-2.5 rounded-xl text-[13px] font-semibold bg-[#4A9BD9] text-white transition-all active:scale-95 whitespace-nowrap"
+                      className="flex items-center flex-1 justify-center py-2.5 rounded-xl text-[13px] font-semibold bg-primary text-white transition-all active:scale-95 whitespace-nowrap"
                     >
                       Aggiungi a calendario
                     </button>
@@ -1969,9 +2130,9 @@ export default function AppChatDetail() {
                   <button
                     data-testid="button-add-options"
                     onClick={() => setShowCreatorOptions(true)}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold border-2 border-dashed border-[#4A9BD9]/40 text-[#4A9BD9] bg-[#EBF5FB]/60 active:bg-[#EBF5FB] transition-colors"
+                    className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold border-2 border-dashed border-primary/40 text-primary bg-primary/10 active:bg-primary/15 transition-colors"
                   >
-                    <Plus size={15} />
+                    <Plus size={14} />
                     Aggiungi opzioni al sondaggio
                   </button>
                 )}
@@ -2053,8 +2214,11 @@ export default function AppChatDetail() {
                       {!isMe && !msg.isFirst && <div className="w-6 shrink-0" />}
 
                       <div
-                        className={`px-3.5 py-2.5 rounded-2xl ${isMe ? "text-white" : "bg-gray-100 text-gray-900"}`}
-                        style={isMe ? { background: "linear-gradient(135deg, #4A9BD9, #5AAEE0)" } : {}}
+                        className={`rounded-2xl px-3.5 py-2.5 ${
+                          isMe
+                            ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground"
+                            : "bg-muted text-foreground"
+                        }`}
                       >
                         <p className="text-sm leading-relaxed">{msg.content}</p>
                       </div>
@@ -2088,21 +2252,59 @@ export default function AppChatDetail() {
                 onKeyDown={(e) => e.key === "Enter" && handleSend()}
                 placeholder={canUseChat ? "Scrivi un messaggio..." : "Completa i voti per scrivere..."}
                 disabled={!canUseChat}
-                className="flex-1 bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2.5 text-sm outline-none focus:border-[#4A9BD9] transition-colors disabled:opacity-50"
+                className="flex-1 bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2.5 text-sm outline-none focus:border-primary transition-colors disabled:opacity-50"
               />
               <button
                 data-testid="button-send-message"
                 type="button"
                 onClick={handleSend}
                 disabled={!text.trim() || isPending || !canUseChat}
-                className="w-10 h-10 rounded-full flex items-center justify-center disabled:opacity-40 transition-opacity active:scale-95 shrink-0"
-                style={{ background: "linear-gradient(135deg, #4A9BD9, #7CB9E8)" }}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/75 disabled:opacity-40 active:scale-95 transition-opacity"
               >
                 <Send size={16} className="text-white" />
               </button>
             </div>
           </div>
         </>
+      )}
+
+      {/* ─── Annulla conferma (calendario) — solo creatore ─── */}
+      {showUnconfirmCalendar && activeEvent && (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 px-4 pb-8">
+          <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-11 h-11 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                <CalendarX size={20} className="text-amber-700" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900">Togliere dal calendario?</h3>
+                <p className="text-xs text-gray-400">L&apos;evento torna in pianificazione per tutti</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 my-4 leading-relaxed">
+              Confermi di voler annullare la conferma? Potrete votare di nuovo e rimettere l&apos;evento in calendario dopo.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                data-testid="button-cancel-unconfirm-calendar"
+                onClick={() => setShowUnconfirmCalendar(false)}
+                className="flex-1 py-3 rounded-xl font-semibold text-gray-600 bg-gray-100 text-sm"
+              >
+                Annulla
+              </button>
+              <button
+                type="button"
+                data-testid="button-confirm-unconfirm-calendar"
+                onClick={() => unconfirmFromCalendar()}
+                disabled={unconfirmingCalendar}
+                className="flex-1 py-3 rounded-xl font-semibold text-white bg-amber-600 text-sm disabled:opacity-60"
+              >
+                {unconfirmingCalendar ? "Aggiornamento…" : "Togli dal calendario"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ─── Conferma eliminazione evento ─── */}

@@ -44,3 +44,18 @@ test("strong normalization dedupes CH4 variants", () => {
   const b = normalizeVenueIdentity("Sporting Club CH4", "Via Trofarello 10 Torino");
   assert.equal(a, b);
 });
+
+test("pranzo/cena intent rejects historic cafés without meal venue profile", () => {
+  const caffe = {
+    ...baseVenue,
+    name: "Caffè Mulassano",
+    description: "Tramezzini storici e caffè al banco",
+  };
+  assert.equal(venueMatchesIntent(caffe, "cibo", "Pranzo"), false);
+  const ristorante = {
+    ...baseVenue,
+    name: "Trattoria Valenza",
+    description: "Cucina piemontese e pranzo al tavolo nel centro",
+  };
+  assert.equal(venueMatchesIntent(ristorante, "cibo", "Pranzo"), true);
+});
