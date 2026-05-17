@@ -1,14 +1,22 @@
-import type { ReactNode } from "react";
-import { Check, Sparkles } from "lucide-react";
+import { Check, ChevronLeft, Sparkles } from "lucide-react";
+import { PianificaStepGuide } from "@/components/PianificaStepGuide";
 import { cn } from "@/lib/utils";
 import {
   SURVEY_MODE_CARDS,
   type SurveyModeId,
 } from "@shared/surveyModes";
 
+export type SurveyPreviewGuide = {
+  stepLabel: string;
+  title: string;
+  body: string;
+  action: string;
+};
+
 type Props = {
-  /** Istruzioni demo / contenuto sopra l'elenco: scorre insieme alle card. */
-  guide?: ReactNode;
+  /** Banner istruzioni demo: sempre card bianca (gestito qui, non dal genitore). */
+  previewGuide?: SurveyPreviewGuide | null;
+  onBack?: () => void;
   value: SurveyModeId;
   onChange: (id: SurveyModeId) => void;
   onContinue: () => void;
@@ -79,7 +87,8 @@ function ModePreview({ id }: { id: SurveyModeId }) {
 }
 
 export function SurveyModePicker({
-  guide,
+  previewGuide,
+  onBack,
   value,
   onChange,
   onContinue,
@@ -94,8 +103,21 @@ export function SurveyModePicker({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-blue-600">
-      <div className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain bg-blue-600 pb-2 no-scrollbar [-webkit-overflow-scrolling:touch]">
-        {guide}
+      <div
+        data-testid="survey-mode-scroll"
+        className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain bg-blue-600 pb-2 no-scrollbar [-webkit-overflow-scrolling:touch]"
+      >
+        {previewGuide ? <PianificaStepGuide {...previewGuide} variant="onBlue" /> : null}
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="mx-5 mb-2 flex items-center gap-1.5 text-xs font-semibold text-blue-100 hover:text-white"
+          >
+            <ChevronLeft size={16} />
+            Indietro ai luoghi
+          </button>
+        ) : null}
         <div className="px-5 pt-3 pb-2">
           <p className="text-xs font-bold uppercase tracking-wide text-blue-200">Dopo i luoghi</p>
           <h2 className="mt-1 text-lg font-bold text-white">Tipo di sondaggio</h2>
@@ -103,7 +125,7 @@ export function SurveyModePicker({
             Come votare su data, orario e luogo. Indietro modifica la lista luoghi.
           </p>
           {showRecBanner && (
-            <div className="mt-3 rounded-xl border border-white/25 bg-white/95 px-3 py-2.5 shadow-sm">
+            <div className="mt-3 rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm">
               <div className="flex items-start gap-2">
                 <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" aria-hidden />
                 <div className="min-w-0 flex-1">
@@ -140,10 +162,18 @@ export function SurveyModePicker({
                 onClick={() => onChange(card.id)}
                 className={cn(
                   "relative flex flex-col rounded-xl border-2 bg-white p-2.5 text-left transition-all active:scale-[0.98]",
-                  sel ? "border-primary ring-1 ring-primary/20 shadow-sm" : "border-gray-100 hover:border-gray-200",
+                  sel
+                    ? "z-[1] border-amber-400 shadow-lg shadow-amber-500/25 ring-[3px] ring-amber-300 ring-offset-2 ring-offset-blue-600"
+                    : "border-gray-100 hover:border-gray-200",
                   isRecommended && !sel && "border-amber-200 ring-1 ring-amber-200/60",
                 )}
+                aria-pressed={sel}
               >
+                {sel && (
+                  <span className="absolute -left-1 -top-1 z-[2] flex h-5 w-5 items-center justify-center rounded-full border-2 border-amber-400 bg-amber-300 text-amber-950 shadow-sm">
+                    <Check size={12} strokeWidth={3} aria-hidden />
+                  </span>
+                )}
                 {isRecommended && (
                   <span className="absolute right-2 top-2 z-[1] flex items-center gap-0.5 rounded-full bg-amber-500 px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-wide text-white shadow-sm">
                     <Sparkles className="h-2.5 w-2.5" aria-hidden />
@@ -167,7 +197,7 @@ export function SurveyModePicker({
           data-testid="button-survey-mode-continue"
           onClick={onContinue}
           disabled={isSubmitting}
-          className="min-h-12 w-full touch-manipulation rounded-xl bg-white py-3 text-base font-bold text-blue-700 shadow-md active:opacity-90 disabled:pointer-events-none disabled:opacity-50"
+          className="min-h-12 w-full touch-manipulation rounded-xl bg-white py-3 text-base font-bold text-blue-700 shadow-md active:opacity-90 disabled:opacity-50"
         >
           {isSubmitting ? "Creazione in corso…" : "Crea evento con questo sondaggio"}
         </button>

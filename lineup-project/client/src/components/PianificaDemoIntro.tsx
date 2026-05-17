@@ -34,7 +34,10 @@ export function PianificaDemoIntro({ userName, onContinue }: Props) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 [-webkit-overflow-scrolling:touch] touch-pan-y">
+      <div
+        data-testid="demo-intro-scroll"
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 [-webkit-overflow-scrolling:touch] touch-pan-y"
+      >
         <div className="mx-auto w-full max-w-[320px]">
           <p className="text-center text-sm font-medium text-muted-foreground">{greeting}</p>
           <h2 className="mt-2 text-center text-2xl font-bold tracking-tight text-foreground">

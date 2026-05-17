@@ -12,10 +12,7 @@ import { PLAN_CATEGORIES, PLAN_SUBCATEGORIES, venuePoolKeyForPlanSubcategory } f
 import { VenueExternalLinks } from "@/components/VenueExternalLinks";
 import { SurveyModePicker } from "@/components/SurveyModePicker";
 import { PianificaStepGuide } from "@/components/PianificaStepGuide";
-import {
-  PianificaPreviewCompletion,
-  type PreviewProfile,
-} from "@/components/PianificaPreviewCompletion";
+import type { PreviewProfile } from "@/components/PianificaPreviewCompletion";
 import { getPianificaPreviewGuide, type PreviewGuideId } from "@/lib/pianificaPreviewGuides";
 import {
   DEFAULT_SURVEY_MODE,
@@ -44,6 +41,8 @@ interface AppCreateEventProps {
   previewMode?: boolean;
   /** Nome e email raccolti in gate demo (per feedback finale). */
   previewProfile?: PreviewProfile;
+  /** Demo: il genitore (modale) mostra la schermata completamento — evita scroll annidati. */
+  onPreviewComplete?: () => void;
 }
 
 export default function AppCreateEvent({
@@ -51,13 +50,14 @@ export default function AppCreateEvent({
   fromScopri,
   previewMode,
   previewProfile,
+  onPreviewComplete,
 }: AppCreateEventProps) {
   const fromScopriFlow = Boolean(fromScopri && fromScopri.venues.length > 0);
 
-  const renderPreviewGuide = (id: PreviewGuideId) => {
+  const renderPreviewGuide = (id: PreviewGuideId, variant?: "default" | "onBlue") => {
     if (!previewMode) return null;
     const guide = getPianificaPreviewGuide(id, fromScopriFlow);
-    return <PianificaStepGuide {...guide} />;
+    return <PianificaStepGuide {...guide} variant={variant ?? (id === "step6" ? "onBlue" : "default")} />;
   };
   const [surveyMode, setSurveyMode] = useState<SurveyModeId>(DEFAULT_SURVEY_MODE);
   const [step, setStep] = useState(0);
@@ -99,6 +99,9 @@ export default function AppCreateEvent({
       if (!r.ok) return { friends: [] };
       return r.json();
     },
+    retry: false,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
   });
   const friendsList = friendsRes?.friends ?? [];
 
@@ -126,6 +129,9 @@ export default function AppCreateEvent({
 
   const { mutate: createEvent, isPending } = useMutation({
     mutationFn: async () => {
+      if (previewMode) {
+        return { id: 0 };
+      }
       const participants = [currentUser, ...(selectedGroup
         ? [selectedGroup]
         : selectedContacts
@@ -349,7 +355,10 @@ export default function AppCreateEvent({
 
   if (step === 0) return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar [-webkit-overflow-scrolling:touch] touch-pan-y">
+      <div
+        data-testid="wizard-step-scroll"
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar [-webkit-overflow-scrolling:touch] touch-pan-y"
+      >
         {renderPreviewGuide("step0")}
         {fromScopriFlow && (
           <p className="text-xs text-primary font-semibold px-6 pt-1 leading-relaxed">
@@ -464,7 +473,10 @@ export default function AppCreateEvent({
       {/* ── Vista categorie ── */}
       {!selectedCategory && (
         <>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar [-webkit-overflow-scrolling:touch] touch-pan-y">
+          <div
+            data-testid="wizard-step-scroll"
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar [-webkit-overflow-scrolling:touch] touch-pan-y"
+          >
             {renderPreviewGuide("step1-category")}
             <div className="px-5 pt-4 pb-3">
             <p className="text-sm text-gray-500 mb-4">Scegli una categoria per la tua proposta di attività.</p>
@@ -504,7 +516,10 @@ export default function AppCreateEvent({
       {/* ── Vista sottocategorie ── */}
       {selectedCategory && (
         <>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar [-webkit-overflow-scrolling:touch] touch-pan-y">
+          <div
+            data-testid="wizard-step-scroll"
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar [-webkit-overflow-scrolling:touch] touch-pan-y"
+          >
             {renderPreviewGuide("step1-sub")}
             <div className="px-5 pt-4 pb-3">
             {/* Header con categoria selezionata */}
@@ -648,7 +663,10 @@ export default function AppCreateEvent({
 
     return (
       <div className="flex h-full min-h-0 flex-col">
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar [-webkit-overflow-scrolling:touch] touch-pan-y">
+        <div
+          data-testid="wizard-step-scroll"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar [-webkit-overflow-scrolling:touch] touch-pan-y"
+        >
           {renderPreviewGuide("step2")}
 
           {/* Navigazione mese */}
@@ -731,7 +749,10 @@ export default function AppCreateEvent({
 
     return (
       <div className="flex h-full min-h-0 flex-col">
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pt-4 pb-2 no-scrollbar">
+        <div
+          data-testid="wizard-step-scroll"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pt-4 pb-2 no-scrollbar [-webkit-overflow-scrolling:touch] touch-pan-y"
+        >
           {renderPreviewGuide("step3")}
           <p className="text-sm text-gray-500 mb-4">
             Vuoi indicare una fascia oraria? Puoi anche saltare.
@@ -820,7 +841,10 @@ export default function AppCreateEvent({
 
     return (
       <div className="flex h-full min-h-0 flex-col">
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-6 pt-4 pb-2 no-scrollbar">
+        <div
+          data-testid="wizard-step-scroll"
+          className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-6 pt-4 pb-2 no-scrollbar [-webkit-overflow-scrolling:touch] touch-pan-y"
+        >
           {renderPreviewGuide("step4")}
           <p className="text-sm text-gray-500">
             Vuoi indicare un orario per i giorni selezionati? Puoi anche saltare.
@@ -972,7 +996,7 @@ export default function AppCreateEvent({
     if (fromScopriFlow) {
       return (
         <div className="flex h-full min-h-0 flex-col">
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-6 pt-4 pb-2 no-scrollbar">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-6 pt-4 pb-2 no-scrollbar [-webkit-overflow-scrolling:touch] touch-pan-y">
             {renderPreviewGuide("step5")}
             {banner}
             <p className="text-sm text-gray-500">
@@ -1019,7 +1043,10 @@ export default function AppCreateEvent({
 
     return (
       <div className="flex h-full min-h-0 flex-col">
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-6 pt-4 pb-2 no-scrollbar">
+        <div
+          data-testid="wizard-step-scroll"
+          className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-6 pt-4 pb-2 no-scrollbar [-webkit-overflow-scrolling:touch] touch-pan-y"
+        >
           {renderPreviewGuide("step5")}
           {banner}
 
@@ -1180,25 +1207,20 @@ export default function AppCreateEvent({
   // Step 6: tipo di sondaggio (dopo la scelta dei luoghi), poi creazione evento
   if (step === 6 && !done) {
     return (
-      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="flex h-full min-h-0 flex-col">
         <SurveyModePicker
-          guide={
-            <>
-              {renderPreviewGuide("step6")}
-              <button
-                type="button"
-                onClick={() => setStep(5)}
-                className="mx-5 mb-2 flex items-center gap-1.5 text-xs font-semibold text-blue-100 hover:text-white"
-              >
-                <ChevronLeft size={16} />
-                Indietro ai luoghi
-              </button>
-            </>
-          }
+          previewGuide={previewMode ? getPianificaPreviewGuide("step6", fromScopriFlow) : null}
+          onBack={() => setStep(5)}
           value={surveyMode}
           onChange={setSurveyMode}
-          onContinue={() => createEvent()}
-          isSubmitting={isPending}
+          onContinue={() => {
+            if (previewMode) {
+              onPreviewComplete?.();
+              return;
+            }
+            createEvent();
+          }}
+          isSubmitting={!previewMode && isPending}
           recommendedId={surveyRecommendation.mode}
           recommendationReason={surveyRecommendation.reason}
           onApplyRecommendation={() => setSurveyMode(surveyRecommendation.mode)}
@@ -1210,12 +1232,7 @@ export default function AppCreateEvent({
   // Success
   if (done) {
     if (previewMode) {
-      return (
-        <PianificaPreviewCompletion
-          profile={previewProfile ?? { name: "", email: "" }}
-          onClose={onClose}
-        />
-      );
+      return null;
     }
 
     return (

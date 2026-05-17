@@ -1,9 +1,16 @@
-import { useEffect, useState } from "react";
-import { Link } from "wouter";
-import { CalendarPlus, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation } from "wouter";
+import { CalendarPlus, ChevronDown, X } from "lucide-react";
 import AppCreateEvent from "@/pages/AppCreateEvent";
 import { AiVenuesSoonIcon } from "@/components/icons/AiVenuesSoonIcon";
 import { PianificaDemoIntro } from "@/components/PianificaDemoIntro";
+import {
+  PianificaPreviewCompletion,
+  scrollCompletionRoot,
+} from "@/components/PianificaPreviewCompletion";
+import { useBodyScrollLock, releaseBodyScrollLock } from "@/hooks/use-body-scroll-lock";
+import { DEMO_COMPLETION_SCROLL_TEST_ID } from "@/lib/demoModalScroll";
+import { cn } from "@/lib/utils";
 import { setCurrentUser } from "@/lib/appUtils";
 
 const GATE_STORAGE_KEY = "lineup_pianifica_demo_gate_v1";
@@ -37,19 +44,50 @@ function completeDemoGate(profile: DemoGateProfile) {
  * Pagina pubblica di prova (QR): nome + email, poi tasto Pianifica.
  * Senza bottom nav e senza navigazione alla chat dopo la creazione.
  */
+const RISCONTRI_DOUBLE_TAP_MS = 450;
+
 export default function AppPianificaDemo() {
+  const [, navigate] = useLocation();
+  const riscontriLastTapRef = useRef(0);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [modalPhase, setModalPhase] = useState<"wizard" | "complete">("wizard");
   const [gateDone, setGateDone] = useState(false);
   const [introDone, setIntroDone] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const completionScrollRef = useRef<HTMLDivElement>(null);
+  const [completionCanScrollMore, setCompletionCanScrollMore] = useState(true);
+
+  useBodyScrollLock(sheetOpen && modalPhase === "wizard");
+
   useEffect(() => {
-    if (!sheetOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
+    if (sheetOpen && modalPhase === "complete") releaseBodyScrollLock();
+  }, [sheetOpen, modalPhase]);
+
+  useEffect(() => {
+    if (!sheetOpen || modalPhase !== "complete") {
+      setCompletionCanScrollMore(false);
+      return;
+    }
+    const el = completionScrollRef.current;
+    if (!el) return;
+    const update = () => {
+      setCompletionCanScrollMore(el.scrollTop + el.clientHeight < el.scrollHeight - 40);
     };
+    update();
+    const t = window.setTimeout(update, 150);
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      window.clearTimeout(t);
+      el.removeEventListener("scroll", update);
+      ro.disconnect();
+    };
+  }, [sheetOpen, modalPhase]);
+
+  useEffect(() => {
+    if (!sheetOpen) setModalPhase("wizard");
   }, [sheetOpen]);
 
   useEffect(() => {
@@ -90,6 +128,29 @@ export default function AppPianificaDemo() {
     setGateDone(true);
   };
 
+  const closeSheet = useCallback(() => {
+    setSheetOpen(false);
+    setModalPhase("wizard");
+  }, []);
+
+  const openRiscontriAdmin = useCallback(() => {
+    releaseBodyScrollLock();
+    setSheetOpen(false);
+    setModalPhase("wizard");
+    navigate("/prova-pianifica/riscontri");
+  }, [navigate]);
+
+  /** Doppio tap/click: un solo tocco non apre il pannello feedback. */
+  const onRiscontriTap = useCallback(() => {
+    const now = Date.now();
+    if (now - riscontriLastTapRef.current < RISCONTRI_DOUBLE_TAP_MS) {
+      riscontriLastTapRef.current = 0;
+      openRiscontriAdmin();
+    } else {
+      riscontriLastTapRef.current = now;
+    }
+  }, [openRiscontriAdmin]);
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       <div className="shrink-0 border-b border-border bg-card px-5 pb-4 pt-[max(2.75rem,env(safe-area-inset-top))] shadow-soft">
@@ -102,7 +163,11 @@ export default function AppPianificaDemo() {
       </div>
 
       {!gateDone ? (
-        <div className="flex min-h-0 flex-1 flex-col justify-center overflow-y-auto overscroll-contain px-5 py-6 [-webkit-overflow-scrolling:touch]">
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div
+            data-testid="demo-gate-scroll"
+            className="flex min-h-0 flex-1 flex-col justify-center overflow-y-auto overscroll-contain px-5 py-4 [-webkit-overflow-scrolling:touch] touch-pan-y"
+          >
           <form
             className="mx-auto w-full max-w-[320px] rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
             onSubmit={confirmGate}
@@ -148,6 +213,18 @@ export default function AppPianificaDemo() {
               Conferma
             </button>
           </form>
+          </div>
+          <div className="shrink-0 px-5 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+            <button
+              type="button"
+              data-testid="link-demo-feedback-admin"
+              onClick={onRiscontriTap}
+              className="mx-auto block min-h-9 w-full touch-manipulation py-2 text-center text-[10px] font-medium text-gray-300/85 select-none active:text-gray-400"
+              aria-label="Riscontri demo. Doppio clic o doppio tocco per aprire l'area riservata."
+            >
+              riscontri
+            </button>
+          </div>
         </div>
       ) : !introDone ? (
         <PianificaDemoIntro
@@ -162,7 +239,10 @@ export default function AppPianificaDemo() {
           }}
         />
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 overflow-y-auto overscroll-contain px-5 py-8 [-webkit-overflow-scrolling:touch]">
+        <div
+          data-testid="demo-home-scroll"
+          className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 overflow-y-auto overscroll-contain px-5 py-8 touch-pan-y [-webkit-overflow-scrolling:touch]"
+        >
           <p className="text-center text-sm text-muted-foreground">
             Ciao <span className="font-semibold text-foreground">{name}</span>, prova il flusso Pianifica.
           </p>
@@ -190,28 +270,23 @@ export default function AppPianificaDemo() {
         </div>
       )}
 
-      <Link
-        href="/prova-pianifica/riscontri"
-        className="flex min-h-11 shrink-0 items-center justify-center py-2 text-center text-[10px] text-gray-300/80 active:text-gray-400"
-        aria-label="Riscontri demo"
-      >
-        ·
-      </Link>
-
       {sheetOpen && gateDone && introDone && (
         <div
-          className="fixed inset-0 z-[100] flex flex-col bg-black/40 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+          className="fixed inset-0 z-[100] flex flex-col overscroll-contain bg-black/40 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))]"
           role="dialog"
           aria-modal="true"
           aria-label="Nuovo evento demo"
-          onClick={() => setSheetOpen(false)}
+          onClick={closeSheet}
         >
           <div
-            className="relative mx-auto flex h-full w-full max-w-[360px] min-h-0 flex-col overflow-hidden rounded-[20px] bg-primary"
+            className={cn(
+              "relative mx-auto flex h-full w-full max-w-[360px] min-h-0 flex-col rounded-[20px] bg-primary",
+              modalPhase === "wizard" && "overflow-hidden",
+            )}
             style={{ animation: "expandFromPianifica 420ms cubic-bezier(0.2,0,0,1) forwards" }}
             onClick={(e) => e.stopPropagation()}
           >
-          <div className="absolute inset-[3px] flex min-h-0 flex-col overflow-hidden rounded-[17px] bg-white">
+          <div className="absolute inset-[3px] flex min-h-0 flex-col rounded-[17px] bg-white">
             <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-4 pb-3 pt-4 sm:px-6 sm:pb-4 sm:pt-5">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Nuovo evento</h2>
@@ -220,20 +295,59 @@ export default function AppPianificaDemo() {
               <button
                 type="button"
                 data-testid="button-close-create-demo"
-                onClick={() => setSheetOpen(false)}
+                onClick={closeSheet}
                 className="flex h-11 w-11 touch-manipulation items-center justify-center rounded-full bg-gray-100 active:bg-gray-200"
                 aria-label="Chiudi"
               >
                 <X size={18} className="text-gray-600" />
               </button>
             </div>
-            <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-              <AppCreateEvent
-                key={`pianifica-demo:${email}`}
-                previewMode
-                previewProfile={{ name: name.trim(), email: email.trim().toLowerCase() }}
-                onClose={() => setSheetOpen(false)}
-              />
+            <div
+              className={cn(
+                "flex min-h-0 flex-1 flex-col",
+                modalPhase === "wizard" && "overflow-hidden rounded-b-[17px]",
+              )}
+            >
+              {modalPhase === "complete" ? (
+                <div
+                  className="flex min-h-0 flex-1 flex-col"
+                  data-testid="preview-completion-root"
+                >
+                  <main
+                    ref={completionScrollRef}
+                    data-testid={DEMO_COMPLETION_SCROLL_TEST_ID}
+                    className="min-h-0 flex-1 basis-0 grow overflow-x-hidden overflow-y-scroll overscroll-y-auto bg-white touch-pan-y [-webkit-overflow-scrolling:touch] [touch-action:pan-y]"
+                    style={{ WebkitOverflowScrolling: "touch" }}
+                  >
+                    <PianificaPreviewCompletion
+                      profile={{ name: name.trim(), email: email.trim().toLowerCase() }}
+                      onClose={closeSheet}
+                      scrollRootRef={completionScrollRef}
+                    />
+                  </main>
+                  {completionCanScrollMore && (
+                    <footer className="z-10 shrink-0 border-t border-gray-200 bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-6px_16px_rgba(0,0,0,0.08)]">
+                      <button
+                        type="button"
+                        data-testid="button-scroll-completion-hint"
+                        onClick={() => scrollCompletionRoot(completionScrollRef.current)}
+                        className="flex min-h-12 w-full touch-manipulation items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-bold text-primary-foreground active:opacity-90"
+                      >
+                        <ChevronDown size={20} className="shrink-0 animate-bounce" aria-hidden />
+                        Scorri verso il basso
+                      </button>
+                    </footer>
+                  )}
+                </div>
+              ) : (
+                <AppCreateEvent
+                  key={`pianifica-demo:${email}`}
+                  previewMode
+                  previewProfile={{ name: name.trim(), email: email.trim().toLowerCase() }}
+                  onPreviewComplete={() => setModalPhase("complete")}
+                  onClose={closeSheet}
+                />
+              )}
             </div>
           </div>
           </div>

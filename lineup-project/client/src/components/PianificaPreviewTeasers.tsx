@@ -27,12 +27,14 @@ type TeaserBannerProps = {
   title: string;
   body: string;
   icon: ReactNode;
+  "data-testid"?: string;
 };
 
-function TeaserBanner({ variant, badge, title, body, icon }: TeaserBannerProps) {
+function TeaserBanner({ variant, badge, title, body, icon, "data-testid": testId }: TeaserBannerProps) {
   const styles = VARIANT_STYLES[variant];
   return (
     <article
+      data-testid={testId}
       className={`rounded-2xl px-4 py-4 shadow-sm ${styles.border} bg-[#F4FAFF]`}
     >
       <div className="flex items-start gap-3">
@@ -73,6 +75,7 @@ export function PianificaPreviewTeasers() {
         variant="sky"
         badge="Social"
         title="Pubblica con il tuo gruppo"
+        data-testid="preview-teaser-social"
         icon={<Megaphone size={22} strokeWidth={2} className="text-sky-600" />}
         body="Potrai rendere visibile l’evento che state pianificando: i tuoi follower nell’app potranno chiedere di unirsi e tu scegli chi aggiungere al piano."
       />

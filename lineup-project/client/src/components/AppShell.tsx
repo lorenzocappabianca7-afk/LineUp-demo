@@ -24,8 +24,8 @@ export default function AppShell({ children }: AppShellProps) {
   };
 
   return (
-    <div className="flex justify-center items-stretch h-screen bg-background">
-      <div className="relative flex flex-col w-full max-w-sm h-screen bg-background overflow-hidden shadow-2xl">
+    <div className="flex justify-center items-stretch h-[100dvh] max-h-[100dvh] bg-background">
+      <div className="relative flex flex-col w-full max-w-sm h-[100dvh] max-h-[100dvh] bg-background overflow-hidden shadow-2xl">
 
         {/* Content */}
         <div
