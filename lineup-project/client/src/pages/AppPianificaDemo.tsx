@@ -41,6 +41,17 @@ export default function AppPianificaDemo() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker.getRegistrations().then((regs) => {
+        for (const r of regs) void r.unregister();
+      });
+    }
+    if ("caches" in window) {
+      void caches.keys().then((keys) => {
+        for (const k of keys) void caches.delete(k);
+      });
+    }
+
     const stored = readStoredGate();
     if (stored) {
       setName(stored.name);
@@ -52,9 +63,12 @@ export default function AppPianificaDemo() {
 
   const canConfirmGate = name.trim().length >= 1 && isValidEmail(email);
 
-  const confirmGate = () => {
+  const confirmGate = (e?: { preventDefault?: () => void }) => {
+    e?.preventDefault?.();
     if (!canConfirmGate) return;
     const profile = { name: name.trim(), email: email.trim().toLowerCase() };
+    setName(profile.name);
+    setEmail(profile.email);
     completeDemoGate(profile);
     setGateDone(true);
   };
@@ -72,7 +86,11 @@ export default function AppPianificaDemo() {
 
       {!gateDone ? (
         <div className="flex flex-1 flex-col justify-center px-5 py-10">
-          <div className="mx-auto w-full max-w-[320px] rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <form
+            className="mx-auto w-full max-w-[320px] rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
+            onSubmit={confirmGate}
+            noValidate
+          >
             <h2 className="text-lg font-bold text-gray-900">Prima di provare</h2>
             <p className="mt-1 text-sm text-gray-500 leading-snug">
               Inserisci nome e email per accedere alla demo del tasto Pianifica.
@@ -92,7 +110,11 @@ export default function AppPianificaDemo() {
             <label className="mt-4 block text-xs font-bold text-gray-600">Email</label>
             <input
               data-testid="input-demo-gate-email"
-              type="email"
+              type="text"
+              inputMode="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="nome@email.com"
@@ -101,15 +123,14 @@ export default function AppPianificaDemo() {
             />
 
             <button
-              type="button"
+              type="submit"
               data-testid="button-demo-gate-confirm"
               disabled={!canConfirmGate}
-              onClick={confirmGate}
               className="mt-5 w-full rounded-xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
             >
               Conferma
             </button>
-          </div>
+          </form>
         </div>
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-8 px-5 py-12">
