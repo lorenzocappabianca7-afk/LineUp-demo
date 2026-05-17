@@ -348,21 +348,22 @@ export default function AppCreateEvent({
   const sortedGroups = [...GROUPS].sort((a, b) => a.name.localeCompare(b.name, "it"));
 
   if (step === 0) return (
-    <div className="flex flex-col h-full">
-      {renderPreviewGuide("step0")}
-      {fromScopriFlow && (
-        <p className="text-xs text-primary font-semibold px-6 pt-3 leading-relaxed">
-          {selectedSubcategories.join(", ")} · {selectedVenues.length}{" "}
-          {selectedVenues.length === 1 ? "luogo già scelto" : "luoghi già scelti"} con Scopri AI. Indica chi vuoi invitare.
-        </p>
-      )}
-      {friendsList.length > 0 && (
-        <p className="text-[11px] text-gray-500 px-6 pt-2 leading-snug">
-          Puoi invitare solo i tuoi <span className="font-bold text-primary">friends</span>. Aggiungili o modificali dal{" "}
-          <span className="font-semibold text-gray-700">Profilo</span>.
-        </p>
-      )}
-      <div className="px-6 py-3 flex-1 overflow-y-auto no-scrollbar min-h-0">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar">
+        {renderPreviewGuide("step0")}
+        {fromScopriFlow && (
+          <p className="text-xs text-primary font-semibold px-6 pt-1 leading-relaxed">
+            {selectedSubcategories.join(", ")} · {selectedVenues.length}{" "}
+            {selectedVenues.length === 1 ? "luogo già scelto" : "luoghi già scelti"} con Scopri AI. Indica chi vuoi invitare.
+          </p>
+        )}
+        {friendsList.length > 0 && (
+          <p className="text-[11px] text-gray-500 px-6 pt-2 leading-snug">
+            Puoi invitare solo i tuoi <span className="font-bold text-primary">friends</span>. Aggiungili o modificali dal{" "}
+            <span className="font-semibold text-gray-700">Profilo</span>.
+          </p>
+        )}
+        <div className="px-6 py-3">
         {sortedGroups.length > 0 && (
           <>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Gruppi</p>
@@ -440,9 +441,10 @@ export default function AppCreateEvent({
         {sortedGroups.length === 0 && invitePoolForIndividuals.length === 0 && (
           <p className="text-sm text-gray-400 text-center py-8">Nessun gruppo o contatto disponibile.</p>
         )}
+        </div>
       </div>
 
-      <div className="px-6 py-4 shrink-0 border-t border-gray-100">
+      <div className="shrink-0 border-t border-gray-100 px-6 py-4">
         <button
           data-testid="button-step-0-next"
           onClick={() => setStep(fromScopriFlow ? 2 : 1)}
@@ -457,13 +459,14 @@ export default function AppCreateEvent({
 
   // Step 1: Cosa
   if (step === 1) return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full min-h-0 flex-col">
 
       {/* ── Vista categorie ── */}
       {!selectedCategory && (
         <>
-          <div className="px-5 pt-4 pb-3 flex-1 overflow-y-auto no-scrollbar min-h-0">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar">
             {renderPreviewGuide("step1-category")}
+            <div className="px-5 pt-4 pb-3">
             <p className="text-sm text-gray-500 mb-4">Scegli una categoria per la tua proposta di attività.</p>
             <div className="grid grid-cols-5 gap-2">
               {PLAN_CATEGORIES.map(({ key, label, Icon, cols, radius }) => (
@@ -479,8 +482,9 @@ export default function AppCreateEvent({
                 </button>
               ))}
             </div>
+            </div>
           </div>
-          <div className="px-6 py-4 shrink-0 border-t border-gray-100">
+          <div className="shrink-0 border-t border-gray-100 px-6 py-4">
             <button
               onClick={() => {
                 setSelectedCategory(null);
@@ -500,8 +504,9 @@ export default function AppCreateEvent({
       {/* ── Vista sottocategorie ── */}
       {selectedCategory && (
         <>
-          <div className="px-5 pt-4 pb-3 flex-1 overflow-y-auto no-scrollbar min-h-0">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar">
             {renderPreviewGuide("step1-sub")}
+            <div className="px-5 pt-4 pb-3">
             {/* Header con categoria selezionata */}
             <button
               onClick={() => { setSelectedCategory(null); setShowCustomInput(false); setCustomSubcategory(""); }}
@@ -563,10 +568,11 @@ export default function AppCreateEvent({
                 </button>
               </div>
             )}
+            </div>
           </div>
 
           {/* Footer sottocategorie */}
-          <div className="px-6 py-4 shrink-0 border-t border-gray-100 flex gap-3">
+          <div className="flex shrink-0 gap-3 border-t border-gray-100 px-6 py-4">
             <button
               onClick={() => { setSelectedCategory(null); setSelectedSubcategories([]); setShowCustomInput(false); setCustomSubcategory(""); }}
               className="px-5 py-3.5 rounded-xl font-semibold text-gray-600 bg-gray-100"
@@ -641,8 +647,8 @@ export default function AppCreateEvent({
     const isToday = (day: number) => yr === today.getFullYear() && mo === today.getMonth() && day === today.getDate();
 
     return (
-      <div className="flex flex-col h-full">
-        <div className="flex-1 overflow-y-auto no-scrollbar min-h-0">
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar">
           {renderPreviewGuide("step2")}
 
           {/* Navigazione mese */}
@@ -724,8 +730,8 @@ export default function AppCreateEvent({
     };
 
     return (
-      <div className="flex flex-col h-full">
-        <div className="px-6 pt-4 pb-2 flex-1 overflow-y-auto no-scrollbar min-h-0">
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pt-4 pb-2 no-scrollbar">
           {renderPreviewGuide("step3")}
           <p className="text-sm text-gray-500 mb-4">
             Vuoi indicare una fascia oraria? Puoi anche saltare.
@@ -813,8 +819,8 @@ export default function AppCreateEvent({
     };
 
     return (
-      <div className="flex flex-col h-full">
-        <div className="px-6 pt-4 pb-2 flex-1 overflow-y-auto no-scrollbar min-h-0 space-y-3">
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-6 pt-4 pb-2 no-scrollbar">
           {renderPreviewGuide("step4")}
           <p className="text-sm text-gray-500">
             Vuoi indicare un orario per i giorni selezionati? Puoi anche saltare.
@@ -965,8 +971,8 @@ export default function AppCreateEvent({
 
     if (fromScopriFlow) {
       return (
-        <div className="flex flex-col h-full">
-          <div className="px-6 pt-4 pb-2 flex-1 overflow-y-auto no-scrollbar space-y-3">
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-6 pt-4 pb-2 no-scrollbar">
             {renderPreviewGuide("step5")}
             {banner}
             <p className="text-sm text-gray-500">
@@ -1012,8 +1018,8 @@ export default function AppCreateEvent({
     }
 
     return (
-      <div className="flex flex-col h-full">
-        <div className="px-6 pt-4 pb-2 flex-1 overflow-y-auto no-scrollbar space-y-3">
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-6 pt-4 pb-2 no-scrollbar">
           {renderPreviewGuide("step5")}
           {banner}
 
@@ -1174,29 +1180,29 @@ export default function AppCreateEvent({
   // Step 6: tipo di sondaggio (dopo la scelta dei luoghi), poi creazione evento
   if (step === 6 && !done) {
     return (
-      <div className="flex h-full min-h-0 flex-col">
-        {renderPreviewGuide("step6")}
-        <div className="flex shrink-0 items-center gap-3 border-b border-gray-100 px-5 py-3">
-          <button
-            type="button"
-            onClick={() => setStep(5)}
-            className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900"
-          >
-            <ChevronLeft size={16} className="text-gray-500" />
-            Indietro ai luoghi
-          </button>
-        </div>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <SurveyModePicker
-            value={surveyMode}
-            onChange={setSurveyMode}
-            onContinue={() => createEvent()}
-            isSubmitting={isPending}
-            recommendedId={surveyRecommendation.mode}
-            recommendationReason={surveyRecommendation.reason}
-            onApplyRecommendation={() => setSurveyMode(surveyRecommendation.mode)}
-          />
-        </div>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        <SurveyModePicker
+          guide={
+            <>
+              {renderPreviewGuide("step6")}
+              <button
+                type="button"
+                onClick={() => setStep(5)}
+                className="mx-5 mb-2 flex items-center gap-1.5 text-xs font-semibold text-blue-100 hover:text-white"
+              >
+                <ChevronLeft size={16} />
+                Indietro ai luoghi
+              </button>
+            </>
+          }
+          value={surveyMode}
+          onChange={setSurveyMode}
+          onContinue={() => createEvent()}
+          isSubmitting={isPending}
+          recommendedId={surveyRecommendation.mode}
+          recommendationReason={surveyRecommendation.reason}
+          onApplyRecommendation={() => setSurveyMode(surveyRecommendation.mode)}
+        />
       </div>
     );
   }

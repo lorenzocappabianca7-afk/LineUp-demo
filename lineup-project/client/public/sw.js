@@ -1,5 +1,5 @@
 /** Incrementare dopo ogni rilascio importante (svuota cache SW lato client). */
-const CACHE_NAME = "lineup-v9-pianifica-demo-gate";
+const CACHE_NAME = "lineup-v10-wizard-scroll";
 const STATIC_ASSETS = ["/", "/manifest.json"];
 
 self.addEventListener("install", (event) => {

@@ -9,7 +9,7 @@ type PianificaStepGuideProps = {
 export function PianificaStepGuide({ stepLabel, title, body, action }: PianificaStepGuideProps) {
   return (
     <div
-      className="mx-5 mt-3 mb-2 shrink-0 rounded-xl border border-primary/25 bg-gradient-to-br from-primary/10 to-primary/5 px-4 py-3"
+      className="mx-5 mt-3 mb-2 rounded-xl border border-primary/25 bg-gradient-to-br from-primary/10 to-primary/5 px-4 py-3"
       role="status"
       aria-live="polite"
     >

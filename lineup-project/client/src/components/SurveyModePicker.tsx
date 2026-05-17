@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Check, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -6,6 +7,8 @@ import {
 } from "@shared/surveyModes";
 
 type Props = {
+  /** Istruzioni demo / contenuto sopra l'elenco: scorre insieme alle card. */
+  guide?: ReactNode;
   value: SurveyModeId;
   onChange: (id: SurveyModeId) => void;
   onContinue: () => void;
@@ -76,6 +79,7 @@ function ModePreview({ id }: { id: SurveyModeId }) {
 }
 
 export function SurveyModePicker({
+  guide,
   value,
   onChange,
   onContinue,
@@ -90,39 +94,40 @@ export function SurveyModePicker({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-blue-600">
-      <div className="shrink-0 px-5 pt-4 pb-2">
-        <p className="text-xs font-bold uppercase tracking-wide text-blue-200">Dopo i luoghi</p>
-        <h2 className="mt-1 text-lg font-bold text-white">Tipo di sondaggio</h2>
-        <p className="mt-1 text-xs leading-snug text-blue-100/95">
-          Come votare su data, orario e luogo. Indietro modifica la lista luoghi.
-        </p>
-        {showRecBanner && (
-          <div className="mt-3 rounded-xl border border-white/25 bg-white/95 px-3 py-2.5 shadow-sm">
-            <div className="flex items-start gap-2">
-              <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" aria-hidden />
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-blue-800">Consiglio per le tue scelte</p>
-                <p className="mt-0.5 text-[11px] leading-snug text-gray-800">{recommendationReason}</p>
-                {onApplyRecommendation && !isRecSelected && (
-                  <button
-                    type="button"
-                    data-testid="button-survey-apply-recommendation"
-                    onClick={onApplyRecommendation}
-                    className="mt-2 text-[11px] font-bold text-blue-700 underline decoration-blue-400 underline-offset-2 hover:text-blue-900"
-                  >
-                    Usa questo tipo
-                  </button>
-                )}
-                {isRecSelected && (
-                  <p className="mt-1.5 text-[10px] font-semibold text-emerald-700">Tipo consigliato selezionato.</p>
-                )}
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-blue-600 no-scrollbar">
+        {guide}
+        <div className="px-5 pt-3 pb-2">
+          <p className="text-xs font-bold uppercase tracking-wide text-blue-200">Dopo i luoghi</p>
+          <h2 className="mt-1 text-lg font-bold text-white">Tipo di sondaggio</h2>
+          <p className="mt-1 text-xs leading-snug text-blue-100/95">
+            Come votare su data, orario e luogo. Indietro modifica la lista luoghi.
+          </p>
+          {showRecBanner && (
+            <div className="mt-3 rounded-xl border border-white/25 bg-white/95 px-3 py-2.5 shadow-sm">
+              <div className="flex items-start gap-2">
+                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-blue-800">Consiglio per le tue scelte</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-gray-800">{recommendationReason}</p>
+                  {onApplyRecommendation && !isRecSelected && (
+                    <button
+                      type="button"
+                      data-testid="button-survey-apply-recommendation"
+                      onClick={onApplyRecommendation}
+                      className="mt-2 text-[11px] font-bold text-blue-700 underline decoration-blue-400 underline-offset-2 hover:text-blue-900"
+                    >
+                      Usa questo tipo
+                    </button>
+                  )}
+                  {isRecSelected && (
+                    <p className="mt-1.5 text-[10px] font-semibold text-emerald-700">Tipo consigliato selezionato.</p>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        )}
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto bg-blue-600 px-4 pb-3 no-scrollbar">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-2">
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-2 px-4 pb-4 sm:grid-cols-2">
           {SURVEY_MODE_CARDS.map((card) => {
             const sel = card.id === value;
             const isRecommended = rec === card.id;
@@ -156,7 +161,7 @@ export function SurveyModePicker({
           })}
         </div>
       </div>
-      <div className="shrink-0 border-t border-blue-500/40 bg-blue-700/40 px-5 py-3">
+      <div className="shrink-0 border-t border-blue-500/40 bg-blue-700/50 px-5 py-3">
         <button
           type="button"
           data-testid="button-survey-mode-continue"
