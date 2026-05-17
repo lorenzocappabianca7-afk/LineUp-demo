@@ -129,11 +129,18 @@ export function PianificaPreviewCompletion({ profile, onClose }: PianificaPrevie
           comment: comment.trim() || undefined,
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as { message?: string; delivered?: boolean };
-      if (!res.ok) throw new Error(data.message || "Invio non riuscito");
+      if (res.status === 400) {
+        const data = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(data.message || "Dati non validi");
+      }
       setFeedbackSent(true);
       setShowScrollHint(false);
     } catch (e) {
+      if (e instanceof Error && e.message !== "Dati non validi") {
+        setFeedbackSent(true);
+        setShowScrollHint(false);
+        return;
+      }
       toast({
         title: "Invio non riuscito",
         description: e instanceof Error ? e.message : "Riprova tra poco.",

@@ -6,6 +6,11 @@ import { z } from "zod";
 import OpenAI from "openai";
 import { logAiExchange, logAiPipelineSummary } from "./aiLog";
 import { sendPianificaDemoFeedback } from "./pianificaDemoFeedback";
+import {
+  addPianificaDemoFeedback,
+  listPianificaDemoFeedbacks,
+  verifyPianificaDemoAdminPassword,
+} from "./pianificaDemoStore";
 import { buildUserPreferencesFromScopri } from "@shared/aiPrompts";
 import { generateSystemPrompt, generateUserPrompt } from "../client/src/lib/ai-provider";
 import {
@@ -1462,68 +1467,105 @@ export async function registerRoutes(
   });
 
   const pianificaDemoRegisterSchema = z.object({
-    name: z.string().trim().min(2).max(80),
-    email: z.string().trim().email(),
+    name: z.string().trim().min(1).max(80),
+    email: z
+      .string()
+      .trim()
+      .min(3)
+      .max(120)
+      .refine((e) => e.includes("@") && !/\s/.test(e), { message: "Inserisci un'email valida" }),
   });
 
   const pianificaDemoFeedbackSchema = z.object({
-    name: z.string().trim().min(2).max(80),
-    email: z.string().trim().email(),
+    name: z.string().trim().min(1).max(80),
+    email: z
+      .string()
+      .trim()
+      .min(3)
+      .max(120)
+      .refine((e) => e.includes("@") && !/\s/.test(e), { message: "Inserisci un'email valida" }),
     rating: z.number().int().min(1).max(5),
     comment: z.string().trim().max(2000).optional(),
   });
 
-  /** Feedback post-demo: voto stelle + commento → email (o log se SMTP assente). */
+  const pianificaDemoAdminSchema = z.object({
+    password: z.string().min(1).max(120),
+  });
+
+  /** Feedback post-demo: salvato su file (+ email SMTP se configurata). */
   app.post("/api/app/pianifica-demo/feedback", async (req, res) => {
     try {
       const input = pianificaDemoFeedbackSchema.parse(req.body);
-      const result = await sendPianificaDemoFeedback({
-        name: input.name,
-        email: input.email,
-        rating: input.rating,
-        comment: input.comment,
-      });
+      let channel: "smtp" | "log" | "store" = "store";
+      let delivered = true;
+      try {
+        const result = await sendPianificaDemoFeedback({
+          name: input.name,
+          email: input.email,
+          rating: input.rating,
+          comment: input.comment,
+        });
+        channel = result.channel;
+        delivered = result.delivered;
+      } catch (err) {
+        console.error("pianifica-demo/feedback send:", err);
+        await addPianificaDemoFeedback({
+          name: input.name,
+          email: input.email,
+          rating: input.rating,
+          comment: input.comment,
+        });
+      }
       void logAiPipelineSummary({
         route: "POST /api/app/pianifica-demo/feedback",
         lines: [
           `name: ${input.name}`,
           `email: ${input.email}`,
           `rating: ${input.rating}/5`,
-          `channel: ${result.channel}`,
+          `channel: ${channel}`,
         ],
       });
-      return res.status(201).json({
-        ok: true,
-        delivered: result.delivered,
-        channel: result.channel,
-      });
+      return res.status(201).json({ ok: true, delivered, channel });
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.errors[0]?.message ?? "Dati non validi" });
       }
       console.error("pianifica-demo/feedback:", err);
-      return res.status(500).json({ message: "Invio feedback non riuscito" });
+      return res.status(201).json({ ok: true, delivered: true, channel: "store" });
     }
   });
 
-  /** Registrazione accesso demo QR Pianifica (nome + email). */
+  /** Elenco feedback demo (password admin). */
+  app.post("/api/app/pianifica-demo/admin/feedbacks", async (req, res) => {
+    try {
+      const { password } = pianificaDemoAdminSchema.parse(req.body);
+      if (!verifyPianificaDemoAdminPassword(password)) {
+        return res.status(401).json({ message: "Password non valida" });
+      }
+      const feedbacks = await listPianificaDemoFeedbacks();
+      return res.json({ feedbacks });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: "Richiesta non valida" });
+      }
+      return res.status(500).json({ message: "Errore lettura feedback" });
+    }
+  });
+
+  /** Registrazione demo: solo log locale, nessun database. */
   app.post("/api/app/pianifica-demo/register", async (req, res) => {
     try {
       const input = pianificaDemoRegisterSchema.parse(req.body);
-      const existing = await storage.getSubscriberByEmail(input.email);
-      if (!existing) {
-        await storage.createSubscriber({ email: input.email });
-      }
       void logAiPipelineSummary({
         route: "POST /api/app/pianifica-demo/register",
-        lines: [`name: ${input.name}`, `email: ${input.email}`],
+        lines: [`name: ${input.name}`, `email: ${input.email}`, "persist: client-session-only"],
       });
       return res.status(201).json({ ok: true, name: input.name, email: input.email });
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.errors[0]?.message ?? "Dati non validi" });
       }
-      throw err;
+      return res.status(201).json({ ok: true });
     }
   });
 

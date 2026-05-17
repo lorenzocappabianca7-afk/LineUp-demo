@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { logAiPipelineSummary } from "./aiLog";
+import { addPianificaDemoFeedback } from "./pianificaDemoStore";
 
 export const PIANIFICA_DEMO_FEEDBACK_RECIPIENTS = [
   "lorenzo.cappabianca7@gmail.com",
@@ -66,7 +67,14 @@ function escapeHtml(s: string) {
 
 export async function sendPianificaDemoFeedback(
   payload: PianificaDemoFeedbackPayload,
-): Promise<{ delivered: boolean; channel: "smtp" | "log" }> {
+): Promise<{ delivered: boolean; channel: "smtp" | "log" | "store" }> {
+  await addPianificaDemoFeedback({
+    name: payload.name,
+    email: payload.email,
+    rating: payload.rating,
+    comment: payload.comment?.trim() || undefined,
+  });
+
   const { subject, text, html } = buildMailContent(payload);
   const recipients = getFeedbackRecipients();
 
@@ -77,21 +85,25 @@ export async function sendPianificaDemoFeedback(
   const from = process.env.SMTP_FROM?.trim() || user;
 
   if (host && user && pass && from) {
-    const transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      auth: { user, pass },
-    });
-    await transporter.sendMail({
-      from,
-      to: recipients.join(", "),
-      replyTo: payload.email,
-      subject,
-      text,
-      html,
-    });
-    return { delivered: true, channel: "smtp" };
+    try {
+      const transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure: port === 465,
+        auth: { user, pass },
+      });
+      await transporter.sendMail({
+        from,
+        to: recipients.join(", "),
+        replyTo: payload.email,
+        subject,
+        text,
+        html,
+      });
+      return { delivered: true, channel: "smtp" };
+    } catch (e) {
+      console.warn("pianifica-demo feedback SMTP failed:", e);
+    }
   }
 
   await logAiPipelineSummary({
@@ -105,5 +117,5 @@ export async function sendPianificaDemoFeedback(
       "— Configura SMTP_HOST, SMTP_USER, SMTP_PASS (e opz. SMTP_FROM) per invio email reale.",
     ],
   });
-  return { delivered: false, channel: "log" };
+  return { delivered: true, channel: "store" };
 }

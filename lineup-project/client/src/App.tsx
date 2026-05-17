@@ -16,12 +16,14 @@ import Admin from "@/pages/Admin";
 import Analytics from "@/pages/Analytics";
 import AppAddContact from "@/pages/AppAddContact";
 import AppPianificaDemo from "@/pages/AppPianificaDemo";
+import PianificaDemoFeedbackAdmin from "@/pages/PianificaDemoFeedbackAdmin";
 import NotFound from "@/pages/not-found";
 
 function AppRouter() {
   return (
     <Switch>
       <Route path="/admin" component={Admin} />
+      <Route path="/prova-pianifica/riscontri" component={PianificaDemoFeedbackAdmin} />
       <Route path="/analytics" component={Analytics} />
       <Route path="/add-contact" component={AppAddContact} />
       <Route>

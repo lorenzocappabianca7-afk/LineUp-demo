@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "wouter";
 import { CalendarPlus, X } from "lucide-react";
 import AppCreateEvent from "@/pages/AppCreateEvent";
 import { AiVenuesSoonIcon } from "@/components/icons/AiVenuesSoonIcon";
@@ -21,7 +22,13 @@ function readStoredGate(): DemoGateProfile | null {
 }
 
 function isValidEmail(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+  const t = value.trim();
+  return t.length >= 3 && t.includes("@") && !/\s/.test(t);
+}
+
+function completeDemoGate(profile: DemoGateProfile) {
+  sessionStorage.setItem(GATE_STORAGE_KEY, JSON.stringify(profile));
+  setCurrentUser(profile.name);
 }
 
 /**
@@ -33,9 +40,6 @@ export default function AppPianificaDemo() {
   const [gateDone, setGateDone] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [gateError, setGateError] = useState<string | null>(null);
-  const [gateSubmitting, setGateSubmitting] = useState(false);
-
   useEffect(() => {
     const stored = readStoredGate();
     if (stored) {
@@ -46,31 +50,13 @@ export default function AppPianificaDemo() {
     }
   }, []);
 
-  const canConfirmGate = name.trim().length >= 2 && isValidEmail(email);
+  const canConfirmGate = name.trim().length >= 1 && isValidEmail(email);
 
-  const confirmGate = async () => {
-    if (!canConfirmGate || gateSubmitting) return;
-    setGateSubmitting(true);
-    setGateError(null);
+  const confirmGate = () => {
+    if (!canConfirmGate) return;
     const profile = { name: name.trim(), email: email.trim().toLowerCase() };
-    try {
-      const res = await fetch("/api/app/pianifica-demo/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(profile),
-      });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { message?: string };
-        throw new Error(data.message || "Registrazione non riuscita");
-      }
-      sessionStorage.setItem(GATE_STORAGE_KEY, JSON.stringify(profile));
-      setCurrentUser(profile.name);
-      setGateDone(true);
-    } catch (e) {
-      setGateError(e instanceof Error ? e.message : "Errore di registrazione");
-    } finally {
-      setGateSubmitting(false);
-    }
+    completeDemoGate(profile);
+    setGateDone(true);
   };
 
   return (
@@ -114,20 +100,14 @@ export default function AppPianificaDemo() {
               autoComplete="email"
             />
 
-            {gateError && (
-              <p className="mt-3 text-xs text-red-500" role="alert">
-                {gateError}
-              </p>
-            )}
-
             <button
               type="button"
               data-testid="button-demo-gate-confirm"
-              disabled={!canConfirmGate || gateSubmitting}
-              onClick={() => void confirmGate()}
+              disabled={!canConfirmGate}
+              onClick={confirmGate}
               className="mt-5 w-full rounded-xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
             >
-              {gateSubmitting ? "Conferma in corso…" : "Conferma"}
+              Conferma
             </button>
           </div>
         </div>
@@ -159,6 +139,14 @@ export default function AppPianificaDemo() {
           </div>
         </div>
       )}
+
+      <Link
+        href="/prova-pianifica/riscontri"
+        className="py-3 text-center text-[10px] text-gray-300/80 hover:text-gray-400"
+        aria-label="Riscontri demo"
+      >
+        ·
+      </Link>
 
       {sheetOpen && gateDone && (
         <div

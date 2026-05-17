@@ -4,6 +4,7 @@ dist
 .env.local
 *.log
 ai_log.txt
+data/pianifica-demo-feedback.json
 .cursor/
 .DS_Store
 server/public

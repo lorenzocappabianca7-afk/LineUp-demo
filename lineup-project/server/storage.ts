@@ -631,8 +631,15 @@ class ResilientStorage implements IStorage {
     const msg = String(anyErr.message ?? "");
     return (
       anyErr.code === "ECONNREFUSED" ||
+      anyErr.code === "28P01" ||
+      anyErr.code === "ENOTFOUND" ||
+      anyErr.code === "ETIMEDOUT" ||
       msg.includes("ECONNREFUSED") ||
-      msg.includes("connect ECONNREFUSED")
+      msg.includes("connect ECONNREFUSED") ||
+      msg.includes("password authentication failed") ||
+      msg.includes("does not exist") ||
+      msg.includes("ENOTFOUND") ||
+      msg.includes("ETIMEDOUT")
     );
   }
 
