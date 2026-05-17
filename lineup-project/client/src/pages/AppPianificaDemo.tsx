@@ -3,9 +3,11 @@ import { Link } from "wouter";
 import { CalendarPlus, X } from "lucide-react";
 import AppCreateEvent from "@/pages/AppCreateEvent";
 import { AiVenuesSoonIcon } from "@/components/icons/AiVenuesSoonIcon";
+import { PianificaDemoIntro } from "@/components/PianificaDemoIntro";
 import { setCurrentUser } from "@/lib/appUtils";
 
 const GATE_STORAGE_KEY = "lineup_pianifica_demo_gate_v1";
+const INTRO_STORAGE_KEY = "lineup_pianifica_demo_intro_v1";
 
 type DemoGateProfile = { name: string; email: string };
 
@@ -38,6 +40,7 @@ function completeDemoGate(profile: DemoGateProfile) {
 export default function AppPianificaDemo() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [gateDone, setGateDone] = useState(false);
+  const [introDone, setIntroDone] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   useEffect(() => {
@@ -67,6 +70,11 @@ export default function AppPianificaDemo() {
       setEmail(stored.email);
       setGateDone(true);
       setCurrentUser(stored.name);
+    }
+    try {
+      if (sessionStorage.getItem(INTRO_STORAGE_KEY) === "1") setIntroDone(true);
+    } catch {
+      /* ignore */
     }
   }, []);
 
@@ -141,6 +149,18 @@ export default function AppPianificaDemo() {
             </button>
           </form>
         </div>
+      ) : !introDone ? (
+        <PianificaDemoIntro
+          userName={name}
+          onContinue={() => {
+            try {
+              sessionStorage.setItem(INTRO_STORAGE_KEY, "1");
+            } catch {
+              /* ignore */
+            }
+            setIntroDone(true);
+          }}
+        />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 overflow-y-auto overscroll-contain px-5 py-8 [-webkit-overflow-scrolling:touch]">
           <p className="text-center text-sm text-muted-foreground">
@@ -178,7 +198,7 @@ export default function AppPianificaDemo() {
         ·
       </Link>
 
-      {sheetOpen && gateDone && (
+      {sheetOpen && gateDone && introDone && (
         <div
           className="fixed inset-0 z-[100] flex flex-col bg-black/40 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))]"
           role="dialog"
