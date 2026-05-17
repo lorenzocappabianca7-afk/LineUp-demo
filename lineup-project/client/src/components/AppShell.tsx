@@ -30,8 +30,10 @@ export default function AppShell({ children }: AppShellProps) {
         {/* Content */}
         <div
           className={cn(
-            "flex-1 overflow-y-auto overscroll-y-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]",
-            !hideBottomNav && "pb-14",
+            "flex min-h-0 flex-1 flex-col",
+            hideBottomNav
+              ? "overflow-hidden"
+              : "overflow-y-auto overscroll-y-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch] pb-14",
           )}
         >
           {children}

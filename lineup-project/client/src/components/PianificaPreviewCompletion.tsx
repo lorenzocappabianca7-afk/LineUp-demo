@@ -231,7 +231,7 @@ export function PianificaPreviewCompletion({ profile, onClose }: PianificaPrevie
                 registerActivity();
               }}
               onMouseEnter={() => setHoverRating(value)}
-              className="rounded-lg p-1 transition-transform active:scale-95 disabled:opacity-50"
+              className="flex h-11 w-11 touch-manipulation items-center justify-center rounded-lg transition-transform active:scale-95 disabled:opacity-50"
               aria-label={`${value} stelle`}
             >
               <Star
@@ -260,7 +260,7 @@ export function PianificaPreviewCompletion({ profile, onClose }: PianificaPrevie
           disabled={feedbackSent}
           placeholder="Cosa ti è piaciuto? Cosa miglioreresti?"
           rows={4}
-          className="mt-2 w-full resize-none rounded-xl border border-gray-200 bg-[#F4FAFF] px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-primary disabled:opacity-60"
+          className="mt-2 w-full resize-none rounded-xl border border-gray-200 bg-[#F4FAFF] px-3 py-3 text-base text-gray-900 outline-none placeholder:text-gray-400 focus:border-primary disabled:opacity-60"
         />
 
         {effectiveProfile && (
@@ -275,7 +275,7 @@ export function PianificaPreviewCompletion({ profile, onClose }: PianificaPrevie
           data-testid="button-submit-demo-feedback"
           disabled={rating == null || submitting || !effectiveProfile}
           onClick={() => void submitFeedback()}
-          className="mt-4 flex w-full items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/75 py-3.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
+          className="mt-4 flex min-h-12 w-full touch-manipulation items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/75 py-3.5 text-base font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
         >
           {submitting ? "Invio in corso…" : "Invia feedback"}
         </button>

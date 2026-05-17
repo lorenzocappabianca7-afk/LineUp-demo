@@ -41,6 +41,15 @@ export default function AppPianificaDemo() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   useEffect(() => {
+    if (!sheetOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [sheetOpen]);
+
+  useEffect(() => {
     if ("serviceWorker" in navigator) {
       void navigator.serviceWorker.getRegistrations().then((regs) => {
         for (const r of regs) void r.unregister();
@@ -74,8 +83,8 @@ export default function AppPianificaDemo() {
   };
 
   return (
-    <div className="flex min-h-full flex-col bg-background">
-      <div className="border-b border-border bg-card px-5 pb-5 pt-12 shadow-soft">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      <div className="shrink-0 border-b border-border bg-card px-5 pb-4 pt-[max(2.75rem,env(safe-area-inset-top))] shadow-soft">
         <p className="mb-1 text-xs font-bold uppercase tracking-wide text-primary">Prova</p>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Pianifica le tue attività</h1>
         <p className="mt-1 text-sm text-muted-foreground">Torino · dalla Mole al tuo calendario</p>
@@ -85,7 +94,7 @@ export default function AppPianificaDemo() {
       </div>
 
       {!gateDone ? (
-        <div className="flex flex-1 flex-col justify-center px-5 py-10">
+        <div className="flex min-h-0 flex-1 flex-col justify-center overflow-y-auto overscroll-contain px-5 py-6 [-webkit-overflow-scrolling:touch]">
           <form
             className="mx-auto w-full max-w-[320px] rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
             onSubmit={confirmGate}
@@ -103,7 +112,7 @@ export default function AppPianificaDemo() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Es. Lorenzo"
-              className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-primary/30"
+              className="mt-1.5 min-h-12 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-base text-gray-900 outline-none focus:ring-2 focus:ring-primary/30"
               autoComplete="name"
             />
 
@@ -118,7 +127,7 @@ export default function AppPianificaDemo() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="nome@email.com"
-              className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-primary/30"
+              className="mt-1.5 min-h-12 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-base text-gray-900 outline-none focus:ring-2 focus:ring-primary/30"
               autoComplete="email"
             />
 
@@ -126,14 +135,14 @@ export default function AppPianificaDemo() {
               type="submit"
               data-testid="button-demo-gate-confirm"
               disabled={!canConfirmGate}
-              className="mt-5 w-full rounded-xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
+              className="mt-5 min-h-12 w-full touch-manipulation rounded-xl bg-primary py-3.5 text-base font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
             >
               Conferma
             </button>
           </form>
         </div>
       ) : (
-        <div className="flex flex-1 flex-col items-center justify-center gap-8 px-5 py-12">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 overflow-y-auto overscroll-contain px-5 py-8 [-webkit-overflow-scrolling:touch]">
           <p className="text-center text-sm text-muted-foreground">
             Ciao <span className="font-semibold text-foreground">{name}</span>, prova il flusso Pianifica.
           </p>
@@ -142,7 +151,7 @@ export default function AppPianificaDemo() {
             type="button"
             data-testid="button-pianifica-demo-page"
             onClick={() => setSheetOpen(true)}
-            className="flex h-[168px] w-[168px] shrink-0 flex-col items-center justify-center gap-1.5 rounded-full bg-primary text-primary-foreground shadow-md outline-none ring-offset-background transition-transform duration-200 hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.97] motion-reduce:transform-none"
+            className="flex h-[168px] w-[168px] shrink-0 touch-manipulation flex-col items-center justify-center gap-1.5 rounded-full bg-primary text-primary-foreground shadow-md outline-none ring-offset-background transition-transform duration-200 hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.97] motion-reduce:transform-none"
             aria-label="Apri pianificazione nuovo evento (prova)"
           >
             <CalendarPlus size={46} strokeWidth={2} className="text-primary-foreground" aria-hidden />
@@ -163,7 +172,7 @@ export default function AppPianificaDemo() {
 
       <Link
         href="/prova-pianifica/riscontri"
-        className="py-3 text-center text-[10px] text-gray-300/80 hover:text-gray-400"
+        className="flex min-h-11 shrink-0 items-center justify-center py-2 text-center text-[10px] text-gray-300/80 active:text-gray-400"
         aria-label="Riscontri demo"
       >
         ·
@@ -171,11 +180,19 @@ export default function AppPianificaDemo() {
 
       {sheetOpen && gateDone && (
         <div
-          className="fixed left-1/2 top-10 z-[100] w-[calc(100%-24px)] max-w-[360px] -translate-x-1/2 rounded-[20px] bg-primary bottom-10"
-          style={{ animation: "expandFromPianifica 420ms cubic-bezier(0.2,0,0,1) forwards" }}
+          className="fixed inset-0 z-[100] flex flex-col bg-black/40 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Nuovo evento demo"
+          onClick={() => setSheetOpen(false)}
         >
-          <div className="absolute inset-[3px] flex flex-col overflow-hidden rounded-[17px] bg-white">
-            <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-6 pb-4 pt-5">
+          <div
+            className="relative mx-auto flex h-full w-full max-w-[360px] min-h-0 flex-col overflow-hidden rounded-[20px] bg-primary"
+            style={{ animation: "expandFromPianifica 420ms cubic-bezier(0.2,0,0,1) forwards" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+          <div className="absolute inset-[3px] flex min-h-0 flex-col overflow-hidden rounded-[17px] bg-white">
+            <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-4 pb-3 pt-4 sm:px-6 sm:pb-4 sm:pt-5">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Nuovo evento</h2>
                 <p className="mt-0.5 text-xs font-medium text-amber-700">Modalità prova</p>
@@ -184,12 +201,13 @@ export default function AppPianificaDemo() {
                 type="button"
                 data-testid="button-close-create-demo"
                 onClick={() => setSheetOpen(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100"
+                className="flex h-11 w-11 touch-manipulation items-center justify-center rounded-full bg-gray-100 active:bg-gray-200"
+                aria-label="Chiudi"
               >
-                <X size={16} className="text-gray-600" />
+                <X size={18} className="text-gray-600" />
               </button>
             </div>
-            <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto">
+            <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
               <AppCreateEvent
                 key={`pianifica-demo:${email}`}
                 previewMode
@@ -197,6 +215,7 @@ export default function AppPianificaDemo() {
                 onClose={() => setSheetOpen(false)}
               />
             </div>
+          </div>
           </div>
         </div>
       )}

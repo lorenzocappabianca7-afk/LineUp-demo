@@ -94,7 +94,7 @@ export function SurveyModePicker({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-blue-600">
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-blue-600 no-scrollbar">
+      <div className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain bg-blue-600 pb-2 no-scrollbar [-webkit-overflow-scrolling:touch]">
         {guide}
         <div className="px-5 pt-3 pb-2">
           <p className="text-xs font-bold uppercase tracking-wide text-blue-200">Dopo i luoghi</p>
@@ -161,13 +161,13 @@ export function SurveyModePicker({
           })}
         </div>
       </div>
-      <div className="shrink-0 border-t border-blue-500/40 bg-blue-700/50 px-5 py-3">
+      <div className="shrink-0 border-t border-blue-500/40 bg-blue-700/50 px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <button
           type="button"
           data-testid="button-survey-mode-continue"
           onClick={onContinue}
           disabled={isSubmitting}
-          className="w-full rounded-xl bg-white py-3 text-sm font-bold text-blue-700 shadow-md active:opacity-90 disabled:pointer-events-none disabled:opacity-50"
+          className="min-h-12 w-full touch-manipulation rounded-xl bg-white py-3 text-base font-bold text-blue-700 shadow-md active:opacity-90 disabled:pointer-events-none disabled:opacity-50"
         >
           {isSubmitting ? "Creazione in corso…" : "Crea evento con questo sondaggio"}
         </button>

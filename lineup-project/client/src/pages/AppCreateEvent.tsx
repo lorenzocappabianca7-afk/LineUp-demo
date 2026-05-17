@@ -349,7 +349,7 @@ export default function AppCreateEvent({
 
   if (step === 0) return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar [-webkit-overflow-scrolling:touch] touch-pan-y">
         {renderPreviewGuide("step0")}
         {fromScopriFlow && (
           <p className="text-xs text-primary font-semibold px-6 pt-1 leading-relaxed">
@@ -449,7 +449,7 @@ export default function AppCreateEvent({
           data-testid="button-step-0-next"
           onClick={() => setStep(fromScopriFlow ? 2 : 1)}
           disabled={!canProceed0}
-          className="w-full py-3.5 rounded-xl font-semibold text-white bg-black transition-opacity disabled:opacity-40"
+          className="w-full min-h-12 touch-manipulation rounded-xl py-3.5 text-base font-semibold text-white bg-black transition-opacity disabled:opacity-40"
         >
           Continua{canProceed0 ? ` con ${groupLabel}` : ""}
         </button>
@@ -464,7 +464,7 @@ export default function AppCreateEvent({
       {/* ── Vista categorie ── */}
       {!selectedCategory && (
         <>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar [-webkit-overflow-scrolling:touch] touch-pan-y">
             {renderPreviewGuide("step1-category")}
             <div className="px-5 pt-4 pb-3">
             <p className="text-sm text-gray-500 mb-4">Scegli una categoria per la tua proposta di attività.</p>
@@ -493,7 +493,7 @@ export default function AppCreateEvent({
                 setCustomSubcategory("");
                 setStep(0);
               }}
-              className="w-full py-3.5 rounded-xl font-semibold text-gray-600 bg-gray-100"
+              className="w-full min-h-12 touch-manipulation rounded-xl py-3.5 text-base font-semibold text-gray-600 bg-gray-100"
             >
               Indietro
             </button>
@@ -504,7 +504,7 @@ export default function AppCreateEvent({
       {/* ── Vista sottocategorie ── */}
       {selectedCategory && (
         <>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar [-webkit-overflow-scrolling:touch] touch-pan-y">
             {renderPreviewGuide("step1-sub")}
             <div className="px-5 pt-4 pb-3">
             {/* Header con categoria selezionata */}
@@ -575,7 +575,7 @@ export default function AppCreateEvent({
           <div className="flex shrink-0 gap-3 border-t border-gray-100 px-6 py-4">
             <button
               onClick={() => { setSelectedCategory(null); setSelectedSubcategories([]); setShowCustomInput(false); setCustomSubcategory(""); }}
-              className="px-5 py-3.5 rounded-xl font-semibold text-gray-600 bg-gray-100"
+              className="px-5 min-h-12 touch-manipulation rounded-xl py-3.5 text-base font-semibold text-gray-600 bg-gray-100"
             >
               Indietro
             </button>
@@ -583,7 +583,7 @@ export default function AppCreateEvent({
               data-testid="button-step-1-next"
               onClick={() => setStep(2)}
               disabled={!canProceed1}
-              className="flex-1 py-3.5 rounded-xl font-semibold text-white bg-black transition-opacity disabled:opacity-40"
+              className="flex-1 min-h-12 touch-manipulation rounded-xl py-3.5 text-base font-semibold text-white bg-black transition-opacity disabled:opacity-40"
             >
               Continua
             </button>
@@ -648,7 +648,7 @@ export default function AppCreateEvent({
 
     return (
       <div className="flex h-full min-h-0 flex-col">
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar [-webkit-overflow-scrolling:touch] touch-pan-y">
           {renderPreviewGuide("step2")}
 
           {/* Navigazione mese */}
@@ -706,7 +706,7 @@ export default function AppCreateEvent({
         <div className="px-6 py-4 shrink-0 border-t border-gray-100 flex gap-3">
           <button
             onClick={() => { setSelectedDates([]); setSelectedTimeWindows([]); setSelectedDayTimes({}); setDayTimeIdx({}); setStep(fromScopriFlow ? 0 : 1); }}
-            className="px-5 py-3.5 rounded-xl font-semibold text-gray-600 bg-gray-100"
+            className="px-5 min-h-12 touch-manipulation rounded-xl py-3.5 text-base font-semibold text-gray-600 bg-gray-100"
           >
             Indietro
           </button>
@@ -714,7 +714,7 @@ export default function AppCreateEvent({
             data-testid="button-step-2-next"
             onClick={() => setStep(3)}
             disabled={!canProceed2}
-            className="flex-1 py-3.5 rounded-xl font-semibold text-white bg-black transition-opacity disabled:opacity-40"
+            className="flex-1 min-h-12 touch-manipulation rounded-xl py-3.5 text-base font-semibold text-white bg-black transition-opacity disabled:opacity-40"
           >
             {selectedDates.length > 0 ? "Continua" : "Continua senza date"}
           </button>
@@ -772,7 +772,7 @@ export default function AppCreateEvent({
         <div className="px-6 py-4 shrink-0 border-t border-gray-100 flex gap-3">
           <button
             onClick={() => setStep(2)}
-            className="px-5 py-3.5 rounded-xl font-semibold text-gray-600 bg-gray-100"
+            className="px-5 min-h-12 touch-manipulation rounded-xl py-3.5 text-base font-semibold text-gray-600 bg-gray-100"
           >
             Indietro
           </button>
@@ -780,7 +780,7 @@ export default function AppCreateEvent({
             data-testid="button-step-3-next"
             onClick={() => setStep(selectedDates.length > 0 ? 4 : 5)}
             disabled={!canProceed3}
-            className="flex-1 py-3.5 rounded-xl font-semibold text-white bg-black transition-opacity disabled:opacity-40"
+            className="flex-1 min-h-12 touch-manipulation rounded-xl py-3.5 text-base font-semibold text-white bg-black transition-opacity disabled:opacity-40"
           >
             {selectedTimeWindows.length > 0 ? "Continua" : "Continua senza fasce orarie"}
           </button>
@@ -896,7 +896,7 @@ export default function AppCreateEvent({
         <div className="px-6 py-4 shrink-0 border-t border-gray-100 flex gap-3">
           <button
             onClick={() => setStep(3)}
-            className="px-5 py-3.5 rounded-xl font-semibold text-gray-600 bg-gray-100"
+            className="px-5 min-h-12 touch-manipulation rounded-xl py-3.5 text-base font-semibold text-gray-600 bg-gray-100"
           >
             Indietro
           </button>
@@ -904,7 +904,7 @@ export default function AppCreateEvent({
             data-testid="button-step-4-next"
             onClick={() => setStep(5)}
             disabled={!canProceed4}
-            className="flex-1 py-3.5 rounded-xl font-semibold text-white bg-black transition-opacity disabled:opacity-40"
+            className="flex-1 min-h-12 touch-manipulation rounded-xl py-3.5 text-base font-semibold text-white bg-black transition-opacity disabled:opacity-40"
           >
             {anyTimes ? "Continua" : "Continua senza orari"}
           </button>
@@ -926,7 +926,7 @@ export default function AppCreateEvent({
             }
             setStep(selectedDates.length > 0 ? 4 : 3);
           }}
-          className="px-5 py-3.5 rounded-xl font-semibold text-gray-600 bg-gray-100"
+          className="px-5 min-h-12 touch-manipulation rounded-xl py-3.5 text-base font-semibold text-gray-600 bg-gray-100"
         >
           Indietro
         </button>
