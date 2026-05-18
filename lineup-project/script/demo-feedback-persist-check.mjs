@@ -45,7 +45,29 @@ async function run() {
     process.exit(1);
   }
 
-  console.log("✓ Feedback salvato e riletto da Postgres.", { id: postBody.id, email: MARKER });
+  const del = await fetch(`${BASE}/api/app/pianifica-demo/admin/feedbacks/delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password: ADMIN_PW, id: postBody.id }),
+  });
+  if (!del.ok) {
+    console.error("DELETE feedback fallito:", del.status, await del.json().catch(() => ({})));
+    process.exit(1);
+  }
+
+  const listAfter = await fetch(`${BASE}/api/app/pianifica-demo/admin/feedbacks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password: ADMIN_PW }),
+  });
+  const listAfterBody = await listAfter.json().catch(() => ({}));
+  const stillThere = (listAfterBody.feedbacks ?? []).some((f) => f.id === postBody.id);
+  if (stillThere) {
+    console.error("Feedback ancora presente dopo eliminazione:", postBody.id);
+    process.exit(1);
+  }
+
+  console.log("✓ Feedback salvato, riletto ed eliminato da Postgres.", { id: postBody.id, email: MARKER });
 }
 
 run().catch((e) => {

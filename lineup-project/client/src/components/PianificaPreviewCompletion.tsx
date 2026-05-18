@@ -160,9 +160,9 @@ export function PianificaPreviewCompletion({
         <div className="mx-auto mb-4 flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-emerald-50">
           <CheckCircle2 size={40} className="text-emerald-500" />
         </div>
-        <h3 className="text-xl font-bold text-gray-900">Prova completata!</h3>
+        <h3 className="text-xl font-bold text-gray-900">Il futuro di LineUp</h3>
         <p className="mt-2 px-1 text-sm text-gray-600">
-          Hai vissuto tutte le fasi di Pianifica. Ecco cosa arriverà presto nell&apos;app.
+          Ecco le funzionalità in arrivo. Più sotto puoi votare l&apos;esperienza e lasciare i tuoi consigli.
         </p>
 
         <PianificaPreviewTeasers />

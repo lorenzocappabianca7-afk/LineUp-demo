@@ -4,6 +4,17 @@ import { ArrowLeft, Lock, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SwipeableFeedbackRow } from "@/components/SwipeableFeedbackRow";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type FeedbackRow = {
   id: string;
@@ -20,6 +31,9 @@ export default function PianificaDemoFeedbackAdmin() {
   const [feedbacks, setFeedbacks] = useState<FeedbackRow[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [openSwipeId, setOpenSwipeId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<FeedbackRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadFeedbacks = async (pw: string) => {
     setLoading(true);
@@ -49,6 +63,35 @@ export default function PianificaDemoFeedbackAdmin() {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     void loadFeedbacks(password);
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    setError("");
+    try {
+      const res = await fetch("/api/app/pianifica-demo/admin/feedbacks/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password, id: pendingDelete.id }),
+      });
+      if (res.status === 401) {
+        setError("Sessione scaduta: password non valida");
+        setAuthenticated(false);
+        return;
+      }
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(data.message || "Eliminazione non riuscita");
+      }
+      setFeedbacks((list) => list.filter((f) => f.id !== pendingDelete.id));
+      setOpenSwipeId(null);
+      setPendingDelete(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Impossibile eliminare il feedback");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const formatDate = (iso: string) => {
@@ -101,7 +144,9 @@ export default function PianificaDemoFeedbackAdmin() {
         </Link>
         <div>
           <h1 className="text-lg font-bold">Feedback Pianifica</h1>
-          <p className="text-xs text-muted-foreground">{feedbacks.length} invii</p>
+          <p className="text-xs text-muted-foreground">
+            {feedbacks.length} invii · scorri a sinistra per eliminare
+          </p>
         </div>
         <Button
           type="button"
@@ -115,13 +160,30 @@ export default function PianificaDemoFeedbackAdmin() {
         </Button>
       </div>
 
-      <div className="mx-auto max-w-lg p-4 space-y-3">
+      {error && (
+        <p className="mx-auto max-w-lg px-4 pt-3 text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div
+        className="mx-auto max-w-lg p-4 space-y-3"
+        onClick={() => setOpenSwipeId(null)}
+        onKeyDown={() => {}}
+        role="presentation"
+      >
         {feedbacks.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-12">Nessun feedback ancora.</p>
         ) : (
           feedbacks.map((fb) => (
-            <Card key={fb.id}>
-              <CardContent className="pt-4 space-y-2">
+            <SwipeableFeedbackRow
+              key={fb.id}
+              rowId={fb.id}
+              open={openSwipeId === fb.id}
+              onOpenChange={(open) => setOpenSwipeId(open ? fb.id : null)}
+              onDeleteClick={() => setPendingDelete(fb)}
+            >
+              <div className="p-4 space-y-2" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between gap-2">
                   <p className="font-semibold text-sm">{fb.name}</p>
                   <div className="flex items-center gap-0.5 text-amber-500" aria-label={`${fb.rating} stelle`}>
@@ -137,11 +199,45 @@ export default function PianificaDemoFeedbackAdmin() {
                 ) : (
                   <p className="text-xs text-muted-foreground italic">Nessun commento</p>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </SwipeableFeedbackRow>
           ))
         )}
       </div>
+
+      <AlertDialog
+        open={pendingDelete != null}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setPendingDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminare questo feedback?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete ? (
+                <>
+                  Stai per eliminare definitivamente il feedback di <strong>{pendingDelete.name}</strong> (
+                  {pendingDelete.email}). L&apos;operazione non si può annullare.
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleting}
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmDelete();
+              }}
+            >
+              {deleting ? "Eliminazione…" : "Elimina"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

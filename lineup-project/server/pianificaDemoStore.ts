@@ -1,7 +1,7 @@
 import { readFile } from "fs/promises";
 import path from "path";
 import { randomUUID } from "crypto";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "./db";
 import { pianificaDemoFeedbacks } from "@shared/schema";
 
@@ -114,4 +114,16 @@ export async function listPianificaDemoFeedbacks(): Promise<PianificaDemoFeedbac
     .orderBy(desc(pianificaDemoFeedbacks.createdAt));
 
   return rows.map(rowToEntry);
+}
+
+export async function deletePianificaDemoFeedback(id: string): Promise<boolean> {
+  await importLegacyFileOnce();
+  const removed = await db
+    .delete(pianificaDemoFeedbacks)
+    .where(eq(pianificaDemoFeedbacks.id, id))
+    .returning({ id: pianificaDemoFeedbacks.id });
+  if (removed.length > 0) {
+    console.log(`[pianifica-demo] feedback eliminato id=${id}`);
+  }
+  return removed.length > 0;
 }

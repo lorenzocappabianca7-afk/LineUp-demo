@@ -8,6 +8,7 @@ import { logAiExchange, logAiPipelineSummary } from "./aiLog";
 import { notifyPianificaDemoFeedbackByEmail } from "./pianificaDemoFeedback";
 import {
   addPianificaDemoFeedback,
+  deletePianificaDemoFeedback,
   listPianificaDemoFeedbacks,
   verifyPianificaDemoAdminPassword,
 } from "./pianificaDemoStore";
@@ -1492,6 +1493,11 @@ export async function registerRoutes(
     password: z.string().min(1).max(120),
   });
 
+  const pianificaDemoAdminDeleteSchema = z.object({
+    password: z.string().min(1).max(120),
+    id: z.string().uuid(),
+  });
+
   /** Feedback post-demo: prima Postgres (obbligatorio), poi email opzionale. */
   app.post("/api/app/pianifica-demo/feedback", async (req, res) => {
     try {
@@ -1552,6 +1558,27 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Richiesta non valida" });
       }
       return res.status(500).json({ message: "Errore lettura feedback" });
+    }
+  });
+
+  /** Elimina un feedback demo (password admin). */
+  app.post("/api/app/pianifica-demo/admin/feedbacks/delete", async (req, res) => {
+    try {
+      const { password, id } = pianificaDemoAdminDeleteSchema.parse(req.body);
+      if (!verifyPianificaDemoAdminPassword(password)) {
+        return res.status(401).json({ message: "Password non valida" });
+      }
+      const deleted = await deletePianificaDemoFeedback(id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Feedback non trovato" });
+      }
+      return res.json({ ok: true, id });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: "Richiesta non valida" });
+      }
+      console.error("pianifica-demo/admin/feedbacks/delete:", err);
+      return res.status(500).json({ message: "Errore eliminazione feedback" });
     }
   });
 
