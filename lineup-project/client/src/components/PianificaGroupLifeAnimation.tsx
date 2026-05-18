@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CalendarDays,
   CheckCircle2,
@@ -13,19 +13,51 @@ import {
 import { cn } from "@/lib/utils";
 import { getAvatarColor, getInitials } from "@/lib/appUtils";
 
-const SCENE_COUNT = 8;
-const SCENE_MS = 3000;
-const FADE_MS = 420;
-const PHASE_MS = 950;
-const LAST_SCENE_INDEX = SCENE_COUNT - 1;
+const STEP_COUNT = 4;
+const FADE_MS = 520;
+/** Ritmo lento tra i micro-passi dentro ogni step (solo telefono, senza vignetta). */
+const SLOW_PHASE_MS = 2200;
 
-function sceneLayer(scene: number): number {
-  if (scene === 0) return 0;
-  if (scene <= 3) return 1;
-  return scene - 2;
-}
+type StepMode = "playing" | "explain";
 
-const LAYER_COUNT = 6;
+type GuideVignetteContent = { title: string; text: string };
+
+type DemoStepConfig = {
+  guide: GuideVignetteContent;
+  /** Micro-animazioni sul telefono prima della vignetta esplicativa. */
+  subPhaseCount: number;
+};
+
+const DEMO_STEPS: DemoStepConfig[] = [
+  {
+    guide: {
+      title: "1 · Chat e sondaggio",
+      text: "Dalla chat del gruppo aprite il sondaggio: proponete date, orari e luoghi, poi votate insieme fino a trovare l'opzione migliore.",
+    },
+    subPhaseCount: 5,
+  },
+  {
+    guide: {
+      title: "2 · Organizza e conferma",
+      text: "Concordate i dettagli in chat. Il creatore dell'evento conferma data, ora e luogo: tutto il gruppo resta allineato.",
+    },
+    subPhaseCount: 5,
+  },
+  {
+    guide: {
+      title: "3 · Calendario",
+      text: "L'evento confermato compare nel calendario LineUp, così non perdete l'appuntamento.",
+    },
+    subPhaseCount: 2,
+  },
+  {
+    guide: {
+      title: "4 · Pubblica con LineUp",
+      text: "Pubblica annunci per feste, calcetto o cene: i follower possono chiedere di partecipare e tu accetti chi vuoi.",
+    },
+    subPhaseCount: 0,
+  },
+];
 
 type Props = {
   onComplete: () => void;
@@ -411,88 +443,45 @@ function SceneCalendar({ highlightDay }: { highlightDay: boolean }) {
 const PUBLISH_EVENT_COPY =
   "Devi organizzare una festa, un calcetto o una cena tra nuovi amici? LineUp ti permette di pubblicare annunci dei tuoi eventi e i tuoi followers potranno far richiesta di partecipazione. Sarai poi tu che hai organizzato ad accettarli e permetterli di farne parte!";
 
-function ScenePublishBanner({ visible }: { visible: boolean }) {
-  return (
-    <PhoneScreen className="flex flex-col items-center justify-center bg-[#F4FAFF] p-3">
-      <article
-        className={cn(
-          "flex max-h-[88%] w-full flex-col overflow-y-auto rounded-2xl border-2 border-sky-400 bg-white px-3.5 py-3.5 shadow-md transition-all duration-600 ease-out",
-          visible ? "translate-y-0 opacity-100 scale-100" : "translate-y-4 opacity-0 scale-[0.98]",
-        )}
-      >
-        <div className="flex items-start gap-2.5">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-600">
-            <Megaphone size={20} />
-          </div>
-          <p className="pt-1 text-[11px] font-semibold leading-snug text-sky-800">Pubblica il tuo evento</p>
-        </div>
-        <p className="mt-2.5 text-[12px] leading-relaxed text-gray-800">{PUBLISH_EVENT_COPY}</p>
-      </article>
-    </PhoneScreen>
-  );
-}
-
-type GuideVignetteContent = { title: string; text: string };
-
-const VIGNETTE_BY_STEP: Record<string, GuideVignetteContent> = {
-  "0:0": { title: "Chat", text: "Vedi gruppi ed eventi in programma." },
-  "0:1": { title: "Apri il gruppo", text: "Tocca la chat del calcetto." },
-  "1:0": { title: "Sondaggio", text: "Data, orario e luogo da votare insieme." },
-  "1:1": { title: "Tab Voto", text: "Qui si decide quando e dove." },
-  "2:0": { title: "Proponi", text: "Tocca per suggerire un'opzione." },
-  "2:1": { title: "Nuova opzione", text: "Tutti la vedono nel sondaggio." },
-  "3:0": { title: "Vota", text: "Ogni partecipante sceglie con un tap." },
-  "3:1": { title: "Preferenze", text: "Le barre mostrano chi è d'accordo." },
-  "4:0": { title: "Chat", text: "Passate al tab Chat per organizzarvi." },
-  "4:1": { title: "Messaggi", text: "Concordate dettagli in tempo reale." },
-  "4:2": { title: "Gruppo allineato", text: "Tutti sulla stessa pagina." },
-  "5:0": { title: "Conferma", text: "Il creatore fissa l'evento." },
-  "5:1": { title: "Confermato", text: "Data, ora e luogo sono definitivi." },
-  "6:0": { title: "Calendario", text: "LineUp segna il giorno scelto." },
-  "6:1": { title: "In agenda", text: "L'evento compare nel calendario." },
-  "7:0": { title: "Pubblica", text: "Annunci per festa, calcetto o cena con i follower." },
-};
-
-const CAPTION_FALLBACK: GuideVignetteContent[] = [
-  { title: "Chat", text: "Apri il gruppo dell'evento." },
-  { title: "Sondaggio", text: "Votate data, orario e luogo." },
-  { title: "Proponi", text: "Aggiungi un'opzione al sondaggio." },
-  { title: "Vota", text: "Scegli le preferenze con un tap." },
-  { title: "Organizza", text: "Parlatene in chat." },
-  { title: "Conferma", text: "L'evento è ufficiale." },
-  { title: "Calendario", text: "Lo trovi in agenda." },
-  { title: "Condividi", text: "Invita chi vuole unirsi." },
-];
-
-function resolveGuideVignette(
-  scene: number,
-  phase: number,
-  showProseguiHint: boolean,
-): GuideVignetteContent {
-  if (showProseguiHint) {
-    return { title: "Prossimo passo", text: "Leggi come funziona la pubblicazione, poi tocca Prosegui." };
-  }
-  const exact = VIGNETTE_BY_STEP[`${scene}:${phase}`];
-  if (exact) return exact;
-  const sceneOnly = VIGNETTE_BY_STEP[`${scene}:0`];
-  if (sceneOnly) return sceneOnly;
-  return CAPTION_FALLBACK[scene] ?? CAPTION_FALLBACK[0];
-}
-
 function GuideVignette({ content, stepKey }: { content: GuideVignetteContent; stepKey: string }) {
   return (
     <div
       key={stepKey}
       data-testid="guide-vignette"
       aria-live="polite"
-      className="mb-2 w-full max-w-[300px] shrink-0 animate-in fade-in slide-in-from-top-1 fill-mode-both duration-350 motion-reduce:animate-none"
+      className="mt-4 w-full max-w-[300px] shrink-0 animate-in fade-in slide-in-from-bottom-2 fill-mode-both duration-500 motion-reduce:animate-none"
     >
-      <div className="rounded-lg border border-primary/20 bg-white/95 px-2.5 py-1.5 shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm">
-        <p className="text-[9px] font-bold uppercase tracking-wide text-primary leading-none">{content.title}</p>
-        <p className="mt-0.5 text-[11px] font-medium leading-snug text-gray-800">{content.text}</p>
+      <div className="rounded-xl border-2 border-primary/25 bg-white px-4 py-3.5 shadow-lg">
+        <p className="text-[10px] font-bold uppercase tracking-wide text-primary">{content.title}</p>
+        <p className="mt-2 text-sm font-medium leading-relaxed text-gray-900">{content.text}</p>
       </div>
     </div>
   );
+}
+
+function StepPhonePreview({
+  step,
+  subPhase,
+  creatorName,
+}: {
+  step: number;
+  subPhase: number;
+  creatorName: string;
+}) {
+  if (step === 0) {
+    if (subPhase <= 1) return <SceneChatList active={subPhase >= 1} />;
+    if (subPhase === 2) return <SceneChatPoll mode="intro" phase={0} creatorName={creatorName} />;
+    if (subPhase === 3) return <SceneChatPoll mode="propose" phase={0} creatorName={creatorName} />;
+    return <SceneChatPoll mode="vote" phase={0} creatorName={creatorName} />;
+  }
+  if (step === 1) {
+    if (subPhase <= 2) return <SceneChatMessages visibleCount={subPhase + 1} />;
+    return <SceneConfirmed creatorName={creatorName} showCheck={subPhase >= 4} />;
+  }
+  if (step === 2) {
+    return <SceneCalendar highlightDay={subPhase >= 1} />;
+  }
+  return <SceneCalendar highlightDay />;
 }
 
 function FixedPublishBanner({ visible, onContinue }: { visible: boolean; onContinue: () => void }) {
@@ -500,12 +489,12 @@ function FixedPublishBanner({ visible, onContinue }: { visible: boolean; onConti
     <div
       className={cn(
         "w-full max-w-[300px] transition-all duration-500 ease-out",
-        visible ? "mt-4 max-h-[560px] opacity-100" : "pointer-events-none mt-0 max-h-0 overflow-hidden opacity-0",
+        visible ? "mt-4 max-h-[640px] opacity-100" : "pointer-events-none mt-0 max-h-0 overflow-hidden opacity-0",
       )}
       aria-hidden={!visible}
     >
       <article
-        className="relative overflow-hidden rounded-2xl border-2 border-sky-400 bg-gradient-to-br from-sky-50 via-white to-primary/10 px-4 pb-5 pt-4 shadow-xl"
+        className="relative overflow-hidden rounded-2xl border-2 border-sky-400 bg-gradient-to-br from-sky-50 via-white to-primary/10 px-4 pb-6 pt-5 shadow-xl"
         data-testid="banner-publish-group-fixed"
       >
         <div
@@ -521,13 +510,15 @@ function FixedPublishBanner({ visible, onContinue }: { visible: boolean; onConti
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-400 to-sky-600 text-white shadow-md shadow-sky-500/30">
             <Megaphone size={22} strokeWidth={2.25} />
           </div>
-          <p className="flex items-center gap-1 pt-1 text-[11px] font-bold uppercase tracking-wide text-sky-700">
-            <Sparkles size={12} className="shrink-0" />
+          <p className="flex items-center gap-1.5 pt-1.5 text-xs font-bold uppercase tracking-wide text-gray-900">
+            <Sparkles size={13} className="shrink-0 text-sky-600" />
             Pubblica con LineUp
           </p>
         </div>
 
-        <p className="relative mt-3 text-[13px] leading-[1.55] text-gray-800 sm:text-sm">{PUBLISH_EVENT_COPY}</p>
+        <p className="relative mt-4 text-[13px] font-bold leading-[1.65] text-gray-900 sm:text-[14px] sm:leading-[1.7]">
+          {PUBLISH_EVENT_COPY}
+        </p>
 
         <button
           type="button"
@@ -535,7 +526,7 @@ function FixedPublishBanner({ visible, onContinue }: { visible: boolean; onConti
           onClick={onContinue}
           disabled={!visible}
           tabIndex={visible ? 0 : -1}
-          className="relative mt-4 flex min-h-12 w-full touch-manipulation items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-primary to-primary/80 py-3.5 text-base font-bold text-primary-foreground shadow-lg shadow-primary/25 active:scale-[0.98] disabled:pointer-events-none motion-reduce:active:scale-100"
+          className="relative mt-5 flex min-h-12 w-full touch-manipulation items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-primary to-primary/80 py-3.5 text-base font-bold text-primary-foreground shadow-lg shadow-primary/25 active:scale-[0.98] disabled:pointer-events-none motion-reduce:active:scale-100"
         >
           Prosegui
           <ChevronRight size={18} strokeWidth={2.5} aria-hidden />
@@ -545,61 +536,25 @@ function FixedPublishBanner({ visible, onContinue }: { visible: boolean; onConti
   );
 }
 
-function LayerContent({
-  layer,
-  scene,
-  phase,
-  creatorName,
-  publishBannerVisible,
-}: {
-  layer: number;
-  scene: number;
-  phase: number;
-  creatorName: string;
-  publishBannerVisible: boolean;
-}) {
-  switch (layer) {
-    case 0:
-      return <SceneChatList active={phase >= 1} />;
-    case 1: {
-      const modes: Array<"intro" | "propose" | "vote"> = ["intro", "propose", "vote"];
-      const mode = modes[Math.min(Math.max(scene, 1), 3) - 1] ?? "intro";
-      return <SceneChatPoll mode={mode} phase={phase} creatorName={creatorName} />;
-    }
-    case 2:
-      return <SceneChatMessages visibleCount={Math.min(phase + 1, 3)} />;
-    case 3:
-      return <SceneConfirmed creatorName={creatorName} showCheck={phase >= 1} />;
-    case 4:
-      return <SceneCalendar highlightDay={phase >= 1} />;
-    case 5:
-      return <ScenePublishBanner visible={publishBannerVisible} />;
-    default:
-      return null;
-  }
-}
-
 export function PianificaGroupLifeAnimation({ onComplete, creatorName = "Tu" }: Props) {
-  const [scene, setScene] = useState(0);
-  const [phase, setPhase] = useState(0);
+  const [step, setStep] = useState(0);
+  const [subPhase, setSubPhase] = useState(0);
+  const [mode, setMode] = useState<StepMode>("playing");
   const [exiting, setExiting] = useState(false);
-  const [publishBannerVisible, setPublishBannerVisible] = useState(false);
-  const [fixedBannerVisible, setFixedBannerVisible] = useState(false);
   const finishedRef = useRef(false);
   const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const sceneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const phaseTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const phaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const safeName = creatorName.trim() || "Tu";
-  const activeLayer = sceneLayer(scene);
+  const stepConfig = DEMO_STEPS[step] ?? DEMO_STEPS[0];
+  const isLastStep = step === STEP_COUNT - 1;
+  const isPlaying = mode === "playing" && !isLastStep;
+  const isExplain = mode === "explain" || isLastStep;
 
   const finish = useCallback(() => {
     if (finishedRef.current) return;
     finishedRef.current = true;
-    if (sceneTimerRef.current) clearTimeout(sceneTimerRef.current);
-    if (phaseTimerRef.current) clearInterval(phaseTimerRef.current);
-    if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+    if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
     setExiting(true);
     exitTimerRef.current = setTimeout(() => onComplete(), 320);
   }, [onComplete]);
@@ -607,81 +562,54 @@ export function PianificaGroupLifeAnimation({ onComplete, creatorName = "Tu" }: 
   useEffect(() => {
     return () => {
       if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
-      if (sceneTimerRef.current) clearTimeout(sceneTimerRef.current);
-      if (phaseTimerRef.current) clearInterval(phaseTimerRef.current);
-      if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+      if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
     };
   }, []);
 
   useEffect(() => {
     if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     if (finishedRef.current) return;
-    setScene(LAST_SCENE_INDEX);
-    setPublishBannerVisible(true);
-    setFixedBannerVisible(true);
+    setStep(STEP_COUNT - 1);
+    setMode("explain");
   }, []);
 
-  const maxPhaseForScene = useMemo(() => {
-    if (scene === 0) return 2;
-    if (scene >= 1 && scene <= 3) return 2;
-    if (scene === 4) return 3;
-    if (scene === 5 || scene === 6) return 2;
-    return 0;
-  }, [scene]);
-
   useEffect(() => {
-    if (finishedRef.current) return;
-    setPhase(0);
-    if (maxPhaseForScene === 0) return;
+    if (finishedRef.current || mode !== "playing" || isLastStep) return;
 
-    let p = 0;
-    phaseTimerRef.current = setInterval(() => {
-      p += 1;
-      if (p >= maxPhaseForScene) {
-        if (phaseTimerRef.current) clearInterval(phaseTimerRef.current);
-        return;
-      }
-      setPhase(p);
-    }, PHASE_MS);
+    const max = stepConfig.subPhaseCount;
+    if (max === 0) {
+      setMode("explain");
+      return;
+    }
 
-    return () => {
-      if (phaseTimerRef.current) clearInterval(phaseTimerRef.current);
-    };
-  }, [scene, maxPhaseForScene]);
-
-  useEffect(() => {
-    if (finishedRef.current) return;
-    setPublishBannerVisible(false);
-    setFixedBannerVisible(false);
-
-    if (scene === LAST_SCENE_INDEX) {
-      bannerTimerRef.current = setTimeout(() => {
-        setPublishBannerVisible(true);
-        setFixedBannerVisible(true);
-      }, 700);
+    if (subPhase >= max - 1) {
+      phaseTimerRef.current = setTimeout(() => setMode("explain"), SLOW_PHASE_MS);
       return () => {
-        if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+        if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
       };
     }
 
-    const delay = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : SCENE_MS;
-
-    sceneTimerRef.current = setTimeout(() => {
-      if (finishedRef.current) return;
-      setScene((s) => s + 1);
-    }, delay);
-
+    phaseTimerRef.current = setTimeout(() => setSubPhase((p) => p + 1), SLOW_PHASE_MS);
     return () => {
-      if (sceneTimerRef.current) clearTimeout(sceneTimerRef.current);
+      if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
     };
-  }, [scene]);
+  }, [step, subPhase, mode, isLastStep, stepConfig.subPhaseCount]);
 
-  const showProseguiHint = fixedBannerVisible && scene === LAST_SCENE_INDEX;
-  const vignette = useMemo(
-    () => resolveGuideVignette(scene, phase, showProseguiHint),
-    [scene, phase, showProseguiHint],
-  );
-  const vignetteKey = `${scene}-${phase}-${showProseguiHint ? "prosegui" : "step"}`;
+  const goToNextStep = useCallback(() => {
+    if (finishedRef.current) return;
+    if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
+    if (step >= STEP_COUNT - 1) {
+      finish();
+      return;
+    }
+    const next = step + 1;
+    setStep(next);
+    setSubPhase(0);
+    setMode(DEMO_STEPS[next]?.subPhaseCount === 0 ? "explain" : "playing");
+  }, [step, finish]);
+
+  /** Senza `mode`: evita remount del telefono al passaggio playing → explain. */
+  const phoneKey = `${step}-${subPhase}`;
 
   return (
     <div
@@ -701,55 +629,70 @@ export function PianificaGroupLifeAnimation({ onComplete, creatorName = "Tu" }: 
       <div className="shrink-0 border-b border-primary/15 bg-white px-4 py-3">
         <p className="text-center text-[10px] font-bold uppercase tracking-wide text-primary">Dopo la creazione</p>
         <p className="mt-1 text-center text-sm font-bold text-gray-900">Segui il flusso su LineUp</p>
+        <p className="mt-1 text-center text-[11px] text-gray-500">
+          Passo {step + 1} di {STEP_COUNT}
+          {isPlaying ? " · guarda il telefono" : " · leggi e continua"}
+        </p>
       </div>
 
-      <div
-        className={cn(
-          "flex min-h-0 flex-1 flex-col items-center px-4 py-3",
-          fixedBannerVisible ? "justify-start overflow-y-auto overscroll-y-contain" : "justify-center overflow-hidden",
-        )}
-      >
+      <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto overscroll-y-contain px-4 py-3">
         <div className="flex w-full max-w-[300px] flex-col items-center">
-          {!exiting && <GuideVignette content={vignette} stepKey={vignetteKey} />}
-          <div
-            className="relative h-[300px] w-full overflow-hidden rounded-[24px] border-2 border-primary/20 bg-white shadow-xl"
-            style={{ transform: "translateZ(0)" }}
-          >
-            {Array.from({ length: LAYER_COUNT }).map((_, layer) => (
+          {!isLastStep && (
+            <div
+              className={cn(
+                "relative h-[300px] w-full overflow-hidden rounded-[24px] border-2 border-primary/20 bg-white shadow-xl transition-opacity duration-500",
+                isExplain && "opacity-95",
+              )}
+              style={{ transform: "translateZ(0)" }}
+            >
               <div
-                key={layer}
-                aria-hidden={activeLayer !== layer}
-                className={cn(
-                  "absolute inset-0 transition-opacity ease-in-out motion-reduce:transition-none",
-                  activeLayer === layer ? "z-10 opacity-100" : "pointer-events-none z-0 opacity-0",
-                )}
-                style={{ transitionDuration: `${FADE_MS}ms` }}
+                key={phoneKey}
+                className="absolute inset-0 animate-in fade-in duration-500 motion-reduce:animate-none"
               >
-                <LayerContent
-                  layer={layer}
-                  scene={scene}
-                  phase={activeLayer === layer ? phase : 0}
-                  creatorName={safeName}
-                  publishBannerVisible={publishBannerVisible}
-                />
+                <StepPhonePreview step={step} subPhase={subPhase} creatorName={safeName} />
               </div>
-            ))}
-          </div>
+              {isPlaying && (
+                <p className="pointer-events-none absolute bottom-2 left-0 right-0 text-center text-[10px] font-semibold text-primary/80">
+                  Anteprima in corso…
+                </p>
+              )}
+            </div>
+          )}
+
+          {isExplain && !isLastStep && (
+            <>
+              <GuideVignette content={stepConfig.guide} stepKey={`explain-${step}`} />
+              <button
+                type="button"
+                data-testid="button-demo-step-continue"
+                onClick={goToNextStep}
+                className="mt-4 flex min-h-12 w-full max-w-[300px] touch-manipulation items-center justify-center gap-2 rounded-xl bg-black py-3.5 text-base font-semibold text-white active:opacity-90"
+              >
+                Ho capito, continua
+                <ChevronRight size={18} strokeWidth={2.5} aria-hidden />
+              </button>
+            </>
+          )}
+
+          {isLastStep && isExplain && (
+            <>
+              <GuideVignette content={stepConfig.guide} stepKey="explain-publish" />
+              <FixedPublishBanner visible={!exiting} onContinue={finish} />
+            </>
+          )}
         </div>
 
-        <div className="mt-2.5 flex gap-1" aria-hidden>
-          {Array.from({ length: SCENE_COUNT }).map((_, i) => (
+        <div className="mt-4 flex gap-1.5" aria-hidden>
+          {Array.from({ length: STEP_COUNT }).map((_, i) => (
             <span
               key={i}
               className={cn(
                 "h-1.5 rounded-full transition-all duration-400 ease-out",
-                i === scene ? "w-5 bg-primary" : i < scene ? "w-1.5 bg-primary/40" : "w-1.5 bg-gray-300",
+                i === step ? "w-6 bg-primary" : i < step ? "w-2 bg-primary/45" : "w-2 bg-gray-300",
               )}
             />
           ))}
         </div>
-
-        <FixedPublishBanner visible={fixedBannerVisible && !exiting} onContinue={finish} />
       </div>
 
       <div className="shrink-0 border-t border-gray-100 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
