@@ -1467,6 +1467,15 @@ export async function registerRoutes(
     res.json({ friends });
   });
 
+  const currentCalendarYear = () => new Date().getFullYear();
+
+  const pianificaDemoBirthYearSchema = z.coerce
+    .number()
+    .int()
+    .refine((y) => y >= 1900 && y <= currentCalendarYear(), {
+      message: "Inserisci un anno di nascita valido (4 cifre)",
+    });
+
   const pianificaDemoRegisterSchema = z.object({
     name: z.string().trim().min(1).max(80),
     email: z
@@ -1475,6 +1484,7 @@ export async function registerRoutes(
       .min(3)
       .max(120)
       .refine((e) => e.includes("@") && !/\s/.test(e), { message: "Inserisci un'email valida" }),
+    birthYear: pianificaDemoBirthYearSchema,
   });
 
   const pianificaDemoFeedbackSchema = z.object({
@@ -1485,6 +1495,7 @@ export async function registerRoutes(
       .min(3)
       .max(120)
       .refine((e) => e.includes("@") && !/\s/.test(e), { message: "Inserisci un'email valida" }),
+    birthYear: pianificaDemoBirthYearSchema,
     rating: z.number().int().min(1).max(5),
     comment: z.string().trim().max(2000).optional(),
   });
@@ -1505,12 +1516,14 @@ export async function registerRoutes(
       const saved = await addPianificaDemoFeedback({
         name: input.name,
         email: input.email,
+        birthYear: input.birthYear,
         rating: input.rating,
         comment: input.comment,
       });
       const notify = await notifyPianificaDemoFeedbackByEmail({
         name: input.name,
         email: input.email,
+        birthYear: input.birthYear,
         rating: input.rating,
         comment: input.comment,
       });
@@ -1520,6 +1533,7 @@ export async function registerRoutes(
           `id: ${saved.id}`,
           `name: ${input.name}`,
           `email: ${input.email}`,
+          `birthYear: ${input.birthYear}`,
           `rating: ${input.rating}/5`,
           `channel: ${notify.channel}`,
           "persist: postgres",
@@ -1588,7 +1602,12 @@ export async function registerRoutes(
       const input = pianificaDemoRegisterSchema.parse(req.body);
       void logAiPipelineSummary({
         route: "POST /api/app/pianifica-demo/register",
-        lines: [`name: ${input.name}`, `email: ${input.email}`, "persist: client-session-only"],
+        lines: [
+          `name: ${input.name}`,
+          `email: ${input.email}`,
+          `birthYear: ${input.birthYear}`,
+          "persist: client-session-only",
+        ],
       });
       return res.status(201).json({ ok: true, name: input.name, email: input.email });
     } catch (err) {

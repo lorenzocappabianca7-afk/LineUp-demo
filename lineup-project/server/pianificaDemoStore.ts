@@ -9,6 +9,7 @@ export type PianificaDemoFeedbackEntry = {
   id: string;
   name: string;
   email: string;
+  birthYear?: number;
   rating: number;
   comment?: string;
   createdAt: string;
@@ -30,6 +31,7 @@ function rowToEntry(row: {
   id: string;
   name: string;
   email: string;
+  birthYear: number | null;
   rating: number;
   comment: string | null;
   createdAt: Date | null;
@@ -38,6 +40,7 @@ function rowToEntry(row: {
     id: row.id,
     name: row.name,
     email: row.email,
+    birthYear: row.birthYear ?? undefined,
     rating: row.rating,
     comment: row.comment ?? undefined,
     createdAt: (row.createdAt ?? new Date()).toISOString(),
@@ -100,6 +103,7 @@ export async function addPianificaDemoFeedback(
     createdAt: createdAt.toISOString(),
     name: entry.name.trim(),
     email: entry.email.trim().toLowerCase(),
+    birthYear: entry.birthYear,
     rating: entry.rating,
     comment: entry.comment?.trim() || undefined,
   };

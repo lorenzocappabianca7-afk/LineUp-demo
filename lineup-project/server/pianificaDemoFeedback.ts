@@ -9,6 +9,7 @@ export const PIANIFICA_DEMO_FEEDBACK_RECIPIENTS = [
 export type PianificaDemoFeedbackPayload = {
   name: string;
   email: string;
+  birthYear: number;
   rating: number;
   comment?: string;
 };
@@ -35,6 +36,7 @@ function buildMailContent(payload: PianificaDemoFeedbackPayload) {
     "",
     `Nome: ${payload.name}`,
     `Email: ${payload.email}`,
+    `Anno di nascita: ${payload.birthYear}`,
     `Voto: ${payload.rating}/5 ${stars}`,
     "",
     "Suggerimenti / consigli:",
@@ -47,6 +49,7 @@ function buildMailContent(payload: PianificaDemoFeedbackPayload) {
       <h2 style="color:#4a8fc4;margin:0 0 12px">Feedback demo Pianifica</h2>
       <p><strong>Nome:</strong> ${escapeHtml(payload.name)}</p>
       <p><strong>Email:</strong> ${escapeHtml(payload.email)}</p>
+      <p><strong>Anno di nascita:</strong> ${payload.birthYear}</p>
       <p><strong>Voto:</strong> ${payload.rating}/5 <span style="color:#f59e0b">${stars}</span></p>
       <p><strong>Suggerimenti / consigli:</strong></p>
       <p style="white-space:pre-wrap;background:#f4faff;border:1px solid #8abfe8;border-radius:12px;padding:12px">${escapeHtml(commentBlock)}</p>

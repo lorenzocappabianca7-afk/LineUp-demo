@@ -3,7 +3,7 @@
  * Uso: node script/demo-full-qa-check.mjs [baseUrl]
  */
 import { chromium, devices } from "playwright";
-import { waitForPreviewCompletion } from "./demo-test-helpers.mjs";
+import { fillDemoGate, waitForPreviewCompletion } from "./demo-test-helpers.mjs";
 
 const BASE = process.argv[2] || "http://127.0.0.1:5199";
 const VP = { name: "iPhone SE", ...devices["iPhone SE"] };
@@ -63,6 +63,7 @@ async function run() {
   await page.goto(`${BASE}/prova-pianifica`, { waitUntil: "networkidle" });
   await page.evaluate(() => {
     sessionStorage.removeItem("lineup_pianifica_demo_gate_v1");
+    sessionStorage.removeItem("lineup_pianifica_demo_gate_v2");
     sessionStorage.removeItem("lineup_pianifica_demo_intro_v1");
   });
   await page.reload({ waitUntil: "networkidle" });
@@ -81,12 +82,12 @@ async function run() {
   await page.goto(`${BASE}/prova-pianifica`, { waitUntil: "networkidle" });
   await page.evaluate(() => {
     sessionStorage.removeItem("lineup_pianifica_demo_gate_v1");
+    sessionStorage.removeItem("lineup_pianifica_demo_gate_v2");
     sessionStorage.removeItem("lineup_pianifica_demo_intro_v1");
   });
   await page.reload({ waitUntil: "networkidle" });
 
-  await page.fill('[data-testid="input-demo-gate-name"]', "QA Demo");
-  await page.fill('[data-testid="input-demo-gate-email"]', "qa@demo.it");
+  await fillDemoGate(page, { name: "QA Demo", email: "qa@demo.it", birthYear: "1995" });
   await page.click('[data-testid="button-demo-gate-confirm"]');
 
   // Intro scroll

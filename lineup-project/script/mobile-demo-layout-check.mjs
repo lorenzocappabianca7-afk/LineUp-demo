@@ -3,7 +3,7 @@
  * Uso: node script/mobile-demo-layout-check.mjs [baseUrl]
  */
 import { chromium, devices } from "playwright";
-import { waitForPreviewCompletion } from "./demo-test-helpers.mjs";
+import { fillDemoGate, waitForPreviewCompletion } from "./demo-test-helpers.mjs";
 
 const BASE = process.argv[2] || "http://127.0.0.1:5199";
 
@@ -80,12 +80,12 @@ async function run() {
     await page.goto(`${BASE}/prova-pianifica`, { waitUntil: "networkidle" });
     await page.evaluate(() => {
       sessionStorage.removeItem("lineup_pianifica_demo_gate_v1");
+      sessionStorage.removeItem("lineup_pianifica_demo_gate_v2");
       sessionStorage.removeItem("lineup_pianifica_demo_intro_v1");
     });
     await page.reload({ waitUntil: "networkidle" });
 
-    await page.fill('[data-testid="input-demo-gate-name"]', "Test Mobile");
-    await page.fill('[data-testid="input-demo-gate-email"]', "mobile@test.it");
+    await fillDemoGate(page, { name: "Test Mobile", email: "mobile@test.it", birthYear: "1993" });
 
     let r = await overflowReport(page);
     const gateScroll = await scrollAreaWorks(page, "demo-gate-scroll");

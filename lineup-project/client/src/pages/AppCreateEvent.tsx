@@ -74,8 +74,8 @@ export default function AppCreateEvent({
   const [selectedCategory, setSelectedCategory] = useState<string | null>(() =>
     fromScopri ? fromScopri.categoryKey : null,
   );
-  const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>(() =>
-    fromScopri ? [fromScopri.subcategoryLabel] : [],
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(() =>
+    fromScopri ? fromScopri.subcategoryLabel : null,
   );
   const [venueSearch, setVenueSearch] = useState("");
   const [aiVenueSuggestions, setAiVenueSuggestions] = useState<VenueOption[]>([]);
@@ -143,8 +143,8 @@ export default function AppCreateEvent({
         ? [selectedGroup]
         : selectedContacts
       )];
-      const activityKey = selectedSubcategories.map(s => s.toLowerCase()).join("/");
-      const title = selectedSubcategories.join(" / ");
+      const activityKey = selectedSubcategory?.toLowerCase() ?? "";
+      const title = selectedSubcategory ?? "";
       const dayTimesFlat = Object.entries(selectedDayTimes).flatMap(([day, times]) =>
         times.map(t => `${day} · ${t}`),
       );
@@ -186,7 +186,7 @@ export default function AppCreateEvent({
   };
 
   const canProceed0 = selectedContacts.length > 0 || selectedGroup !== null;
-  const canProceed1 = selectedSubcategories.length > 0;
+  const canProceed1 = Boolean(selectedSubcategory?.trim());
   const canProceed2 = true; // date opzionali
   const canProceed3 = true; // fasce orarie opzionali
   const canProceed4 = true; // orari per giorno opzionali
@@ -214,9 +214,9 @@ export default function AppCreateEvent({
     [isDirectPlan, fromScopriFlow, selectedDates.length, timeOptionCount, selectedVenues.length],
   );
 
-  const venueKeys = selectedSubcategories
-    .map((s) => venuePoolKeyForPlanSubcategory(s))
-    .filter((k): k is string => Boolean(k));
+  const venueKeys = selectedSubcategory
+    ? [venuePoolKeyForPlanSubcategory(selectedSubcategory)].filter((k): k is string => Boolean(k))
+    : [];
   const allVenues =
     venueKeys.length === 0
       ? []
@@ -227,10 +227,10 @@ export default function AppCreateEvent({
 
   const catLabelForBanner = PLAN_CATEGORIES.find(c => c.key === selectedCategory)?.label ?? "";
 
-  const toggleSubcategory = (sub: string) => {
-    setSelectedSubcategories(prev =>
-      prev.includes(sub) ? prev.filter(s => s !== sub) : [...prev, sub]
-    );
+  const selectSubcategory = (sub: string) => {
+    const trimmed = sub.trim();
+    if (!trimmed) return;
+    setSelectedSubcategory((prev) => (prev === trimmed ? null : trimmed));
   };
 
   const toggleVenue = (venue: VenueOption) => {
@@ -380,7 +380,7 @@ export default function AppCreateEvent({
         </div>
         {fromScopriFlow && (
           <p className="text-xs text-primary font-semibold px-6 pt-1 leading-relaxed">
-            {selectedSubcategories.join(", ")} · {selectedVenues.length}{" "}
+            {selectedSubcategory} · {selectedVenues.length}{" "}
             {selectedVenues.length === 1 ? "luogo già scelto" : "luoghi già scelti"} con Scopri AI. Indica chi vuoi invitare.
           </p>
         )}
@@ -518,7 +518,7 @@ export default function AppCreateEvent({
             <button
               onClick={() => {
                 setSelectedCategory(null);
-                setSelectedSubcategories([]);
+                setSelectedSubcategory(null);
                 setShowCustomInput(false);
                 setCustomSubcategory("");
                 setStep(0);
@@ -542,14 +542,19 @@ export default function AppCreateEvent({
             <div className="px-5 pt-4 pb-3">
             {/* Header con categoria selezionata */}
             <button
-              onClick={() => { setSelectedCategory(null); setShowCustomInput(false); setCustomSubcategory(""); }}
+              onClick={() => {
+                setSelectedCategory(null);
+                setSelectedSubcategory(null);
+                setShowCustomInput(false);
+                setCustomSubcategory("");
+              }}
               className="flex items-center gap-2 mb-4 text-sm font-semibold text-gray-500 hover:text-black transition-colors"
             >
               <ArrowLeft size={16} />
               {PLAN_CATEGORIES.find(c => c.key === selectedCategory)?.label}
             </button>
 
-            <p className="text-sm text-gray-500 mb-3">Scegli una sottocategoria.</p>
+            <p className="text-sm text-gray-500 mb-3">Scegli una sola sottocategoria.</p>
 
             {/* Pillole sottocategorie */}
             <div className="flex flex-wrap gap-2">
@@ -557,9 +562,9 @@ export default function AppCreateEvent({
                 <button
                   key={sub}
                   data-testid={`subcategory-${sub}`}
-                  onClick={() => toggleSubcategory(sub)}
+                  onClick={() => selectSubcategory(sub)}
                   className={`px-4 py-2 rounded-full text-sm font-medium transition-all active:scale-95 ${
-                    selectedSubcategories.includes(sub)
+                    selectedSubcategory === sub
                       ? "bg-black text-white"
                       : "bg-primary/10 text-black hover:bg-gray-200"
                   }`}
@@ -588,12 +593,12 @@ export default function AppCreateEvent({
                   autoFocus
                   value={customSubcategory}
                   onChange={e => setCustomSubcategory(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && customSubcategory.trim()) { toggleSubcategory(customSubcategory.trim()); setCustomSubcategory(""); } }}
+                  onKeyDown={e => { if (e.key === "Enter" && customSubcategory.trim()) { selectSubcategory(customSubcategory.trim()); setCustomSubcategory(""); setShowCustomInput(false); } }}
                   placeholder="Scrivi la tua attività…"
                   className="flex-1 px-4 py-2 rounded-xl bg-gray-100 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-primary/30"
                 />
                 <button
-                  onClick={() => { if (customSubcategory.trim()) { toggleSubcategory(customSubcategory.trim()); setCustomSubcategory(""); } }}
+                  onClick={() => { if (customSubcategory.trim()) { selectSubcategory(customSubcategory.trim()); setCustomSubcategory(""); setShowCustomInput(false); } }}
                   disabled={!customSubcategory.trim()}
                   className="px-4 py-2 rounded-xl bg-black text-white text-sm font-semibold disabled:opacity-40 transition-opacity"
                 >
@@ -607,7 +612,7 @@ export default function AppCreateEvent({
           {/* Footer sottocategorie */}
           <div className="flex shrink-0 gap-3 border-t border-gray-100 px-6 py-4">
             <button
-              onClick={() => { setSelectedCategory(null); setSelectedSubcategories([]); setShowCustomInput(false); setCustomSubcategory(""); }}
+              onClick={() => { setSelectedCategory(null); setSelectedSubcategory(null); setShowCustomInput(false); setCustomSubcategory(""); }}
               className="px-5 min-h-12 touch-manipulation rounded-xl py-3.5 text-base font-semibold text-gray-600 bg-gray-100"
             >
               Indietro
@@ -1003,7 +1008,7 @@ export default function AppCreateEvent({
         </div>
         <div>
           <p className="text-xs font-bold text-primary">
-            {selectedSubcategories.length > 0 ? selectedSubcategories.join(" / ") : "Dove"} · {catLabelForBanner} · {groupLabel}
+            {selectedSubcategory ?? "Dove"} · {catLabelForBanner} · {groupLabel}
           </p>
           <p className="text-xs text-gray-500">
             {selectedDates.slice(0, 2).join(" · ")}{selectedDates.length > 2 ? ` +${selectedDates.length - 2}` : ""}

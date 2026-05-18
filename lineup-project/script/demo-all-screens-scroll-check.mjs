@@ -3,7 +3,7 @@
  * Uso: node script/demo-all-screens-scroll-check.mjs [baseUrl]
  */
 import { chromium, devices } from "playwright";
-import { waitForPreviewCompletion } from "./demo-test-helpers.mjs";
+import { fillDemoGate, waitForPreviewCompletion } from "./demo-test-helpers.mjs";
 
 const BASE = process.argv[2] || "http://127.0.0.1:5199";
 const VIEWPORTS = [
@@ -54,8 +54,7 @@ async function advanceTo(page, marker) {
     case null:
       return;
     case "gate-done":
-      await page.fill('[data-testid="input-demo-gate-name"]', "Scroll All");
-      await page.fill('[data-testid="input-demo-gate-email"]', "all@scroll.it");
+      await fillDemoGate(page, { name: "Scroll All", email: "all@scroll.it", birthYear: "1991" });
       await page.click('[data-testid="button-demo-gate-confirm"]');
       return;
     case "intro-done":
@@ -113,6 +112,7 @@ async function run() {
     await page.goto(`${BASE}/prova-pianifica`, { waitUntil: "networkidle" });
     await page.evaluate(() => {
       sessionStorage.removeItem("lineup_pianifica_demo_gate_v1");
+      sessionStorage.removeItem("lineup_pianifica_demo_gate_v2");
       sessionStorage.removeItem("lineup_pianifica_demo_intro_v1");
     });
     await page.reload({ waitUntil: "networkidle" });

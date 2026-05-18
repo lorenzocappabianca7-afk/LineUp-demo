@@ -20,6 +20,7 @@ type FeedbackRow = {
   id: string;
   name: string;
   email: string;
+  birthYear?: number;
   rating: number;
   comment?: string;
   createdAt: string;
@@ -193,6 +194,9 @@ export default function PianificaDemoFeedbackAdmin() {
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground break-all">{fb.email}</p>
+                {fb.birthYear != null && (
+                  <p className="text-xs text-muted-foreground">Anno di nascita: {fb.birthYear}</p>
+                )}
                 <p className="text-xs text-muted-foreground">{formatDate(fb.createdAt)}</p>
                 {fb.comment?.trim() ? (
                   <p className="text-sm whitespace-pre-wrap rounded-lg bg-muted/50 p-3">{fb.comment}</p>

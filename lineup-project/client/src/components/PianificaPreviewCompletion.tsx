@@ -2,11 +2,11 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { CheckCircle2, ChevronDown, Star } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PianificaPreviewTeasers } from "@/components/PianificaPreviewTeasers";
+import { readStoredDemoProfile, type PreviewProfile } from "@/lib/pianificaDemoProfile";
+
+export type { PreviewProfile };
 
 const IDLE_MS = 3000;
-const GATE_STORAGE_KEY = "lineup_pianifica_demo_gate_v1";
-
-export type PreviewProfile = { name: string; email: string };
 
 export type PianificaPreviewCompletionProps = {
   profile: PreviewProfile;
@@ -15,18 +15,6 @@ export type PianificaPreviewCompletionProps = {
   scrollRootRef: RefObject<HTMLElement | null>;
   onScrollActivity?: () => void;
 };
-
-function readStoredProfile(): PreviewProfile | null {
-  try {
-    const raw = sessionStorage.getItem(GATE_STORAGE_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw) as PreviewProfile;
-    if (!data?.name?.trim() || !data?.email?.trim()) return null;
-    return { name: data.name.trim(), email: data.email.trim() };
-  } catch {
-    return null;
-  }
-}
 
 /** Solo contenuto: nessun overflow/scroll qui (evita blocchi Safari). */
 export function PianificaPreviewCompletion({
@@ -46,7 +34,8 @@ export function PianificaPreviewCompletion({
   const [submitting, setSubmitting] = useState(false);
   const [feedbackSent, setFeedbackSent] = useState(false);
 
-  const effectiveProfile = profile.name && profile.email ? profile : readStoredProfile();
+  const effectiveProfile =
+    profile.name && profile.email && profile.birthYear ? profile : readStoredDemoProfile();
 
   const clearIdleTimer = useCallback(() => {
     if (idleTimerRef.current) {
@@ -104,6 +93,7 @@ export function PianificaPreviewCompletion({
         body: JSON.stringify({
           name: effectiveProfile.name,
           email: effectiveProfile.email,
+          birthYear: effectiveProfile.birthYear,
           rating,
           comment: comment.trim() || undefined,
         }),

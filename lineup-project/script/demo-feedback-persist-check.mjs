@@ -14,6 +14,7 @@ async function run() {
     body: JSON.stringify({
       name: "Test Persistenza",
       email: MARKER,
+      birthYear: 1992,
       rating: 5,
       comment: "Verifica automatica salvataggio DB",
     }),

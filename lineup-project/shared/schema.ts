@@ -188,6 +188,7 @@ export const pianificaDemoFeedbacks = pgTable("pianifica_demo_feedbacks", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull(),
+  birthYear: integer("birth_year"),
   rating: integer("rating").notNull(),
   comment: text("comment"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

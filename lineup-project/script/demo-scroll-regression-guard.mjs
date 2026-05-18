@@ -3,7 +3,7 @@
  * Uso: node script/demo-scroll-regression-guard.mjs [baseUrl]
  */
 import { chromium, devices } from "playwright";
-import { waitForPreviewCompletion } from "./demo-test-helpers.mjs";
+import { fillDemoGate, waitForPreviewCompletion } from "./demo-test-helpers.mjs";
 
 const BASE = process.argv[2] || "http://127.0.0.1:5199";
 const VP = { name: "iPhone SE", ...devices["iPhone SE"] };
@@ -12,11 +12,11 @@ async function reachCompletion(page) {
   await page.goto(`${BASE}/prova-pianifica`, { waitUntil: "networkidle" });
   await page.evaluate(() => {
     sessionStorage.removeItem("lineup_pianifica_demo_gate_v1");
+    sessionStorage.removeItem("lineup_pianifica_demo_gate_v2");
     sessionStorage.removeItem("lineup_pianifica_demo_intro_v1");
   });
   await page.reload({ waitUntil: "networkidle" });
-  await page.fill('[data-testid="input-demo-gate-name"]', "Guard");
-  await page.fill('[data-testid="input-demo-gate-email"]', "guard@test.it");
+  await fillDemoGate(page, { name: "Guard", email: "guard@test.it", birthYear: "1994" });
   await page.click('[data-testid="button-demo-gate-confirm"]');
   await page.click('[data-testid="button-demo-intro-continue"]');
   await page.click('[data-testid="button-pianifica-demo-page"]');

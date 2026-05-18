@@ -1,3 +1,10 @@
+/** Compila il gate demo (nome, email, anno di nascita). */
+export async function fillDemoGate(page, { name, email, birthYear = "1990" } = {}) {
+  await page.fill('[data-testid="input-demo-gate-name"]', name ?? "Test Demo");
+  await page.fill('[data-testid="input-demo-gate-email"]', email ?? "demo@test.it");
+  await page.fill('[data-testid="input-demo-gate-birth-year"]', String(birthYear));
+}
+
 /** Salta l'anteprima animata post-sondaggio (demo) se visibile. */
 export async function skipGroupLifeDemo(page) {
   const skip = page.locator('[data-testid="button-skip-group-life-demo"]');

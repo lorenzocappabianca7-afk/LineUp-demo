@@ -12,36 +12,23 @@ import { useBodyScrollLock, releaseBodyScrollLock } from "@/hooks/use-body-scrol
 import { DEMO_COMPLETION_SCROLL_TEST_ID } from "@/lib/demoModalScroll";
 import { cn } from "@/lib/utils";
 import { setCurrentUser } from "@/lib/appUtils";
+import {
+  isValidBirthYearInput,
+  isValidEmail,
+  readStoredDemoProfile,
+  storeDemoProfile,
+  type PreviewProfile,
+} from "@/lib/pianificaDemoProfile";
 
-const GATE_STORAGE_KEY = "lineup_pianifica_demo_gate_v1";
 const INTRO_STORAGE_KEY = "lineup_pianifica_demo_intro_v1";
 
-type DemoGateProfile = { name: string; email: string };
-
-function readStoredGate(): DemoGateProfile | null {
-  try {
-    const raw = sessionStorage.getItem(GATE_STORAGE_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw) as DemoGateProfile;
-    if (!data?.name?.trim() || !data?.email?.trim()) return null;
-    return { name: data.name.trim(), email: data.email.trim() };
-  } catch {
-    return null;
-  }
-}
-
-function isValidEmail(value: string) {
-  const t = value.trim();
-  return t.length >= 3 && t.includes("@") && !/\s/.test(t);
-}
-
-function completeDemoGate(profile: DemoGateProfile) {
-  sessionStorage.setItem(GATE_STORAGE_KEY, JSON.stringify(profile));
+function completeDemoGate(profile: PreviewProfile) {
+  storeDemoProfile(profile);
   setCurrentUser(profile.name);
 }
 
 /**
- * Pagina pubblica di prova (QR): nome + email, poi tasto Pianifica.
+ * Pagina pubblica di prova (QR): nome, email e anno di nascita, poi tasto Pianifica.
  * Senza bottom nav e senza navigazione alla chat dopo la creazione.
  */
 const RISCONTRI_DOUBLE_TAP_MS = 450;
@@ -55,6 +42,7 @@ export default function AppPianificaDemo() {
   const [introDone, setIntroDone] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [birthYear, setBirthYear] = useState("");
   const completionScrollRef = useRef<HTMLDivElement>(null);
   const [completionCanScrollMore, setCompletionCanScrollMore] = useState(true);
 
@@ -102,10 +90,11 @@ export default function AppPianificaDemo() {
       });
     }
 
-    const stored = readStoredGate();
+    const stored = readStoredDemoProfile();
     if (stored) {
       setName(stored.name);
       setEmail(stored.email);
+      setBirthYear(String(stored.birthYear));
       setGateDone(true);
       setCurrentUser(stored.name);
     }
@@ -116,17 +105,29 @@ export default function AppPianificaDemo() {
     }
   }, []);
 
-  const canConfirmGate = name.trim().length >= 1 && isValidEmail(email);
+  const canConfirmGate =
+    name.trim().length >= 1 && isValidEmail(email) && isValidBirthYearInput(birthYear);
 
   const confirmGate = (e?: { preventDefault?: () => void }) => {
     e?.preventDefault?.();
     if (!canConfirmGate) return;
-    const profile = { name: name.trim(), email: email.trim().toLowerCase() };
+    const parsedYear = Number(birthYear.trim());
+    const profile: PreviewProfile = {
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      birthYear: parsedYear,
+    };
     setName(profile.name);
     setEmail(profile.email);
+    setBirthYear(String(profile.birthYear));
     completeDemoGate(profile);
     setGateDone(true);
   };
+
+  const demoProfile: PreviewProfile | null =
+    name.trim() && isValidEmail(email) && isValidBirthYearInput(birthYear)
+      ? { name: name.trim(), email: email.trim().toLowerCase(), birthYear: Number(birthYear.trim()) }
+      : readStoredDemoProfile();
 
   const closeSheet = useCallback(() => {
     setSheetOpen(false);
@@ -175,7 +176,7 @@ export default function AppPianificaDemo() {
           >
             <h2 className="text-lg font-bold text-gray-900">Prima di provare</h2>
             <p className="mt-1 text-sm text-gray-500 leading-snug">
-              Inserisci nome e email per accedere alla demo del tasto Pianifica.
+              Inserisci nome, email e anno di nascita per accedere alla demo del tasto Pianifica.
             </p>
 
             <label className="mt-5 block text-xs font-bold text-gray-600">Nome</label>
@@ -203,6 +204,20 @@ export default function AppPianificaDemo() {
               className="mt-1.5 min-h-12 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-base text-gray-900 outline-none focus:ring-2 focus:ring-primary/30"
               autoComplete="email"
             />
+
+            <label className="mt-4 block text-xs font-bold text-gray-600">Anno di nascita</label>
+            <input
+              data-testid="input-demo-gate-birth-year"
+              type="text"
+              inputMode="numeric"
+              autoComplete="bday-year"
+              value={birthYear}
+              onChange={(e) => setBirthYear(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              placeholder="Es. 1995"
+              maxLength={4}
+              className="mt-1.5 min-h-12 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-base text-gray-900 outline-none focus:ring-2 focus:ring-primary/30"
+            />
+            <p className="mt-1 text-[11px] text-gray-400">Solo l&apos;anno, senza mese e giorno.</p>
 
             <button
               type="submit"
@@ -319,11 +334,13 @@ export default function AppPianificaDemo() {
                     className="min-h-0 flex-1 basis-0 grow overflow-x-hidden overflow-y-scroll overscroll-y-auto bg-white touch-pan-y [-webkit-overflow-scrolling:touch] [touch-action:pan-y]"
                     style={{ WebkitOverflowScrolling: "touch" }}
                   >
+                    {demoProfile && (
                     <PianificaPreviewCompletion
-                      profile={{ name: name.trim(), email: email.trim().toLowerCase() }}
+                      profile={demoProfile}
                       onClose={closeSheet}
                       scrollRootRef={completionScrollRef}
                     />
+                    )}
                   </main>
                   {completionCanScrollMore && (
                     <footer className="z-10 shrink-0 border-t border-gray-200 bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-6px_16px_rgba(0,0,0,0.08)]">
@@ -343,7 +360,7 @@ export default function AppPianificaDemo() {
                 <AppCreateEvent
                   key={`pianifica-demo:${email}`}
                   previewMode
-                  previewProfile={{ name: name.trim(), email: email.trim().toLowerCase() }}
+                  previewProfile={demoProfile ?? undefined}
                   onPreviewComplete={() => setModalPhase("complete")}
                   onClose={closeSheet}
                 />

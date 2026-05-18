@@ -9,7 +9,6 @@ import {
   Search,
   Send,
   Sparkles,
-  UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getAvatarColor, getInitials } from "@/lib/appUtils";
@@ -409,66 +408,112 @@ function SceneCalendar({ highlightDay }: { highlightDay: boolean }) {
   );
 }
 
+const PUBLISH_EVENT_COPY =
+  "Devi organizzare una festa, un calcetto o una cena tra nuovi amici? LineUp ti permette di pubblicare annunci dei tuoi eventi e i tuoi followers potranno far richiesta di partecipazione. Sarai poi tu che hai organizzato ad accettarli e permetterli di farne parte!";
+
 function ScenePublishBanner({ visible }: { visible: boolean }) {
   return (
-    <PhoneScreen className="flex flex-col items-center justify-center bg-[#F4FAFF] p-4">
+    <PhoneScreen className="flex flex-col items-center justify-center bg-[#F4FAFF] p-3">
       <article
         className={cn(
-          "w-full rounded-2xl border-2 border-sky-400 bg-white px-4 py-4 shadow-md transition-all duration-600 ease-out",
+          "flex max-h-[88%] w-full flex-col overflow-y-auto rounded-2xl border-2 border-sky-400 bg-white px-3.5 py-3.5 shadow-md transition-all duration-600 ease-out",
           visible ? "translate-y-0 opacity-100 scale-100" : "translate-y-4 opacity-0 scale-[0.98]",
         )}
       >
-        <div className="flex items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-600">
-            <Megaphone size={22} />
+        <div className="flex items-start gap-2.5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-600">
+            <Megaphone size={20} />
           </div>
-          <div className="min-w-0 text-left">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-sky-700">Dopo la conferma</p>
-            <h3 className="mt-0.5 text-base font-bold leading-snug text-gray-900">Pubblica con il tuo gruppo</h3>
-            <p className="mt-2 text-sm leading-relaxed text-gray-800">
-              Per una <span className="font-semibold">festa</span> o un{" "}
-              <span className="font-semibold">calcetto</span>: i tuoi follower possono chiedere di unirsi e tu scegli chi
-              aggiungere all&apos;evento.
-            </p>
-          </div>
+          <p className="pt-1 text-[11px] font-semibold leading-snug text-sky-800">Pubblica il tuo evento</p>
         </div>
+        <p className="mt-2.5 text-[12px] leading-relaxed text-gray-800">{PUBLISH_EVENT_COPY}</p>
       </article>
     </PhoneScreen>
   );
 }
 
-const CAPTIONS = [
-  "Apri Chat: vedi i gruppi e le attività in corso.",
-  "Entri nella chat dell'evento: il sondaggio LineUp è in alto.",
-  "Proponi data, orario o luogo con un tap.",
-  "Il gruppo vota sulle opzioni — come nell'app vera.",
-  "Organizzate tutto in chat, in tempo reale.",
-  "Il creatore conferma: data, ora e luogo sono fissi.",
-  "L'evento compare nel calendario LineUp.",
-  "Pubblica l'evento e aggiungi chi vuole unirsi — festa, calcetto e altro.",
+type GuideVignetteContent = { title: string; text: string };
+
+const VIGNETTE_BY_STEP: Record<string, GuideVignetteContent> = {
+  "0:0": { title: "Chat", text: "Vedi gruppi ed eventi in programma." },
+  "0:1": { title: "Apri il gruppo", text: "Tocca la chat del calcetto." },
+  "1:0": { title: "Sondaggio", text: "Data, orario e luogo da votare insieme." },
+  "1:1": { title: "Tab Voto", text: "Qui si decide quando e dove." },
+  "2:0": { title: "Proponi", text: "Tocca per suggerire un'opzione." },
+  "2:1": { title: "Nuova opzione", text: "Tutti la vedono nel sondaggio." },
+  "3:0": { title: "Vota", text: "Ogni partecipante sceglie con un tap." },
+  "3:1": { title: "Preferenze", text: "Le barre mostrano chi è d'accordo." },
+  "4:0": { title: "Chat", text: "Passate al tab Chat per organizzarvi." },
+  "4:1": { title: "Messaggi", text: "Concordate dettagli in tempo reale." },
+  "4:2": { title: "Gruppo allineato", text: "Tutti sulla stessa pagina." },
+  "5:0": { title: "Conferma", text: "Il creatore fissa l'evento." },
+  "5:1": { title: "Confermato", text: "Data, ora e luogo sono definitivi." },
+  "6:0": { title: "Calendario", text: "LineUp segna il giorno scelto." },
+  "6:1": { title: "In agenda", text: "L'evento compare nel calendario." },
+  "7:0": { title: "Pubblica", text: "Annunci per festa, calcetto o cena con i follower." },
+};
+
+const CAPTION_FALLBACK: GuideVignetteContent[] = [
+  { title: "Chat", text: "Apri il gruppo dell'evento." },
+  { title: "Sondaggio", text: "Votate data, orario e luogo." },
+  { title: "Proponi", text: "Aggiungi un'opzione al sondaggio." },
+  { title: "Vota", text: "Scegli le preferenze con un tap." },
+  { title: "Organizza", text: "Parlatene in chat." },
+  { title: "Conferma", text: "L'evento è ufficiale." },
+  { title: "Calendario", text: "Lo trovi in agenda." },
+  { title: "Condividi", text: "Invita chi vuole unirsi." },
 ];
+
+function resolveGuideVignette(
+  scene: number,
+  phase: number,
+  showProseguiHint: boolean,
+): GuideVignetteContent {
+  if (showProseguiHint) {
+    return { title: "Prossimo passo", text: "Leggi come funziona la pubblicazione, poi tocca Prosegui." };
+  }
+  const exact = VIGNETTE_BY_STEP[`${scene}:${phase}`];
+  if (exact) return exact;
+  const sceneOnly = VIGNETTE_BY_STEP[`${scene}:0`];
+  if (sceneOnly) return sceneOnly;
+  return CAPTION_FALLBACK[scene] ?? CAPTION_FALLBACK[0];
+}
+
+function GuideVignette({ content, stepKey }: { content: GuideVignetteContent; stepKey: string }) {
+  return (
+    <div
+      key={stepKey}
+      data-testid="guide-vignette"
+      aria-live="polite"
+      className="mb-2 w-full max-w-[300px] shrink-0 animate-in fade-in slide-in-from-top-1 fill-mode-both duration-350 motion-reduce:animate-none"
+    >
+      <div className="rounded-lg border border-primary/20 bg-white/95 px-2.5 py-1.5 shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm">
+        <p className="text-[9px] font-bold uppercase tracking-wide text-primary leading-none">{content.title}</p>
+        <p className="mt-0.5 text-[11px] font-medium leading-snug text-gray-800">{content.text}</p>
+      </div>
+    </div>
+  );
+}
 
 function FixedPublishBanner({ visible, onContinue }: { visible: boolean; onContinue: () => void }) {
   return (
     <div
       className={cn(
         "w-full max-w-[300px] transition-all duration-500 ease-out",
-        visible
-          ? "mt-4 max-h-[320px] opacity-100"
-          : "pointer-events-none mt-0 max-h-0 overflow-hidden opacity-0",
+        visible ? "mt-4 max-h-[560px] opacity-100" : "pointer-events-none mt-0 max-h-0 overflow-hidden opacity-0",
       )}
       aria-hidden={!visible}
     >
       <article
-        className="relative overflow-hidden rounded-2xl border-2 border-sky-400 bg-gradient-to-br from-sky-50 via-white to-primary/10 px-4 pb-4 pt-4 shadow-xl"
+        className="relative overflow-hidden rounded-2xl border-2 border-sky-400 bg-gradient-to-br from-sky-50 via-white to-primary/10 px-4 pb-5 pt-4 shadow-xl"
         data-testid="banner-publish-group-fixed"
       >
         <div
-          className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-sky-300/25"
+          className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-sky-300/25"
           aria-hidden
         />
         <div
-          className="pointer-events-none absolute -bottom-4 left-8 h-16 w-16 rounded-full bg-primary/10"
+          className="pointer-events-none absolute -bottom-6 left-6 h-20 w-20 rounded-full bg-primary/10"
           aria-hidden
         />
 
@@ -476,33 +521,13 @@ function FixedPublishBanner({ visible, onContinue }: { visible: boolean; onConti
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-400 to-sky-600 text-white shadow-md shadow-sky-500/30">
             <Megaphone size={22} strokeWidth={2.25} />
           </div>
-          <div className="min-w-0 flex-1 text-left">
-            <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-sky-700">
-              <Sparkles size={11} className="shrink-0" />
-              Festa · calcetto · sport
-            </p>
-            <h3 className="mt-1 text-base font-bold leading-snug text-gray-900">
-              Pubblica il tuo evento, trova partecipanti
-            </h3>
-            <p className="mt-1.5 text-sm leading-relaxed text-gray-700">
-              Condividi l&apos;annuncio con il gruppo e i follower: chi è interessato chiede di unirsi e{" "}
-              <span className="font-semibold text-gray-900">tu scegli chi aggiungere</span>.
-            </p>
-          </div>
+          <p className="flex items-center gap-1 pt-1 text-[11px] font-bold uppercase tracking-wide text-sky-700">
+            <Sparkles size={12} className="shrink-0" />
+            Pubblica con LineUp
+          </p>
         </div>
 
-        <ul className="relative mt-3 space-y-1.5 text-left text-xs text-gray-600">
-          <li className="flex items-center gap-2">
-            <UserPlus size={14} className="shrink-0 text-sky-600" />
-            Ideale quando cercate una persona in più
-          </li>
-          <li className="flex items-center gap-2">
-            <span className="text-base leading-none" aria-hidden>
-              ⚽
-            </span>
-            Partita, cena, festa: stesso flusso per tutti
-          </li>
-        </ul>
+        <p className="relative mt-3 text-[13px] leading-[1.55] text-gray-800 sm:text-sm">{PUBLISH_EVENT_COPY}</p>
 
         <button
           type="button"
@@ -510,7 +535,7 @@ function FixedPublishBanner({ visible, onContinue }: { visible: boolean; onConti
           onClick={onContinue}
           disabled={!visible}
           tabIndex={visible ? 0 : -1}
-          className="relative mt-4 flex min-h-12 w-full touch-manipulation items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-primary to-primary/80 py-3.5 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/25 active:scale-[0.98] disabled:pointer-events-none motion-reduce:active:scale-100"
+          className="relative mt-4 flex min-h-12 w-full touch-manipulation items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-primary to-primary/80 py-3.5 text-base font-bold text-primary-foreground shadow-lg shadow-primary/25 active:scale-[0.98] disabled:pointer-events-none motion-reduce:active:scale-100"
         >
           Prosegui
           <ChevronRight size={18} strokeWidth={2.5} aria-hidden />
@@ -651,10 +676,12 @@ export function PianificaGroupLifeAnimation({ onComplete, creatorName = "Tu" }: 
     };
   }, [scene]);
 
-  const caption =
-    fixedBannerVisible && scene === LAST_SCENE_INDEX
-      ? "Tocca Prosegui: scopri il futuro di LineUp e lascia il tuo voto e i tuoi consigli."
-      : (CAPTIONS[scene] ?? CAPTIONS[CAPTIONS.length - 1]);
+  const showProseguiHint = fixedBannerVisible && scene === LAST_SCENE_INDEX;
+  const vignette = useMemo(
+    () => resolveGuideVignette(scene, phase, showProseguiHint),
+    [scene, phase, showProseguiHint],
+  );
+  const vignetteKey = `${scene}-${phase}-${showProseguiHint ? "prosegui" : "step"}`;
 
   return (
     <div
@@ -682,39 +709,35 @@ export function PianificaGroupLifeAnimation({ onComplete, creatorName = "Tu" }: 
           fixedBannerVisible ? "justify-start overflow-y-auto overscroll-y-contain" : "justify-center overflow-hidden",
         )}
       >
-        <div
-          className="relative h-[360px] w-full max-w-[300px] overflow-hidden rounded-[24px] border-2 border-primary/20 bg-white shadow-xl"
-          style={{ transform: "translateZ(0)" }}
-        >
-          {Array.from({ length: LAYER_COUNT }).map((_, layer) => (
-            <div
-              key={layer}
-              aria-hidden={activeLayer !== layer}
-              className={cn(
-                "absolute inset-0 transition-opacity ease-in-out motion-reduce:transition-none",
-                activeLayer === layer ? "z-10 opacity-100" : "pointer-events-none z-0 opacity-0",
-              )}
-              style={{ transitionDuration: `${FADE_MS}ms` }}
-            >
-              <LayerContent
-                layer={layer}
-                scene={scene}
-                phase={activeLayer === layer ? phase : 0}
-                creatorName={safeName}
-                publishBannerVisible={publishBannerVisible}
-              />
-            </div>
-          ))}
+        <div className="flex w-full max-w-[300px] flex-col items-center">
+          {!exiting && <GuideVignette content={vignette} stepKey={vignetteKey} />}
+          <div
+            className="relative h-[300px] w-full overflow-hidden rounded-[24px] border-2 border-primary/20 bg-white shadow-xl"
+            style={{ transform: "translateZ(0)" }}
+          >
+            {Array.from({ length: LAYER_COUNT }).map((_, layer) => (
+              <div
+                key={layer}
+                aria-hidden={activeLayer !== layer}
+                className={cn(
+                  "absolute inset-0 transition-opacity ease-in-out motion-reduce:transition-none",
+                  activeLayer === layer ? "z-10 opacity-100" : "pointer-events-none z-0 opacity-0",
+                )}
+                style={{ transitionDuration: `${FADE_MS}ms` }}
+              >
+                <LayerContent
+                  layer={layer}
+                  scene={scene}
+                  phase={activeLayer === layer ? phase : 0}
+                  creatorName={safeName}
+                  publishBannerVisible={publishBannerVisible}
+                />
+              </div>
+            ))}
+          </div>
         </div>
 
-        <p
-          key={scene}
-          className="mt-4 max-w-[300px] animate-in fade-in fill-mode-both text-center text-xs leading-relaxed text-gray-600 duration-400 motion-reduce:animate-none"
-        >
-          {caption}
-        </p>
-
-        <div className="mt-3 flex gap-1" aria-hidden>
+        <div className="mt-2.5 flex gap-1" aria-hidden>
           {Array.from({ length: SCENE_COUNT }).map((_, i) => (
             <span
               key={i}
