@@ -7,7 +7,7 @@ services:
     plan: free
     # Se il repo Git è la cartella padre "Lineup", usa rootDir; se il repo è solo lineup-project, rimuovi rootDir.
     rootDir: lineup-project
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci && npm run build && npm run db:push
     startCommand: npm start
     healthCheckPath: /prova-pianifica
     envVars:

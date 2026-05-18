@@ -51,7 +51,7 @@ const GUIDES: Record<PreviewGuideId, GuideContent> = {
     stepLabel: "Passo 5 di 7",
     title: "Orari per giorno (opzionale)",
     body: "Se hai scelto dei giorni, puoi aggiungere orari precisi per ciascuno.",
-    action: "Muovi lo slider, premi + per aggiungere l’orario, poi Continua.",
+    action: "Muovi lo slider, poi premi Seleziona orario per aggiungere l’orario scelto.",
   },
   step5: {
     stepLabel: "Passo 6 di 7",

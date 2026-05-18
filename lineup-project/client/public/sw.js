@@ -1,5 +1,5 @@
 /** Incrementare dopo ogni rilascio importante (svuota cache SW lato client). */
-const CACHE_NAME = "lineup-v20-completion-main-scroll";
+const CACHE_NAME = "lineup-v22-group-life-smooth";
 const STATIC_ASSETS = ["/", "/manifest.json"];
 
 self.addEventListener("install", (event) => {

@@ -182,3 +182,15 @@ export const demoEvents = pgTable("demo_events", {
   location: text("location").notNull(),
   imageUrl: text("image_url"),
 });
+
+/** Feedback demo QR Pianifica — persistente su Postgres (sopravvive al cold start Render). */
+export const pianificaDemoFeedbacks = pgTable("pianifica_demo_feedbacks", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  rating: integer("rating").notNull(),
+  comment: text("comment"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type PianificaDemoFeedbackRow = typeof pianificaDemoFeedbacks.$inferSelect;

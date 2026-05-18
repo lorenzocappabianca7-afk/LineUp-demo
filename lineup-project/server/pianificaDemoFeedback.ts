@@ -1,6 +1,5 @@
 import nodemailer from "nodemailer";
 import { logAiPipelineSummary } from "./aiLog";
-import { addPianificaDemoFeedback } from "./pianificaDemoStore";
 
 export const PIANIFICA_DEMO_FEEDBACK_RECIPIENTS = [
   "lorenzo.cappabianca7@gmail.com",
@@ -65,16 +64,10 @@ function escapeHtml(s: string) {
     .replace(/"/g, "&quot;");
 }
 
-export async function sendPianificaDemoFeedback(
+/** Notifica email (opzionale). Il feedback è già salvato su Postgres prima di chiamare questa funzione. */
+export async function notifyPianificaDemoFeedbackByEmail(
   payload: PianificaDemoFeedbackPayload,
-): Promise<{ delivered: boolean; channel: "smtp" | "log" | "store" }> {
-  await addPianificaDemoFeedback({
-    name: payload.name,
-    email: payload.email,
-    rating: payload.rating,
-    comment: payload.comment?.trim() || undefined,
-  });
-
+): Promise<{ delivered: boolean; channel: "smtp" | "log" }> {
   const { subject, text, html } = buildMailContent(payload);
   const recipients = getFeedbackRecipients();
 
@@ -106,16 +99,20 @@ export async function sendPianificaDemoFeedback(
     }
   }
 
-  await logAiPipelineSummary({
-    route: "POST /api/app/pianifica-demo/feedback [no-smtp]",
-    lines: [
-      `to: ${recipients.join(", ")}`,
-      `name: ${payload.name}`,
-      `email: ${payload.email}`,
-      `rating: ${payload.rating}/5`,
-      `comment: ${payload.comment?.trim() || "(vuoto)"}`,
-      "— Configura SMTP_HOST, SMTP_USER, SMTP_PASS (e opz. SMTP_FROM) per invio email reale.",
-    ],
-  });
-  return { delivered: true, channel: "store" };
+  try {
+    await logAiPipelineSummary({
+      route: "POST /api/app/pianifica-demo/feedback [no-smtp]",
+      lines: [
+        `to: ${recipients.join(", ")}`,
+        `name: ${payload.name}`,
+        `email: ${payload.email}`,
+        `rating: ${payload.rating}/5`,
+        `comment: ${payload.comment?.trim() || "(vuoto)"}`,
+        "— Configura SMTP_HOST, SMTP_USER, SMTP_PASS (e opz. SMTP_FROM) per invio email reale.",
+      ],
+    });
+  } catch (e) {
+    console.warn("pianifica-demo feedback log failed:", e);
+  }
+  return { delivered: false, channel: "log" };
 }

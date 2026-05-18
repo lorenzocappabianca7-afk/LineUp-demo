@@ -3,6 +3,7 @@
  * Uso: node script/demo-scroll-regression-guard.mjs [baseUrl]
  */
 import { chromium, devices } from "playwright";
+import { waitForPreviewCompletion } from "./demo-test-helpers.mjs";
 
 const BASE = process.argv[2] || "http://127.0.0.1:5199";
 const VP = { name: "iPhone SE", ...devices["iPhone SE"] };
@@ -32,7 +33,7 @@ async function reachCompletion(page) {
   if (await v.count()) await v.click();
   await page.click('[data-testid="button-step-venue-to-survey"]');
   await page.click('[data-testid="button-survey-mode-continue"]');
-  await page.waitForSelector('[data-testid="preview-completion-scroll"]', { timeout: 8000 });
+  await waitForPreviewCompletion(page);
 }
 
 async function run() {

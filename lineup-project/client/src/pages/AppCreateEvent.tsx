@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Star, MapPin, Tag, ChevronRight, ChevronLeft, Users, User, Search, UtensilsCrossed, Landmark, Dumbbell, Ticket, Gamepad2, PenLine, ArrowLeft, Plus, X, MessageCircle, Sunrise, Sun, Sunset, Moon, Coffee, Link2, Copy, Check } from "lucide-react";
+import { CheckCircle2, Star, MapPin, Tag, ChevronRight, ChevronLeft, Users, User, Search, UtensilsCrossed, Landmark, Dumbbell, Ticket, Gamepad2, PenLine, ArrowLeft, X, MessageCircle, Sunrise, Sun, Sunset, Moon, Coffee, Link2, Copy, Check } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
@@ -12,6 +12,7 @@ import { PLAN_CATEGORIES, PLAN_SUBCATEGORIES, venuePoolKeyForPlanSubcategory } f
 import { VenueExternalLinks } from "@/components/VenueExternalLinks";
 import { SurveyModePicker } from "@/components/SurveyModePicker";
 import { PianificaStepGuide } from "@/components/PianificaStepGuide";
+import { PianificaGroupLifeAnimation } from "@/components/PianificaGroupLifeAnimation";
 import type { PreviewProfile } from "@/components/PianificaPreviewCompletion";
 import { getPianificaPreviewGuide, type PreviewGuideId } from "@/lib/pianificaPreviewGuides";
 import {
@@ -60,6 +61,7 @@ export default function AppCreateEvent({
     return <PianificaStepGuide {...guide} variant={variant ?? (id === "step6" ? "onBlue" : "default")} />;
   };
   const [surveyMode, setSurveyMode] = useState<SurveyModeId>(DEFAULT_SURVEY_MODE);
+  const [showGroupLifeDemo, setShowGroupLifeDemo] = useState(false);
   const [step, setStep] = useState(0);
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
@@ -109,6 +111,11 @@ export default function AppCreateEvent({
     () => getEventChatInviteUrl(createdEventId ?? 0),
     [createdEventId],
   );
+
+  const handleGroupLifeDemoComplete = useCallback(() => {
+    setShowGroupLifeDemo(false);
+    onPreviewComplete?.();
+  }, [onPreviewComplete]);
 
   const copyInviteLink = async () => {
     if (!inviteEventUrl) return;
@@ -360,6 +367,17 @@ export default function AppCreateEvent({
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar [-webkit-overflow-scrolling:touch] touch-pan-y"
       >
         {renderPreviewGuide("step0")}
+        <div
+          className="mx-6 mt-2 mb-1 rounded-xl border border-[#25D366]/25 bg-[#E8F8EF] px-3.5 py-2.5"
+          data-testid="banner-whatsapp-contacts-sync"
+          role="note"
+        >
+          <p className="text-[11px] leading-snug text-gray-800">
+            <span className="font-bold text-[#128C7E]">WhatsApp</span>
+            {" — "}
+            I contatti che vedi qui saranno sincronizzati con quelli della tua rubrica WhatsApp.
+          </p>
+        </div>
         {fromScopriFlow && (
           <p className="text-xs text-primary font-semibold px-6 pt-1 leading-relaxed">
             {selectedSubcategories.join(", ")} · {selectedVenues.length}{" "}
@@ -862,12 +880,13 @@ export default function AppCreateEvent({
                     <p className="font-bold text-gray-900">{day}</p>
                   </div>
                   <button
+                    type="button"
                     data-testid={`button-add-time-${day}`}
                     onClick={() => addTimeForDay(day)}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/75"
-                    title="Aggiungi orario"
+                    className="shrink-0 min-h-10 touch-manipulation rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm active:bg-emerald-700"
+                    aria-label={`Seleziona orario per ${day}`}
                   >
-                    <Plus size={18} className="text-primary-foreground" strokeWidth={2.5} />
+                    Seleziona orario
                   </button>
                 </div>
 
@@ -1204,6 +1223,15 @@ export default function AppCreateEvent({
     );
   }
 
+  if (previewMode && showGroupLifeDemo) {
+    return (
+      <PianificaGroupLifeAnimation
+        creatorName={previewProfile?.name?.trim() || getCurrentUser()}
+        onComplete={handleGroupLifeDemoComplete}
+      />
+    );
+  }
+
   // Step 6: tipo di sondaggio (dopo la scelta dei luoghi), poi creazione evento
   if (step === 6 && !done) {
     return (
@@ -1215,7 +1243,7 @@ export default function AppCreateEvent({
           onChange={setSurveyMode}
           onContinue={() => {
             if (previewMode) {
-              onPreviewComplete?.();
+              setShowGroupLifeDemo(true);
               return;
             }
             createEvent();

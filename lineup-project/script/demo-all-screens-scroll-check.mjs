@@ -3,6 +3,7 @@
  * Uso: node script/demo-all-screens-scroll-check.mjs [baseUrl]
  */
 import { chromium, devices } from "playwright";
+import { waitForPreviewCompletion } from "./demo-test-helpers.mjs";
 
 const BASE = process.argv[2] || "http://127.0.0.1:5199";
 const VIEWPORTS = [
@@ -95,7 +96,7 @@ async function advanceTo(page, marker) {
     }
     case "survey-done":
       await page.click('[data-testid="button-survey-mode-continue"]');
-      await page.waitForSelector('[data-testid="preview-completion-scroll"]', { timeout: 8000 });
+      await waitForPreviewCompletion(page);
       return;
     default:
       throw new Error(`unknown marker ${marker}`);

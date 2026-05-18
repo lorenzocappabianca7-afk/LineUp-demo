@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { z } from "zod";
 import OpenAI from "openai";
 import { logAiExchange, logAiPipelineSummary } from "./aiLog";
-import { sendPianificaDemoFeedback } from "./pianificaDemoFeedback";
+import { notifyPianificaDemoFeedbackByEmail } from "./pianificaDemoFeedback";
 import {
   addPianificaDemoFeedback,
   listPianificaDemoFeedbacks,
@@ -1492,46 +1492,49 @@ export async function registerRoutes(
     password: z.string().min(1).max(120),
   });
 
-  /** Feedback post-demo: salvato su file (+ email SMTP se configurata). */
+  /** Feedback post-demo: prima Postgres (obbligatorio), poi email opzionale. */
   app.post("/api/app/pianifica-demo/feedback", async (req, res) => {
     try {
       const input = pianificaDemoFeedbackSchema.parse(req.body);
-      let channel: "smtp" | "log" | "store" = "store";
-      let delivered = true;
-      try {
-        const result = await sendPianificaDemoFeedback({
-          name: input.name,
-          email: input.email,
-          rating: input.rating,
-          comment: input.comment,
-        });
-        channel = result.channel;
-        delivered = result.delivered;
-      } catch (err) {
-        console.error("pianifica-demo/feedback send:", err);
-        await addPianificaDemoFeedback({
-          name: input.name,
-          email: input.email,
-          rating: input.rating,
-          comment: input.comment,
-        });
-      }
+      const saved = await addPianificaDemoFeedback({
+        name: input.name,
+        email: input.email,
+        rating: input.rating,
+        comment: input.comment,
+      });
+      const notify = await notifyPianificaDemoFeedbackByEmail({
+        name: input.name,
+        email: input.email,
+        rating: input.rating,
+        comment: input.comment,
+      });
       void logAiPipelineSummary({
         route: "POST /api/app/pianifica-demo/feedback",
         lines: [
+          `id: ${saved.id}`,
           `name: ${input.name}`,
           `email: ${input.email}`,
           `rating: ${input.rating}/5`,
-          `channel: ${channel}`,
+          `channel: ${notify.channel}`,
+          "persist: postgres",
         ],
       });
-      return res.status(201).json({ ok: true, delivered, channel });
+      return res.status(201).json({
+        ok: true,
+        id: saved.id,
+        saved: true,
+        delivered: notify.delivered,
+        channel: notify.channel,
+      });
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.errors[0]?.message ?? "Dati non validi" });
       }
       console.error("pianifica-demo/feedback:", err);
-      return res.status(201).json({ ok: true, delivered: true, channel: "store" });
+      return res.status(500).json({
+        message: "Impossibile salvare il feedback. Riprova tra poco.",
+        saved: false,
+      });
     }
   });
 

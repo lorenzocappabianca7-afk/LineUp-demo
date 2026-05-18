@@ -15,7 +15,8 @@
     "test:demo-qa": "node script/demo-full-qa-check.mjs",
     "test:demo-scroll-guard": "node script/demo-scroll-regression-guard.mjs",
     "test:demo-all-screens": "node script/demo-all-screens-scroll-check.mjs",
-    "test:demo": "npm run test:demo-all-screens && npm run test:demo-scroll && npm run test:demo-qa && npm run test:demo-scroll-guard && node script/demo-riscontri-double-tap-check.mjs",
+    "test:demo-feedback": "node script/demo-feedback-persist-check.mjs",
+    "test:demo": "npm run test:demo-all-screens && npm run test:demo-scroll && npm run test:demo-qa && npm run test:demo-scroll-guard && node script/demo-riscontri-double-tap-check.mjs && npm run test:demo-feedback",
     "shadcn": "npx --yes shadcn@latest"
   },
   "dependencies": {

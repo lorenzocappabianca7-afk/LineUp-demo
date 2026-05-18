@@ -3,6 +3,7 @@
  * Uso: node script/mobile-demo-layout-check.mjs [baseUrl]
  */
 import { chromium, devices } from "playwright";
+import { waitForPreviewCompletion } from "./demo-test-helpers.mjs";
 
 const BASE = process.argv[2] || "http://127.0.0.1:5199";
 
@@ -140,7 +141,7 @@ async function run() {
 
     const t0 = Date.now();
     await page.click('[data-testid="button-survey-mode-continue"]');
-    await page.waitForSelector('[data-testid="preview-completion-scroll"]', { timeout: 8000 });
+    await waitForPreviewCompletion(page);
     const transitionMs = Date.now() - t0;
     if (transitionMs > 6000) {
       issues.push({ viewport: vp.name, screen: "create-transition", problem: `slow:${transitionMs}ms` });

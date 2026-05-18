@@ -108,18 +108,13 @@ export function PianificaPreviewCompletion({
           comment: comment.trim() || undefined,
         }),
       });
-      if (res.status === 400) {
-        const data = (await res.json().catch(() => ({}))) as { message?: string };
-        throw new Error(data.message || "Dati non validi");
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string; saved?: boolean };
+      if (!res.ok || data.saved === false || data.ok === false) {
+        throw new Error(data.message || "Impossibile salvare il feedback");
       }
       setFeedbackSent(true);
       setShowScrollHint(false);
     } catch (e) {
-      if (e instanceof Error && e.message !== "Dati non validi") {
-        setFeedbackSent(true);
-        setShowScrollHint(false);
-        return;
-      }
       toast({
         title: "Invio non riuscito",
         description: e instanceof Error ? e.message : "Riprova tra poco.",
