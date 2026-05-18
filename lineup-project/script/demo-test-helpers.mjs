@@ -11,11 +11,18 @@ export async function skipGroupLifeDemo(page) {
   const prosegui = page.locator('[data-testid="button-prosegui-group-life-demo"]');
   try {
     await page.waitForSelector('[data-testid="pianifica-group-life-demo"]', { timeout: 8000 });
-    // Test automatici: salta subito (l'animazione può durare ~25s se si aspetta Prosegui).
     if (await skip.isVisible().catch(() => false)) {
       await skip.click();
-    } else if (await prosegui.isVisible().catch(() => false)) {
-      await prosegui.click();
+    } else {
+      for (let i = 0; i < 3; i++) {
+        if (await page.locator('[data-testid="preview-completion-scroll"]').isVisible().catch(() => false)) {
+          break;
+        }
+        if (await prosegui.isVisible().catch(() => false)) {
+          await prosegui.click();
+        }
+        await page.waitForTimeout(350);
+      }
     }
     await page.waitForSelector('[data-testid="preview-completion-scroll"]', { timeout: 10000 });
   } catch {

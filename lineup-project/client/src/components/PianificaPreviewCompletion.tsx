@@ -150,9 +150,9 @@ export function PianificaPreviewCompletion({
         <div className="mx-auto mb-4 flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-emerald-50">
           <CheckCircle2 size={40} className="text-emerald-500" />
         </div>
-        <h3 className="text-xl font-bold text-gray-900">Il futuro di LineUp</h3>
+        <h3 className="text-2xl font-black tracking-tight text-amber-400">Il futuro di LineUp</h3>
         <p className="mt-2 px-1 text-sm text-gray-600">
-          Ecco le funzionalità in arrivo. Più sotto puoi votare l&apos;esperienza e lasciare i tuoi consigli.
+          Scorri per scoprire le funzionalità in arrivo, poi vota l&apos;esperienza e lascia i tuoi consigli.
         </p>
 
         <PianificaPreviewTeasers />

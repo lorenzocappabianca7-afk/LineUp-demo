@@ -1,5 +1,5 @@
 /** Incrementare dopo ogni rilascio importante (svuota cache SW lato client). */
-const CACHE_NAME = "lineup-v35-animation-fluid";
+const CACHE_NAME = "lineup-v36-two-banners";
 const STATIC_ASSETS = ["/", "/manifest.json"];
 
 self.addEventListener("install", (event) => {
