@@ -18,7 +18,7 @@ import { getPianificaPreviewGuide, type PreviewGuideId } from "@/lib/pianificaPr
 import {
   DEFAULT_SURVEY_MODE,
   recommendSurveyModeFromPlanning,
-  type SurveyModeId,
+  type CreatorSurveyModeId,
 } from "@shared/surveyModes";
 
 
@@ -60,7 +60,7 @@ export default function AppCreateEvent({
     const guide = getPianificaPreviewGuide(id, fromScopriFlow);
     return <PianificaStepGuide {...guide} variant={variant ?? (id === "step6" ? "onBlue" : "default")} />;
   };
-  const [surveyMode, setSurveyMode] = useState<SurveyModeId>(DEFAULT_SURVEY_MODE);
+  const [surveyMode, setSurveyMode] = useState<CreatorSurveyModeId>(DEFAULT_SURVEY_MODE);
   const [showGroupLifeDemo, setShowGroupLifeDemo] = useState(false);
   const [step, setStep] = useState(0);
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
@@ -70,7 +70,6 @@ export default function AppCreateEvent({
   const [dayTimeIdx, setDayTimeIdx] = useState<Record<string, number>>({});
   const [selectedDayTimes, setSelectedDayTimes] = useState<Record<string, string[]>>({});
   const [selectedVenues, setSelectedVenues] = useState<VenueOption[]>(() => fromScopri?.venues ?? []);
-  const [isDirectPlan, setIsDirectPlan] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(() =>
     fromScopri ? fromScopri.categoryKey : null,
   );
@@ -160,7 +159,7 @@ export default function AppCreateEvent({
         dateOptions: selectedDates,
         timeOptions: mergedTimeOptions,
         venueOptions: selectedVenues,
-        status: isDirectPlan && confirmedDate && confirmedTime && confirmedVenue ? "confirmed" : "planning",
+        status: "planning",
         confirmedDate,
         confirmedTime,
         confirmedVenue,
@@ -205,13 +204,12 @@ export default function AppCreateEvent({
   const surveyRecommendation = useMemo(
     () =>
       recommendSurveyModeFromPlanning({
-        isDirectPlan,
         fromScopriFlow,
         dateCount: selectedDates.length,
         timeOptionCount,
         venueCount: selectedVenues.length,
       }),
-    [isDirectPlan, fromScopriFlow, selectedDates.length, timeOptionCount, selectedVenues.length],
+    [fromScopriFlow, selectedDates.length, timeOptionCount, selectedVenues.length],
   );
 
   const venueKeys = selectedSubcategory
@@ -978,26 +976,15 @@ export default function AppCreateEvent({
         >
           Indietro
         </button>
-        <div className="flex-1">
-          <label className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-500">
-            <input
-              type="checkbox"
-              checked={isDirectPlan}
-              onChange={(e) => setIsDirectPlan(e.target.checked)}
-              className="rounded border-gray-300 text-primary focus:ring-primary/30"
-            />
-            Evento già definito (senza votazione)
-          </label>
-          <button
-            data-testid="button-step-venue-to-survey"
-            type="button"
-            onClick={() => setStep(6)}
-            disabled={!canProceed5}
-            className="w-full rounded-xl bg-gradient-to-br from-primary to-primary/75 py-3.5 font-semibold text-primary-foreground transition-opacity active:opacity-80 disabled:opacity-40"
-          >
-            Tipo di sondaggio
-          </button>
-        </div>
+        <button
+          data-testid="button-step-venue-to-survey"
+          type="button"
+          onClick={() => setStep(6)}
+          disabled={!canProceed5}
+          className="flex-1 rounded-xl bg-gradient-to-br from-primary to-primary/75 py-3.5 font-semibold text-primary-foreground transition-opacity active:opacity-80 disabled:opacity-40"
+        >
+          Scegli modello sondaggio
+        </button>
       </div>
     );
 

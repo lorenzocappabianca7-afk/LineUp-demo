@@ -2082,6 +2082,11 @@ export default function AppChatDetail() {
                   Pareggio: di solito l&apos;organizzatore propone lo spareggio finale col gruppo.
                 </p>
               )}
+              {surveyBehavior(parseSurveyMode(activeEvent.surveyMode)).aiPersonalizedHint && (
+                <p className="px-4 pb-2 text-[10px] leading-snug text-violet-700/90">
+                  Sondaggio con AI: regole adattate alle tue scelte in creazione evento.
+                </p>
+              )}
 
               {/* ─── Action Strip ─── */}
               <div className="px-4 py-4 border-t border-gray-100 space-y-2.5">

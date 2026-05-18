@@ -5,24 +5,19 @@ export async function fillDemoGate(page, { name, email, birthYear = "1990" } = {
   await page.fill('[data-testid="input-demo-gate-birth-year"]', String(birthYear));
 }
 
-/** Salta l'anteprima animata post-sondaggio (demo) se visibile. */
+/** Avanza i due banner post-creazione (demo): solo Prosegui, niente skip. */
 export async function skipGroupLifeDemo(page) {
-  const skip = page.locator('[data-testid="button-skip-group-life-demo"]');
   const prosegui = page.locator('[data-testid="button-prosegui-group-life-demo"]');
   try {
     await page.waitForSelector('[data-testid="pianifica-group-life-demo"]', { timeout: 8000 });
-    if (await skip.isVisible().catch(() => false)) {
-      await skip.click();
-    } else {
-      for (let i = 0; i < 3; i++) {
-        if (await page.locator('[data-testid="preview-completion-scroll"]').isVisible().catch(() => false)) {
-          break;
-        }
-        if (await prosegui.isVisible().catch(() => false)) {
-          await prosegui.click();
-        }
-        await page.waitForTimeout(350);
+    for (let i = 0; i < 3; i++) {
+      if (await page.locator('[data-testid="preview-completion-scroll"]').isVisible().catch(() => false)) {
+        break;
       }
+      if (await prosegui.isVisible().catch(() => false)) {
+        await prosegui.click();
+      }
+      await page.waitForTimeout(350);
     }
     await page.waitForSelector('[data-testid="preview-completion-scroll"]', { timeout: 10000 });
   } catch {

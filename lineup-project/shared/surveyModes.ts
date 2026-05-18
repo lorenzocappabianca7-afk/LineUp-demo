@@ -3,34 +3,47 @@
  * Valori persistiti in `app_events.survey_mode`.
  */
 
-export const SURVEY_MODE_IDS = [
-  /** 1 — Calendario e RSVP: organizzatore fissa tutto; altri solo Sì / No / Forse. */
+/** I quattro modelli mostrati in creazione evento. */
+export const CREATOR_SURVEY_MODE_IDS = [
+  /** 1 — Una sola combinazione: il gruppo vota solo presenza (Sì / No). */
   "fixed_calendar_rsvp",
-  /** 2 — Come (1) con proposte gruppo in attesa di approvazione organizzatore. */
-  "fixed_calendar_rsvp_proposals",
-  /** 3 — Sondaggio aperto: voti e proposte da tutti (comportamento predefinito LineUp). */
-  "flexible_voting",
-  /** 4 — Come (3) ma una sola scelta per categoria (data / ora / luogo) non è revocabile. */
-  "flexible_voting_locked",
-  /** 5 — Lista chiusa: solo organizzatore gestisce le opzioni; gli altri votano. */
-  "vote_no_proposals",
-  /** 6 — Coordinamento: solo organizzatore modifica l’elenco; contesti ordinati o di team. */
+  /** 2 — Solo il creatore aggiunge o rimuove opzioni; gli altri votano. */
   "organizer_curated_poll",
-  /** 7 — Come (3) con invito UI a poche preferenze per categoria (stesso motore). */
+  /** 3 — Tutti possono proporre, togliere e votare su data, ora e luogo. */
+  "flexible_voting",
+  /** 4 — LineUp AI costruisce il sondaggio sulle tue esigenze. */
+  "ai_personalized",
+] as const;
+
+export type CreatorSurveyModeId = (typeof CREATOR_SURVEY_MODE_IDS)[number];
+
+/** Valori legacy ancora validi in DB (non più in picker). */
+const LEGACY_SURVEY_MODE_IDS = [
+  "fixed_calendar_rsvp_proposals",
+  "flexible_voting_locked",
+  "vote_no_proposals",
   "compact_preferences",
-  /** 8 — Come (3) con copy su maggioranza e gestione pareggi (solo UI). */
   "majority_with_creator_tiebreak",
+] as const;
+
+export const SURVEY_MODE_IDS = [
+  ...CREATOR_SURVEY_MODE_IDS,
+  ...LEGACY_SURVEY_MODE_IDS,
 ] as const;
 
 export type SurveyModeId = (typeof SURVEY_MODE_IDS)[number];
 
-export const DEFAULT_SURVEY_MODE: SurveyModeId = "flexible_voting";
+export const DEFAULT_SURVEY_MODE: CreatorSurveyModeId = "flexible_voting";
 
 export function parseSurveyMode(raw: unknown): SurveyModeId {
   if (typeof raw === "string" && (SURVEY_MODE_IDS as readonly string[]).includes(raw)) {
     return raw as SurveyModeId;
   }
   return DEFAULT_SURVEY_MODE;
+}
+
+export function isCreatorSurveyMode(id: SurveyModeId): id is CreatorSurveyModeId {
+  return (CREATOR_SURVEY_MODE_IDS as readonly string[]).includes(id);
 }
 
 export type SurveyBehavior = {
@@ -44,6 +57,15 @@ export type SurveyBehavior = {
   compactTwoOptionsHint: boolean;
   /** Mostra nota pareggio / creatore. */
   creatorTiebreakHint: boolean;
+  /** Sondaggio configurato con assistenza AI. */
+  aiPersonalizedHint: boolean;
+};
+
+const behaviorDefaults = {
+  lockSingleChoicePerCategory: false,
+  compactTwoOptionsHint: false,
+  creatorTiebreakHint: false,
+  aiPersonalizedHint: false,
 };
 
 export function surveyBehavior(mode: SurveyModeId): SurveyBehavior {
@@ -51,26 +73,33 @@ export function surveyBehavior(mode: SurveyModeId): SurveyBehavior {
     case "fixed_calendar_rsvp":
       return {
         memberProposals: "off",
-        attendance: "ternary",
-        lockSingleChoicePerCategory: false,
-        compactTwoOptionsHint: false,
-        creatorTiebreakHint: false,
+        attendance: "binary",
+        ...behaviorDefaults,
       };
-    case "fixed_calendar_rsvp_proposals":
+    case "organizer_curated_poll":
       return {
-        memberProposals: "pending_creator",
-        attendance: "ternary",
-        lockSingleChoicePerCategory: false,
-        compactTwoOptionsHint: false,
-        creatorTiebreakHint: false,
+        memberProposals: "off",
+        attendance: "binary",
+        ...behaviorDefaults,
       };
     case "flexible_voting":
       return {
         memberProposals: "on",
         attendance: "binary",
-        lockSingleChoicePerCategory: false,
-        compactTwoOptionsHint: false,
-        creatorTiebreakHint: false,
+        ...behaviorDefaults,
+      };
+    case "ai_personalized":
+      return {
+        memberProposals: "on",
+        attendance: "binary",
+        ...behaviorDefaults,
+        aiPersonalizedHint: true,
+      };
+    case "fixed_calendar_rsvp_proposals":
+      return {
+        memberProposals: "pending_creator",
+        attendance: "ternary",
+        ...behaviorDefaults,
       };
     case "flexible_voting_locked":
       return {
@@ -79,38 +108,31 @@ export function surveyBehavior(mode: SurveyModeId): SurveyBehavior {
         lockSingleChoicePerCategory: true,
         compactTwoOptionsHint: false,
         creatorTiebreakHint: false,
+        aiPersonalizedHint: false,
       };
     case "vote_no_proposals":
       return {
         memberProposals: "off",
         attendance: "binary",
-        lockSingleChoicePerCategory: false,
-        compactTwoOptionsHint: false,
-        creatorTiebreakHint: false,
-      };
-    case "organizer_curated_poll":
-      return {
-        memberProposals: "off",
-        attendance: "binary",
-        lockSingleChoicePerCategory: false,
-        compactTwoOptionsHint: false,
-        creatorTiebreakHint: false,
+        ...behaviorDefaults,
       };
     case "compact_preferences":
       return {
         memberProposals: "on",
         attendance: "binary",
-        lockSingleChoicePerCategory: false,
         compactTwoOptionsHint: true,
+        lockSingleChoicePerCategory: false,
         creatorTiebreakHint: false,
+        aiPersonalizedHint: false,
       };
     case "majority_with_creator_tiebreak":
       return {
         memberProposals: "on",
         attendance: "binary",
+        creatorTiebreakHint: true,
         lockSingleChoicePerCategory: false,
         compactTwoOptionsHint: false,
-        creatorTiebreakHint: true,
+        aiPersonalizedHint: false,
       };
     default:
       return surveyBehavior(DEFAULT_SURVEY_MODE);
@@ -128,13 +150,12 @@ export function memberProposalsRequireApproval(mode: SurveyModeId): boolean {
 
 /** Suggerimento automatico in base a date, fasce/orari e luoghi scelti nel wizard. */
 export type SurveyModeRecommendation = {
-  mode: SurveyModeId;
+  mode: CreatorSurveyModeId;
   /** Una riga per il banner in creazione evento. */
   reason: string;
 };
 
 export function recommendSurveyModeFromPlanning(input: {
-  isDirectPlan: boolean;
   fromScopriFlow: boolean;
   dateCount: number;
   timeOptionCount: number;
@@ -143,137 +164,71 @@ export function recommendSurveyModeFromPlanning(input: {
   const d = Math.max(0, Math.floor(input.dateCount));
   const t = Math.max(0, Math.floor(input.timeOptionCount));
   const v = Math.max(0, Math.floor(input.venueCount));
-  const { isDirectPlan, fromScopriFlow } = input;
+  const { fromScopriFlow } = input;
 
-  if (isDirectPlan) {
+  if (d === 1 && t <= 1 && v === 1) {
     return {
       mode: "fixed_calendar_rsvp",
-      reason: "Tutto già fissato: solo conferma presenza.",
+      reason: "Hai una sola combinazione: chiedi al gruppo solo se ci sarà.",
     };
   }
 
   if (d === 0 && t === 0 && v === 0) {
     return {
       mode: "flexible_voting",
-      reason: "Niente in lista: il gruppo propone e vota.",
+      reason: "Niente ancora in lista: lascia che il gruppo proponga e voti.",
     };
   }
 
-  if (d === 1 && t <= 1 && v === 1) {
+  if (fromScopriFlow || d >= 3 || v >= 4 || (d >= 2 && v >= 2)) {
     return {
-      mode: "fixed_calendar_rsvp",
-      reason: "Una sola combinazione: chiedi chi c’è.",
+      mode: "ai_personalized",
+      reason: "Molte variabili: l’AI può adattare il sondaggio al tuo caso.",
     };
   }
 
-  if (d === 1 && t <= 1 && v === 2) {
-    return {
-      mode: "fixed_calendar_rsvp_proposals",
-      reason: "Due luoghi: idee extra con tua approvazione.",
-    };
-  }
-
-  if (v >= 4 || d >= 4 || (v >= 3 && d >= 3)) {
-    return {
-      mode: "compact_preferences",
-      reason: "Tante opzioni: meglio poche preferenze segnate.",
-    };
-  }
-
-  if (fromScopriFlow && v >= 3) {
-    return {
-      mode: "compact_preferences",
-      reason: "Tanti luoghi da Scopri: evita voti ovunque.",
-    };
-  }
-
-  if (d >= 2 && d <= 3 && v >= 2 && v <= 3 && t <= 2) {
-    return {
-      mode: "flexible_voting_locked",
-      reason: "Griglia piccola: un voto definitivo accelera.",
-    };
-  }
-
-  if (d >= 2 && v >= 2) {
-    return {
-      mode: "majority_with_creator_tiebreak",
-      reason: "Date e luoghi in gara: utile nota sui pareggi.",
-    };
-  }
-
-  if (v === 1 && (d >= 2 || t >= 2)) {
+  if (d >= 2 || t >= 2 || v >= 2) {
     return {
       mode: "organizer_curated_poll",
-      reason: "Un posto, più slot: tu curi le opzioni.",
-    };
-  }
-
-  if (d >= 2 || t >= 2 || v >= 3) {
-    return {
-      mode: "vote_no_proposals",
-      reason: "Lista già ampia: solo voto, niente nuove proposte.",
+      reason: "Più opzioni in gioco: tieni tu il controllo della lista.",
     };
   }
 
   return {
     mode: "flexible_voting",
-    reason: "Poco o nulla vincolato: sondaggio aperto.",
+    reason: "Poche vincoli: sondaggio aperto per tutti.",
   };
 }
 
-/** Card anteprima (creazione evento): ordine = 1…8 come da specifica utente. */
+/** Card anteprima (creazione evento): i quattro modelli in chat. */
 export const SURVEY_MODE_CARDS: Array<{
-  id: SurveyModeId;
+  id: CreatorSurveyModeId;
   title: string;
   subtitle: string;
   hint: string;
 }> = [
   {
     id: "fixed_calendar_rsvp",
-    title: "Calendario e RSVP",
-    subtitle: "Tu fissi data, ora e luogo.",
-    hint: "Altri: Sì / No / Forse.",
+    title: "Presenza sì / no",
+    subtitle: "Hai fissato una sola data, ora e luogo (e attività).",
+    hint: "Il gruppo vota solo se parteciperà.",
   },
   {
-    id: "fixed_calendar_rsvp_proposals",
-    title: "Calendario + idee",
-    subtitle: "Base fissa, suggerimenti da approvare.",
-    hint: "Tu accetti cosa entra in lista.",
+    id: "organizer_curated_poll",
+    title: "Lista del creatore",
+    subtitle: "Solo tu aggiungi o togli giorni, orari e luoghi.",
+    hint: "Gli altri votano sulle tue opzioni.",
   },
   {
     id: "flexible_voting",
     title: "Sondaggio aperto",
-    subtitle: "Voti e proposte da tutti.",
-    hint: "Predefinito, massima libertà.",
+    subtitle: "Tutti possono proporre, togliere e votare.",
+    hint: "Libertà su data, ora e luogo.",
   },
   {
-    id: "flexible_voting_locked",
-    title: "Voto definitivo",
-    subtitle: "Una scelta per tipo, non revocabile.",
-    hint: "Meno ripensamenti.",
-  },
-  {
-    id: "vote_no_proposals",
-    title: "Lista chiusa",
-    subtitle: "Solo le tue opzioni in votazione.",
-    hint: "Zero nuove voci dal gruppo.",
-  },
-  {
-    id: "organizer_curated_poll",
-    title: "Coordinamento",
-    subtitle: "Solo tu modifichi la lista.",
-    hint: "Il gruppo vota soltanto.",
-  },
-  {
-    id: "compact_preferences",
-    title: "Poche preferenze",
-    subtitle: "Aperto, ma invito a votare poco.",
-    hint: "Max 2 preferenze in chat.",
-  },
-  {
-    id: "majority_with_creator_tiebreak",
-    title: "Maggioranza e pareggi",
-    subtitle: "Aperto + nota su ex aequo.",
-    hint: "Spareggio spesso dal creatore.",
+    id: "ai_personalized",
+    title: "Sondaggio con AI",
+    subtitle: "LineUp costruisce il modello sulle tue esigenze.",
+    hint: "Personalizzato per te e il gruppo.",
   },
 ];

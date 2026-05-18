@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { CalendarDays, Megaphone, Sparkles } from "lucide-react";
+import { Megaphone, Sparkles, Ticket } from "lucide-react";
 
 type TeaserVariant = "primary" | "sky" | "navy";
 
@@ -47,8 +47,8 @@ function TeaserBanner({ variant, badge, title, body, icon, "data-testid": testId
           <p className="text-[10px] font-bold uppercase tracking-wide text-gray-900/70">
             {badge}
           </p>
-          <h4 className="mt-0.5 text-base font-bold leading-snug text-gray-900">{title}</h4>
-          <p className="mt-1.5 text-sm leading-relaxed text-gray-900">{body}</p>
+          <h4 className="mt-0.5 text-base font-bold leading-snug text-gray-900 break-words">{title}</h4>
+          <p className="mt-1.5 text-sm leading-relaxed text-gray-900 break-words">{body}</p>
         </div>
       </div>
     </article>
@@ -68,7 +68,7 @@ export function PianificaPreviewTeasers() {
         badge="Prossimamente"
         title="Luoghi pensati per te"
         icon={<Sparkles size={22} strokeWidth={2} className="text-primary" />}
-        body="L’intelligenza artificiale ti guiderà verso ristoranti, locali ed eventi che rispecchiano davvero le esigenze tue e del gruppo — meno ricerche, più idee giuste al primo colpo."
+        body="Se non sai ancora cosa fare, oltre il tasto Pianifica, il tasto Scopri ti permetterà attraverso un semplice questionario di trovare, grazie al supporto dell’AI, luoghi per i tuoi eventi che rispecchiano appieno le tue esigenze."
       />
 
       <TeaserBanner
@@ -82,10 +82,11 @@ export function PianificaPreviewTeasers() {
 
       <TeaserBanner
         variant="navy"
-        badge="Organizzazione"
-        title="Chat mirate e calendario"
-        icon={<CalendarDays size={22} strokeWidth={2} className="text-[#1e3a5f]" />}
-        body="Le chat saranno accessibili solo a chi ha votato nel sondaggio, per decisioni più rapide e meno distrazioni. Un calendario integrato ti terrà traccia di tutte le attività pianificate."
+        badge="Prenotazioni"
+        title="Prenota con LineUp"
+        data-testid="preview-teaser-bookings"
+        icon={<Ticket size={22} strokeWidth={2} className="text-[#1e3a5f]" />}
+        body="Potrai prenotare ristoranti, eventi e attività tutto attraverso LineUp. I nostri members potranno inoltre accedere a sconti esclusivi sulle loro prenotazioni."
       />
     </div>
   );

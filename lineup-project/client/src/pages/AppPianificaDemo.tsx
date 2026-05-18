@@ -259,7 +259,8 @@ export default function AppPianificaDemo() {
           className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 overflow-y-auto overscroll-contain px-5 py-8 touch-pan-y [-webkit-overflow-scrolling:touch]"
         >
           <p className="text-center text-sm text-muted-foreground">
-            Ciao <span className="font-semibold text-foreground">{name}</span>, prova il flusso Pianifica.
+            Ciao <span className="font-semibold text-foreground">{name}</span>, prova tu stesso a pianificare un
+            evento cliccando sul tasto qui sotto.
           </p>
 
           <button
@@ -331,7 +332,10 @@ export default function AppPianificaDemo() {
                   <main
                     ref={completionScrollRef}
                     data-testid={DEMO_COMPLETION_SCROLL_TEST_ID}
-                    className="min-h-0 flex-1 basis-0 grow overflow-x-hidden overflow-y-scroll overscroll-y-auto bg-white touch-pan-y [-webkit-overflow-scrolling:touch] [touch-action:pan-y]"
+                    className={cn(
+                      "min-h-0 flex-1 basis-0 grow overflow-x-hidden overflow-y-scroll overscroll-y-auto bg-white touch-pan-y [-webkit-overflow-scrolling:touch] [touch-action:pan-y]",
+                      completionCanScrollMore && "pb-[5.75rem]",
+                    )}
                     style={{ WebkitOverflowScrolling: "touch" }}
                   >
                     {demoProfile && (

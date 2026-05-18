@@ -57,13 +57,13 @@ const GUIDES: Record<PreviewGuideId, GuideContent> = {
     stepLabel: "Passo 6 di 7",
     title: "Dove?",
     body: "Scegli uno o più luoghi a Torino. Puoi cercare per nome o usare i suggerimenti.",
-    action: "Seleziona almeno un locale, poi premi Tipo di sondaggio in basso.",
+    action: "Seleziona almeno un locale, poi premi Scegli modello sondaggio in basso.",
   },
   step6: {
     stepLabel: "Passo 7 di 7",
-    title: "Come voterà il gruppo?",
-    body: "Decidi se tutti possono proporre alternative o solo votare sulle opzioni che hai messo.",
-    action: "Scegli una modalità di sondaggio e premi Crea evento con questo sondaggio.",
+    title: "Modello di sondaggio in chat",
+    body: "Quattro modelli: presenza sì/no, lista solo tua, sondaggio aperto per tutti, oppure personalizzato con l’AI.",
+    action: "Scegli una card e premi Crea evento con questo sondaggio.",
   },
   success: {
     stepLabel: "Fine prova",
@@ -85,7 +85,7 @@ const SCOPRI_LABELS: Partial<Record<PreviewGuideId, string>> = {
 const SCOPRI_OVERRIDES: Partial<Record<PreviewGuideId, Partial<GuideContent>>> = {
   step5: {
     body: "I luoghi sono già stati scelti con Scopri AI. Controlla che vadano bene per il gruppo.",
-    action: "Se serve, torna indietro per modificare date e orari; poi premi Tipo di sondaggio.",
+    action: "Se serve, torna indietro per modificare date e orari; poi scegli il modello di sondaggio.",
   },
 };
 

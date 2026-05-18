@@ -20,6 +20,7 @@ function InfoBanner({
   label,
   title,
   body,
+  attentionNote,
   onContinue,
   continueTestId,
 }: {
@@ -29,6 +30,8 @@ function InfoBanner({
   label: string;
   title: string;
   body: string;
+  /** Vignetta sopra il pulsante Prosegui. */
+  attentionNote?: string;
   onContinue: () => void;
   continueTestId: string;
 }) {
@@ -52,12 +55,20 @@ function InfoBanner({
         </div>
         <div className="min-w-0 flex-1 pt-0.5">
           <p className="text-[10px] font-bold uppercase tracking-wide text-primary">{label}</p>
-          <h3 className="mt-1 text-base font-bold leading-snug text-gray-900">{title}</h3>
+          <h3 className="mt-1 text-base font-bold leading-snug text-gray-900 break-words">{title}</h3>
         </div>
       </div>
-      <p className="relative mt-4 text-[13px] font-semibold leading-[1.65] text-gray-900 sm:text-[14px] sm:leading-[1.7]">
+      <p className="relative mt-4 text-[13px] font-semibold leading-[1.65] text-gray-900 break-words sm:text-[14px] sm:leading-[1.7]">
         {body}
       </p>
+      {attentionNote ? (
+        <p
+          className="relative mt-4 rounded-xl border border-amber-200/80 bg-amber-50/90 px-3 py-2.5 text-[11px] font-semibold leading-snug text-amber-950 break-words"
+          data-testid="banner-attention-vote-chat"
+        >
+          {attentionNote}
+        </p>
+      ) : null}
       <button
         type="button"
         data-testid={continueTestId}
@@ -97,32 +108,46 @@ export function PianificaGroupLifeAnimation({ onComplete }: Props) {
   return (
     <div
       className={cn(
-        "flex h-full min-h-0 flex-col bg-[#F4FAFF] transition-opacity duration-300 ease-out",
+        "flex h-full min-h-0 flex-col overflow-hidden bg-[#F4FAFF] transition-opacity duration-300 ease-out",
         exiting && "opacity-0",
       )}
       data-testid="pianifica-group-life-demo"
     >
-      <div className="shrink-0 border-b border-primary/15 bg-white px-4 py-3">
+      <div
+        data-testid="group-life-header"
+        className="relative z-10 shrink-0 border-b border-primary/15 bg-white px-4 pt-3 pb-4 shadow-sm"
+      >
         <p className="text-center text-[10px] font-bold uppercase tracking-wide text-primary">Dopo la creazione</p>
         <p className="mt-1 text-center text-sm font-bold text-gray-900">Cosa succede su LineUp</p>
         <p className="mt-1 text-center text-[11px] text-gray-500">
           {step === 0 ? "1 di 2 · Chat, sondaggio e calendario" : "2 di 2 · Pubblica il tuo evento"}
         </p>
+        {step === 0 ? (
+          <div className="mt-4 border-t border-primary/10 pt-4 text-center" data-testid="group-life-intro">
+            <p className="text-lg font-bold text-emerald-600 sm:text-xl">Perfetto,</p>
+            <p className="mt-1 text-sm font-semibold leading-snug text-gray-900 sm:text-[15px]">
+              hai creato la chat/gruppo per il tuo evento, cosa succede ora?
+            </p>
+          </div>
+        ) : null}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto overscroll-y-contain px-4 py-4">
+      <div className="relative z-0 flex min-h-0 flex-1 flex-col items-center justify-start overflow-y-auto overscroll-y-contain px-4 pt-3 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         <div className="flex w-full max-w-[340px] flex-col">
           {step === 0 ? (
-            <InfoBanner
-              testId="banner-chat-survey-demo"
-              icon={<MessageCircle size={22} strokeWidth={2.25} />}
-              iconWrapClass="bg-gradient-to-br from-primary to-primary/75 shadow-primary/25"
-              label="Chat e sondaggio"
-              title="Organizza insieme al gruppo"
-              body={CHAT_SURVEY_COPY}
-              onContinue={goNext}
-              continueTestId="button-prosegui-group-life-demo"
-            />
+            <>
+              <InfoBanner
+                testId="banner-chat-survey-demo"
+                icon={<MessageCircle size={22} strokeWidth={2.25} />}
+                iconWrapClass="bg-gradient-to-br from-primary to-primary/75 shadow-primary/25"
+                label="Chat e sondaggio"
+                title="Organizza insieme al gruppo"
+                body={CHAT_SURVEY_COPY}
+                attentionNote="Attenzione: solo chi ha votato il sondaggio potrà mandare messaggi nella chat del gruppo."
+                onContinue={goNext}
+                continueTestId="button-prosegui-group-life-demo"
+              />
+            </>
           ) : (
             <InfoBanner
               testId="banner-publish-group-fixed"
@@ -154,18 +179,6 @@ export function PianificaGroupLifeAnimation({ onComplete }: Props) {
             Pubblicazione
           </span>
         </div>
-      </div>
-
-      <div className="shrink-0 border-t border-gray-100 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <button
-          type="button"
-          data-testid="button-skip-group-life-demo"
-          onClick={finish}
-          disabled={exiting}
-          className="min-h-11 w-full touch-manipulation rounded-xl border border-gray-200 bg-white py-2.5 text-sm font-semibold text-gray-700 active:bg-gray-50 disabled:opacity-50"
-        >
-          Salta e vai alle funzioni in arrivo
-        </button>
       </div>
     </div>
   );
