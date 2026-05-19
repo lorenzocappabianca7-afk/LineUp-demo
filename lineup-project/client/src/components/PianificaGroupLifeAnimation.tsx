@@ -65,25 +65,18 @@ function InfoBanner({
         <aside
           role="alert"
           data-testid="banner-attention-vote-chat"
-          className="relative mt-5 overflow-hidden rounded-2xl border-2 border-amber-500 bg-gradient-to-br from-amber-100 via-amber-50 to-orange-50 px-4 py-4 shadow-[0_4px_14px_rgba(245,158,11,0.35)] ring-2 ring-amber-400/40"
+          className="relative mt-4 overflow-hidden rounded-xl border-2 border-amber-500 bg-gradient-to-br from-amber-100 via-amber-50 to-orange-50 px-3 py-2.5 shadow-[0_3px_10px_rgba(245,158,11,0.28)] ring-1 ring-amber-400/35"
         >
-          <div className="flex items-start gap-3">
+          <div className="flex items-center gap-2.5">
             <div
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-md"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm"
               aria-hidden
             >
-              <AlertTriangle size={22} strokeWidth={2.5} />
+              <AlertTriangle size={17} strokeWidth={2.5} />
             </div>
-            <div className="min-w-0 flex-1 pt-0.5">
-              <p className="text-xs font-black uppercase tracking-wider text-amber-800">Attenzione</p>
-              <p className="mt-1.5 text-sm font-bold leading-snug text-amber-950 break-words sm:text-[15px] sm:leading-relaxed">
-                Nella chat del gruppo{" "}
-                <span className="underline decoration-amber-600 decoration-2 underline-offset-2">
-                  possono scrivere solo
-                </span>{" "}
-                chi ha votato il sondaggio.
-              </p>
-            </div>
+            <p className="min-w-0 flex-1 text-xs font-bold leading-snug text-amber-950 break-words">
+              Nella chat del gruppo, possono scrivere solo coloro che hanno votato il sondaggio
+            </p>
           </div>
         </aside>
       ) : null}

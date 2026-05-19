@@ -382,12 +382,6 @@ export default function AppCreateEvent({
             {selectedVenues.length === 1 ? "luogo già scelto" : "luoghi già scelti"} con Scopri AI. Indica chi vuoi invitare.
           </p>
         )}
-        {friendsList.length > 0 && (
-          <p className="text-[11px] text-gray-500 px-6 pt-2 leading-snug">
-            Puoi invitare solo i tuoi <span className="font-bold text-primary">friends</span>. Aggiungili o modificali dal{" "}
-            <span className="font-semibold text-gray-700">Profilo</span>.
-          </p>
-        )}
         <div className="px-6 py-3">
         {sortedGroups.length > 0 && (
           <>
