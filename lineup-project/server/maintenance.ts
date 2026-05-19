@@ -78,7 +78,10 @@ const maintenanceJson = () => ({
   message: LINEUP_MAINTENANCE_COPY.lead,
 });
 
-/** Blocco aggiornamenti: HTML per le pagine, 503 per le API. */
+/**
+ * Solo se imposti MAINTENANCE_MODE=true su Render (deploy manuale).
+ * Non si attiva per errori di rete o API lente: l’app client parte sempre.
+ */
 export function registerMaintenanceHandling(app: Express): void {
   app.get("/api/health", (_req, res) => {
     if (isMaintenanceMode()) {

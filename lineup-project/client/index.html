@@ -17,39 +17,7 @@
     <title>LineUp</title>
   </head>
   <body>
-    <div id="lineup-boot-fallback" hidden style="position:fixed;inset:0;z-index:99999;display:none;align-items:center;justify-content:center;padding:1.5rem;font-family:system-ui,sans-serif;background:linear-gradient(165deg,#f4faff 0%,#fff9e6 45%,#fff 100%);color:#111827;">
-      <div style="max-width:20rem;text-align:center;border-radius:1.25rem;border:2px solid rgba(124,185,232,.35);background:#fff;padding:2rem 1.5rem;box-shadow:0 12px 40px rgba(17,24,39,.08);">
-        <p style="margin:0 0 1rem;font-size:1.75rem;font-weight:800;color:#4a9bd9;">LineUp</p>
-        <p style="margin:0 0 .75rem;font-size:1.125rem;font-weight:800;">Aggiornamento in corso</p>
-        <p style="margin:0;font-size:.9375rem;line-height:1.55;color:#4b5563;">Ci scusiamo: in questo momento non riusciamo a caricare LineUp.</p>
-        <p style="margin:.75rem 0 0;font-size:.9375rem;line-height:1.55;font-weight:600;color:#1f2937;">C’è un problema temporaneo, ma il team LineUp ci sta già lavorando per ripristinare il servizio al più presto.</p>
-      </div>
-    </div>
     <div id="root"></div>
-    <script>
-      (function () {
-        var el = document.getElementById("lineup-boot-fallback");
-        function show() {
-          if (!el) return;
-          el.hidden = false;
-          el.style.display = "flex";
-        }
-        function hide() {
-          if (!el) return;
-          el.hidden = true;
-          el.style.display = "none";
-        }
-        window.__lineupBootHide = hide;
-        fetch("/api/health", { cache: "no-store", headers: { Accept: "application/json" } })
-          .then(function (r) { return r.json().then(function (d) { return { r: r, d: d }; }); })
-          .then(function (x) {
-            if (x.r.ok && x.d && x.d.ok === true) hide();
-            else show();
-          })
-          .catch(show);
-        setTimeout(show, 12000);
-      })();
-    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
