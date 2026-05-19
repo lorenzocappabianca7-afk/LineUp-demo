@@ -3,11 +3,14 @@ import express, { type Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
+import { registerMaintenanceHandling } from "./maintenance";
 import { createServer } from "http";
 
 const app = express();
 app.set("trust proxy", 1);
 const httpServer = createServer(app);
+
+registerMaintenanceHandling(app);
 
 declare module "http" {
   interface IncomingMessage {

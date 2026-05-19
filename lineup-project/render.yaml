@@ -13,6 +13,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: MAINTENANCE_MODE
+        value: "false"
       - key: DATABASE_URL
         sync: false
       - key: OPENAI_API_KEY

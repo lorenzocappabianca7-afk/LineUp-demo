@@ -11,7 +11,7 @@ const INTRO_BANNERS = [
     icon: AppWindow,
     badge: "L'app",
     title: "Cos'è LineUp",
-    body: "È l'app per organizzare uscite, eventi e attività con amici e gruppi: proponi date, orari e luoghi, raccogli i voti e conferma il piano in un unico posto.",
+    body: "L'app per organizzare uscite, eventi e attività con chi vuoi, nel modo più facile e veloce e senza stress.",
     border: "border-primary/30",
     badgeClass: "bg-primary/15 text-primary",
     iconClass: "bg-primary/15 text-primary",
@@ -21,7 +21,7 @@ const INTRO_BANNERS = [
     icon: Lightbulb,
     badge: "Il valore",
     title: "Che problemi risolve",
-    body: "Meno chat caotiche, meno «non so quando» e meno piani che si perdono. LineUp mette ordine nelle decisioni del gruppo e ti porta all'appuntamento senza stress.",
+    body: "Basta caos durante l'organizzazione di uscite, niente più stress nell'aspettare chi non risponde e stop all'ansia di trovare il luogo che vada bene tutti.",
     border: "border-amber-200/80",
     badgeClass: "bg-amber-100 text-amber-900",
     iconClass: "bg-amber-100 text-amber-800",
@@ -30,8 +30,8 @@ const INTRO_BANNERS = [
     id: "vs-social",
     icon: MessagesSquare,
     badge: "Novità",
-    title: "Oltre WhatsApp e Instagram",
-    body: "Su WhatsApp e Instagram i messaggi affogano le decisioni. Qui sondaggio, conferma e calendario sono al centro — non commenti sparsi in chat.",
+    title: "Perché LineUp",
+    body: "Grazie all'AI, LineUp supporta te e i tuoi amici nella programmazione delle vostre attività, tiene traccia dei tuoi eventi futuri e ti mette in contatto con persone con i tuoi stessi interessi.",
     border: "border-sky-200/80",
     badgeClass: "bg-sky-100 text-sky-800",
     iconClass: "bg-sky-100 text-sky-700",
@@ -50,11 +50,11 @@ export function PianificaDemoIntro({ userName, onContinue }: Props) {
       >
         <div className="mx-auto w-full max-w-[320px]">
           <p className="text-center text-sm font-medium text-muted-foreground">{greeting}</p>
-          <h2 className="mt-2 text-center text-2xl font-bold tracking-tight text-foreground">
+          <h2 className="mt-2 text-center text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Cos&apos;è <span className="text-primary">LineUp</span>?
           </h2>
-          <p className="mt-3 text-center text-sm leading-relaxed text-gray-600">
-            Tre cose da sapere prima di provare il flusso Pianifica.
+          <p className="mt-3 text-center text-sm font-bold leading-snug text-foreground sm:text-base sm:leading-relaxed">
+            Decidi date, orari e luoghi con il gruppo — senza piani persi in chat: tutto in un unico posto.
           </p>
 
           <div className="mt-5 space-y-3">
@@ -62,18 +62,20 @@ export function PianificaDemoIntro({ userName, onContinue }: Props) {
               <article
                 key={id}
                 data-testid={`demo-intro-banner-${id}`}
-                className={`rounded-2xl border-2 bg-white px-4 py-4 shadow-sm ${border}`}
+                className={`rounded-2xl border-2 bg-white px-4 py-5 shadow-sm ${border}`}
               >
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3.5">
                   <div
-                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconClass}`}
+                    className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${iconClass}`}
                   >
-                    <Icon size={22} strokeWidth={2} aria-hidden />
+                    <Icon size={26} strokeWidth={2} aria-hidden />
                   </div>
                   <div className="min-w-0 flex-1 text-left">
-                    <p className={`text-[10px] font-bold uppercase tracking-wide ${badgeClass}`}>{badge}</p>
-                    <h3 className="mt-1 text-sm font-bold leading-snug text-gray-900">{title}</h3>
-                    <p className="mt-1.5 text-xs leading-relaxed text-gray-600 break-words">{body}</p>
+                    <p className={`text-xs font-bold uppercase tracking-wide ${badgeClass}`}>{badge}</p>
+                    <h3 className="mt-1.5 text-base font-bold leading-snug text-gray-900 sm:text-lg">{title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-gray-600 break-words sm:text-[15px] sm:leading-relaxed">
+                      {body}
+                    </p>
                   </div>
                 </div>
               </article>
