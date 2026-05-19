@@ -370,14 +370,14 @@ export default function AppCreateEvent({
           data-testid="banner-whatsapp-contacts-sync"
           role="note"
         >
-          <p className="text-[11px] leading-snug text-gray-800">
+          <p className="text-xs leading-snug text-gray-800 sm:text-sm">
             <span className="font-bold text-[#128C7E]">WhatsApp</span>
             {" — "}
             I contatti che vedi qui saranno sincronizzati con quelli della tua rubrica WhatsApp.
           </p>
         </div>
         {fromScopriFlow && (
-          <p className="text-xs text-primary font-semibold px-6 pt-1 leading-relaxed">
+          <p className="text-sm text-primary font-semibold px-6 pt-1 leading-relaxed">
             {selectedSubcategory} · {selectedVenues.length}{" "}
             {selectedVenues.length === 1 ? "luogo già scelto" : "luoghi già scelti"} con Scopri AI. Indica chi vuoi invitare.
           </p>
@@ -1004,7 +1004,7 @@ export default function AppCreateEvent({
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-6 pt-4 pb-2 no-scrollbar [-webkit-overflow-scrolling:touch] touch-pan-y">
             {renderPreviewGuide("step5")}
             {banner}
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 leading-relaxed sm:text-[15px]">
               Categoria e luoghi arrivano da Scopri AI. Puoi tornare indietro per modificare date e orari.
             </p>
             {selectedVenues.map((venue) => (
@@ -1132,12 +1132,20 @@ export default function AppCreateEvent({
                   );
                 })}
               {!aiVenueLoading &&
+                !aiVenueRefining &&
                 venueSearch.trim().length >= 2 &&
                 aiVenueSuggestions.length === 0 &&
                 !aiVenueError && (
-                  <p className="text-xs text-gray-400 text-center py-2">
-                    Nessun risultato dall&apos;AI. Prova un altro nome o scegli dalla lista sotto.
-                  </p>
+                  <div
+                    className="rounded-xl border border-amber-200/90 bg-amber-50 px-3 py-2.5"
+                    data-testid="banner-ai-venue-no-results"
+                    role="note"
+                  >
+                    <p className="text-xs leading-snug text-amber-950">
+                      Ci dispiace che la tua ricerca non abbia dato un risultato, ma l&apos;AI è ancora in fase di
+                      sviluppo.
+                    </p>
+                  </div>
                 )}
             </div>
           )}
@@ -1236,8 +1244,6 @@ export default function AppCreateEvent({
           }}
           isSubmitting={!previewMode && isPending}
           recommendedId={surveyRecommendation.mode}
-          recommendationReason={surveyRecommendation.reason}
-          onApplyRecommendation={() => setSurveyMode(surveyRecommendation.mode)}
         />
       </div>
     );

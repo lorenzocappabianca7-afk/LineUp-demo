@@ -206,7 +206,7 @@ export const SURVEY_MODE_CARDS: Array<{
   title: string;
   subtitle: string;
   hint: string;
-  /** Esempi di eventi adatti a questo modello (mostrati in picker). */
+  /** «Perfetto per…» o nota dedicata (picker creazione evento). */
   examples: string;
 }> = [
   {
@@ -214,27 +214,27 @@ export const SURVEY_MODE_CARDS: Array<{
     title: "Presenza sì / no",
     subtitle: "Hai fissato una sola data, ora e luogo (e attività).",
     hint: "Il gruppo vota solo se parteciperà.",
-    examples: "Cena di compleanno, partita in palestra, aperitivo già in calendario.",
+    examples: "feste o meeting di lavoro.",
   },
   {
     id: "organizer_curated_poll",
     title: "Lista del creatore",
     subtitle: "Solo tu aggiungi o togli giorni, orari e luoghi.",
     hint: "Gli altri votano sulle tue opzioni.",
-    examples: "Weekend tra due sabati, cena tra 3 ristoranti, serata cinema o bowling.",
+    examples: "inviti a casa.",
   },
   {
     id: "flexible_voting",
     title: "Sondaggio aperto",
     subtitle: "Tutti possono proporre, togliere e votare.",
     hint: "Libertà su data, ora e luogo.",
-    examples: "Uscita senza data fissa, weekend «quando va a tutti», gruppo di amici in libertà.",
+    examples: "uscite, cene al ristorante o attività sportive di gruppo.",
   },
   {
     id: "ai_personalized",
     title: "Sondaggio con AI",
     subtitle: "LineUp costruisce il modello sulle tue esigenze.",
     hint: "Personalizzato per te e il gruppo.",
-    examples: "Addio al nubilato, team building, viaggio di gruppo con molte preferenze.",
+    examples: "Utilizza questo sondaggio se non sai bene come orientarti",
   },
 ];

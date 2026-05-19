@@ -22,11 +22,8 @@ type Props = {
   onContinue: () => void;
   /** Se true, disabilita il pulsante finale (es. durante la creazione evento). */
   isSubmitting?: boolean;
-  /** Modalità suggerita in base a date, orari e luoghi scelti nel wizard. */
+  /** Modalità suggerita in base a date, orari e luoghi scelti nel wizard (badge «Consigliato» sulla card). */
   recommendedId?: CreatorSurveyModeId;
-  recommendationReason?: string;
-  /** Imposta il valore al consiglio (es. `() => setSurveyMode(rec.mode)`). */
-  onApplyRecommendation?: () => void;
 };
 
 /** Mini-anteprima visiva (solo CSS) per tipo di sondaggio. */
@@ -91,12 +88,8 @@ export function SurveyModePicker({
   onContinue,
   isSubmitting,
   recommendedId,
-  recommendationReason,
-  onApplyRecommendation,
 }: Props) {
   const rec = recommendedId && SURVEY_MODE_CARDS.some((c) => c.id === recommendedId) ? recommendedId : undefined;
-  const showRecBanner = Boolean(rec && recommendationReason?.trim());
-  const isRecSelected = rec != null && value === rec;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-blue-600">
@@ -116,34 +109,11 @@ export function SurveyModePicker({
           </button>
         ) : null}
         <div className="px-5 pt-3 pb-2">
-          <h2 className="text-base font-bold leading-snug text-white break-words sm:text-lg">
-            Ora scegli il modello di sondaggio da inserire nella chat del tuo evento
+          <h2 className="text-lg font-bold leading-snug text-white break-words sm:text-xl sm:leading-relaxed">
+            L&apos;app ha raccolto tutte le indicazioni da te selezionate nella pianificazione dell&apos;evento,
+            ora scegli la tipologia di sondaggio che verrà inserito nella chat del tuo evento.
           </h2>
         </div>
-        {showRecBanner && (
-            <div className="mx-5 mb-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm">
-              <div className="flex items-start gap-2">
-                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" aria-hidden />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-blue-800">Consiglio per le tue scelte</p>
-                  <p className="mt-0.5 text-[11px] leading-snug text-gray-800">{recommendationReason}</p>
-                  {onApplyRecommendation && !isRecSelected && (
-                    <button
-                      type="button"
-                      data-testid="button-survey-apply-recommendation"
-                      onClick={onApplyRecommendation}
-                      className="mt-2 text-[11px] font-bold text-blue-700 underline decoration-blue-400 underline-offset-2 hover:text-blue-900"
-                    >
-                      Usa questo modello
-                    </button>
-                  )}
-                  {isRecSelected && (
-                    <p className="mt-1.5 text-[10px] font-semibold text-emerald-700">Modello consigliato selezionato.</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
         <div className="grid grid-cols-2 gap-2.5 px-4 pb-24">
           {SURVEY_MODE_CARDS.map((card) => {
             const sel = card.id === value;
@@ -191,8 +161,14 @@ export function SurveyModePicker({
                 <p className="mt-1 text-xs leading-snug text-gray-600">{card.subtitle}</p>
                 <p className="mt-1.5 text-xs font-semibold leading-snug text-primary">{card.hint}</p>
                 <p className="mt-2 text-[11px] leading-snug text-gray-500">
-                  <span className="font-bold text-gray-600">Es. </span>
-                  {card.examples}
+                  {card.id === "ai_personalized" ? (
+                    <span className="font-semibold text-gray-700">{card.examples}</span>
+                  ) : (
+                    <>
+                      <span className="font-bold text-gray-600">Perfetto per </span>
+                      {card.examples}
+                    </>
+                  )}
                 </p>
               </button>
             );

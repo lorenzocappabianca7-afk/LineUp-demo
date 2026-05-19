@@ -181,9 +181,9 @@ export default function AppPianificaDemo() {
             onSubmit={confirmGate}
             noValidate
           >
-            <h2 className="text-lg font-bold text-gray-900">Prima di provare</h2>
+            <h2 className="text-lg font-bold text-gray-900">Benvenuto!</h2>
             <p className="mt-1 text-sm text-gray-500 leading-snug">
-              Inserisci nome, email e anno di nascita per accedere alla demo del tasto Pianifica.
+              Prima di accedere alla simulazione di LineUp, ti chiediamo di inserire qualche dato
             </p>
 
             <label className="mt-5 block text-xs font-bold text-gray-600">Nome</label>

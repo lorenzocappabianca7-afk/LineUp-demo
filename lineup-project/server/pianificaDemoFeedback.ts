@@ -1,6 +1,36 @@
 import nodemailer from "nodemailer";
 import { logAiPipelineSummary } from "./aiLog";
 
+const SMTP_TIMEOUT_MS = 8_000;
+
+type FeedbackMailTransporter = ReturnType<typeof nodemailer.createTransport>;
+
+let cachedFeedbackTransporter: FeedbackMailTransporter | null = null;
+let cachedFeedbackTransportKey = "";
+
+function getFeedbackMailTransporter(
+  host: string,
+  port: number,
+  user: string,
+  pass: string,
+): FeedbackMailTransporter {
+  const key = `${host}:${port}:${user}`;
+  if (cachedFeedbackTransporter && cachedFeedbackTransportKey === key) {
+    return cachedFeedbackTransporter;
+  }
+  cachedFeedbackTransporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
+    connectionTimeout: SMTP_TIMEOUT_MS,
+    greetingTimeout: SMTP_TIMEOUT_MS,
+    socketTimeout: SMTP_TIMEOUT_MS,
+  });
+  cachedFeedbackTransportKey = key;
+  return cachedFeedbackTransporter;
+}
+
 export const PIANIFICA_DEMO_FEEDBACK_RECIPIENTS = [
   "lorenzo.cappabianca7@gmail.com",
   "federico.bossotti@gmail.com",
@@ -82,12 +112,7 @@ export async function notifyPianificaDemoFeedbackByEmail(
 
   if (host && user && pass && from) {
     try {
-      const transporter = nodemailer.createTransport({
-        host,
-        port,
-        secure: port === 465,
-        auth: { user, pass },
-      });
+      const transporter = getFeedbackMailTransporter(host, port, user, pass);
       await transporter.sendMail({
         from,
         to: recipients.join(", "),

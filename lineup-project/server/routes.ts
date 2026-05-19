@@ -1520,31 +1520,39 @@ export async function registerRoutes(
         rating: input.rating,
         comment: input.comment,
       });
-      const notify = await notifyPianificaDemoFeedbackByEmail({
+
+      const payload = {
         name: input.name,
         email: input.email,
         birthYear: input.birthYear,
         rating: input.rating,
         comment: input.comment,
-      });
-      void logAiPipelineSummary({
-        route: "POST /api/app/pianifica-demo/feedback",
-        lines: [
-          `id: ${saved.id}`,
-          `name: ${input.name}`,
-          `email: ${input.email}`,
-          `birthYear: ${input.birthYear}`,
-          `rating: ${input.rating}/5`,
-          `channel: ${notify.channel}`,
-          "persist: postgres",
-        ],
-      });
+      };
+      void notifyPianificaDemoFeedbackByEmail(payload)
+        .then((notify) => {
+          void logAiPipelineSummary({
+            route: "POST /api/app/pianifica-demo/feedback",
+            lines: [
+              `id: ${saved.id}`,
+              `name: ${input.name}`,
+              `email: ${input.email}`,
+              `birthYear: ${input.birthYear}`,
+              `rating: ${input.rating}/5`,
+              `channel: ${notify.channel}`,
+              `delivered: ${notify.delivered}`,
+              "persist: postgres",
+              "notify: async",
+            ],
+          });
+        })
+        .catch((e) => {
+          console.warn("pianifica-demo feedback email (async):", e);
+        });
+
       return res.status(201).json({
         ok: true,
         id: saved.id,
         saved: true,
-        delivered: notify.delivered,
-        channel: notify.channel,
       });
     } catch (err) {
       if (err instanceof z.ZodError) {

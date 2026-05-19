@@ -54,7 +54,7 @@ export function PianificaDemoIntro({ userName, onContinue }: Props) {
             Cos&apos;è <span className="text-primary">LineUp</span>?
           </h2>
           <p className="mt-3 text-center text-sm font-bold leading-snug text-foreground sm:text-base sm:leading-relaxed">
-            Decidi date, orari e luoghi con il gruppo — senza piani persi in chat: tutto in un unico posto.
+            LineUp, il social organizzativo che semplificherà la tua vita
           </p>
 
           <div className="mt-5 space-y-3">
