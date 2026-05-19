@@ -11,6 +11,8 @@ const IDLE_MS = 3000;
 export type PianificaPreviewCompletionProps = {
   profile: PreviewProfile;
   onClose: () => void;
+  /** Dopo l’invio del feedback: niente pulsante Chiudi (il modale resta sulla schermata di ringraziamento). */
+  onFeedbackSent?: () => void;
   /** Contenitore scroll gestito dal modale (AppPianificaDemo) — un solo layer, iOS-safe. */
   scrollRootRef: RefObject<HTMLElement | null>;
   onScrollActivity?: () => void;
@@ -20,6 +22,7 @@ export type PianificaPreviewCompletionProps = {
 export function PianificaPreviewCompletion({
   profile,
   onClose,
+  onFeedbackSent,
   scrollRootRef,
   onScrollActivity,
 }: PianificaPreviewCompletionProps) {
@@ -104,6 +107,7 @@ export function PianificaPreviewCompletion({
       }
       setFeedbackSent(true);
       setShowScrollHint(false);
+      onFeedbackSent?.();
     } catch (e) {
       toast({
         title: "Invio non riuscito",
@@ -119,7 +123,10 @@ export function PianificaPreviewCompletion({
 
   if (feedbackSent) {
     return (
-      <div className="flex flex-col items-center px-4 py-8 pb-10 text-center" data-testid="preview-completion-content">
+      <div
+        className="flex flex-col items-center px-4 py-8 pb-10 text-center"
+        data-testid="preview-completion-thanks"
+      >
         <div className="w-full max-w-sm rounded-2xl border-2 border-primary bg-[#F4FAFF] px-6 py-8 shadow-md">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
             <CheckCircle2 size={36} className="text-emerald-500" />
@@ -129,14 +136,6 @@ export function PianificaPreviewCompletion({
             Il tuo contributo ci aiuta a costruire LineUp insieme a chi lo userà.
           </p>
         </div>
-        <button
-          type="button"
-          data-testid="button-close-preview-completion"
-          onClick={onClose}
-          className="mt-8 w-full max-w-sm rounded-xl bg-gradient-to-br from-primary to-primary/75 py-3.5 text-sm font-semibold text-primary-foreground"
-        >
-          Chiudi
-        </button>
       </div>
     );
   }

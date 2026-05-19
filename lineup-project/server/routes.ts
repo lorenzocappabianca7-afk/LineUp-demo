@@ -1669,12 +1669,26 @@ export async function registerRoutes(
           messages: [
             {
               role: "system",
-              content:
-                'Rispondi solo con JSON: {"venues":[...]} max 5 elementi. Ogni elemento: name, address (area generica o vuota), quartiere (zona Torino, stringa breve; preferito per UI), rating 0-5, mapsUrl, websiteUrl, instagramUrl (URL o null). Regole: solo locali reali a Torino che esistono o sono noti; niente markdown. Se la query sembra un refuso, correggi usando nomi reali (non inventare locali generici tipo "Trive"). mapsUrl: URL maps valido con query= nome preciso + Torino (il server normalizza i link). NON inventare numeri civici.',
+              content: `Rispondi SOLO con JSON valido, senza markdown: {"venues":[...]}.
+
+FORMATO (array "venues", stesso schema del frontend):
+- Ogni elemento: name (string), address (area/zona generica, senza numero civico inventato), quartiere (comune o quartiere in Piemonte, stringa breve), rating (0-5), mapsUrl (string), websiteUrl (URL ufficiale o null), instagramUrl (URL o null).
+- "venues" è sempre un array (lista): 1 elemento se il match è univoco; 2-3 elementi se più luoghi reali in Piemonte hanno nome molto simile; massimo 3 elementi totali.
+
+REGOLE TASSATIVE:
+1) Geofencing Piemonte: cerca ESCLUSIVAMENTE attività reali nella regione Piemonte, Italia. Anche se l'utente scrive solo il nome del locale o una città, non proporre luoghi fuori Piemonte.
+2) Fuzzy search (refusi): se la query ha errori di ortografia o è un nome parziale, identifica il luogo reale in Piemonte che più si avvicina all'intento (correggi refusi, non inventare nomi generici).
+3) Nomi simili: se più locali reali in Piemonte corrispondono (es. stesso nome in città diverse), restituisci 2-3 candidati distinti (città/comune diversi in quartiere o address) così l'utente sceglie.
+4) Link "magici":
+   - websiteUrl: solo il sito ufficiale se lo conosci con certezza; se c'è incertezza usa null (non inventare URL).
+   - mapsUrl: link di ricerca universale Google Maps, ESATTAMENTE nel formato https://www.google.com/maps/search/?api=1&query=Nome+Locale+Citta+Piemonte con spazi sostituiti da "+" (es. Ristorante+Da+Mario+Alessandria+Piemonte). Usa il comune reale in Piemonte al posto di "Citta". Nessun indirizzo civico inventato.
+5) Qualità: solo locali che esistono o sono ampiamente noti; niente markdown; rating plausibile; address generico ok.`,
             },
             {
               role: "user",
-              content: `Luoghi a Torino per: ${JSON.stringify(query)}${hintsBlock}`,
+              content: `Cerca luoghi in Piemonte per questa query utente: ${JSON.stringify(query)}${hintsBlock}
+
+Applica geofencing Piemonte, correggi refusi se necessario, e se ci sono omonimi in città diverse restituisci 2-3 opzioni nell'array venues.`,
             },
           ],
         }),

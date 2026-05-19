@@ -887,9 +887,9 @@ export default function AppCreateEvent({
                     data-testid={`button-add-time-${day}`}
                     onClick={() => addTimeForDay(day)}
                     className="shrink-0 min-h-10 touch-manipulation rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm active:bg-emerald-700"
-                    aria-label={`Seleziona orario per ${day}`}
+                    aria-label={`Conferma orario per ${day}`}
                   >
-                    Seleziona orario
+                    Conferma orario
                   </button>
                 </div>
 

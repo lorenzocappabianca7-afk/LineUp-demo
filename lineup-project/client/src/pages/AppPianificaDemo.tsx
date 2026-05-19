@@ -38,6 +38,8 @@ export default function AppPianificaDemo() {
   const riscontriLastTapRef = useRef(0);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [modalPhase, setModalPhase] = useState<"wizard" | "complete">("wizard");
+  /** Dopo «Grazie di cuore!»: il modale non si chiude (né torna al tasto Pianifica). */
+  const [completionThanksLocked, setCompletionThanksLocked] = useState(false);
   const [gateDone, setGateDone] = useState(false);
   const [introDone, setIntroDone] = useState(false);
   const [name, setName] = useState("");
@@ -130,8 +132,16 @@ export default function AppPianificaDemo() {
       : readStoredDemoProfile();
 
   const closeSheet = useCallback(() => {
+    if (completionThanksLocked) return;
     setSheetOpen(false);
     setModalPhase("wizard");
+    setCompletionThanksLocked(false);
+  }, [completionThanksLocked]);
+
+  const openSheet = useCallback(() => {
+    setCompletionThanksLocked(false);
+    setModalPhase("wizard");
+    setSheetOpen(true);
   }, []);
 
   const openRiscontriAdmin = useCallback(() => {
@@ -158,9 +168,6 @@ export default function AppPianificaDemo() {
         <p className="mb-1 text-xs font-bold uppercase tracking-wide text-primary">Prova</p>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Pianifica le tue attività</h1>
         <p className="mt-1 text-sm text-muted-foreground">Torino · dalla Mole al tuo calendario</p>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Demo interattiva: al termine non è disponibile l&apos;accesso alla chat.
-        </p>
       </div>
 
       {!gateDone ? (
@@ -259,14 +266,16 @@ export default function AppPianificaDemo() {
           className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 overflow-y-auto overscroll-contain px-5 py-8 touch-pan-y [-webkit-overflow-scrolling:touch]"
         >
           <p className="text-center text-sm text-muted-foreground">
-            Ciao <span className="font-semibold text-foreground">{name}</span>, prova tu stesso a pianificare un
-            evento cliccando sul tasto qui sotto.
+            Ciao <span className="font-semibold text-foreground">{name}</span>,{" "}
+            <span className="font-bold text-foreground">
+              prova tu stesso a pianificare un evento cliccando sul tasto qui sotto.
+            </span>
           </p>
 
           <button
             type="button"
             data-testid="button-pianifica-demo-page"
-            onClick={() => setSheetOpen(true)}
+            onClick={openSheet}
             className="flex h-[168px] w-[168px] shrink-0 touch-manipulation flex-col items-center justify-center gap-1.5 rounded-full bg-primary text-primary-foreground shadow-md outline-none ring-offset-background transition-transform duration-200 hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.97] motion-reduce:transform-none"
             aria-label="Apri pianificazione nuovo evento (prova)"
           >
@@ -308,15 +317,18 @@ export default function AppPianificaDemo() {
                 <h2 className="text-lg font-bold text-gray-900">Nuovo evento</h2>
                 <p className="mt-0.5 text-xs font-medium text-amber-700">Modalità prova</p>
               </div>
-              <button
-                type="button"
-                data-testid="button-close-create-demo"
-                onClick={closeSheet}
-                className="flex h-11 w-11 touch-manipulation items-center justify-center rounded-full bg-gray-100 active:bg-gray-200"
-                aria-label="Chiudi"
-              >
-                <X size={18} className="text-gray-600" />
-              </button>
+              {!completionThanksLocked && (
+                <button
+                  type="button"
+                  data-testid="button-close-create-demo"
+                  onClick={closeSheet}
+                  className="flex h-11 w-11 touch-manipulation items-center justify-center rounded-full bg-gray-100 active:bg-gray-200"
+                  aria-label="Chiudi"
+                >
+                  <X size={18} className="text-gray-600" />
+                </button>
+              )}
+              {completionThanksLocked && <span className="h-11 w-11 shrink-0" aria-hidden />}
             </div>
             <div
               className={cn(
@@ -342,6 +354,7 @@ export default function AppPianificaDemo() {
                     <PianificaPreviewCompletion
                       profile={demoProfile}
                       onClose={closeSheet}
+                      onFeedbackSent={() => setCompletionThanksLocked(true)}
                       scrollRootRef={completionScrollRef}
                     />
                     )}

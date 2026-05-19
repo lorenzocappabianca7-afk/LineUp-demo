@@ -1,30 +1,40 @@
-import { CalendarDays, MapPin, Sparkles, Users, Vote } from "lucide-react";
+import { AppWindow, Lightbulb, MessagesSquare } from "lucide-react";
 
 type Props = {
   userName?: string;
   onContinue: () => void;
 };
 
-const HIGHLIGHTS = [
+const INTRO_BANNERS = [
   {
-    icon: CalendarDays,
-    title: "Un calendario sociale",
-    body: "Proponi uscite, cene e attività: il gruppo vota date, orari e luoghi in un solo posto.",
+    id: "what",
+    icon: AppWindow,
+    badge: "L'app",
+    title: "Cos'è LineUp",
+    body: "È l'app per organizzare uscite, eventi e attività con amici e gruppi: proponi date, orari e luoghi, raccogli i voti e conferma il piano in un unico posto.",
+    border: "border-primary/30",
+    badgeClass: "bg-primary/15 text-primary",
+    iconClass: "bg-primary/15 text-primary",
   },
   {
-    icon: Vote,
-    title: "Sondaggi chiari",
-    body: "Niente più chat infinite: ognuno esprime preferenze e si vede subito cosa conviene a tutti.",
+    id: "problems",
+    icon: Lightbulb,
+    badge: "Il valore",
+    title: "Che problemi risolve",
+    body: "Meno chat caotiche, meno «non so quando» e meno piani che si perdono. LineUp mette ordine nelle decisioni del gruppo e ti porta all'appuntamento senza stress.",
+    border: "border-amber-200/80",
+    badgeClass: "bg-amber-100 text-amber-900",
+    iconClass: "bg-amber-100 text-amber-800",
   },
   {
-    icon: MapPin,
-    title: "Torino, con intelligenza",
-    body: "L’AI ti suggerisce locali e zone adatte a ciò che avete scelto — senza perdere tempo a cercare.",
-  },
-  {
-    icon: Users,
-    title: "Pensato per il gruppo",
-    body: "Inviti, proposte e decisioni insieme: LineUp tiene unito il piano, non solo la conversazione.",
+    id: "vs-social",
+    icon: MessagesSquare,
+    badge: "Novità",
+    title: "Oltre WhatsApp e Instagram",
+    body: "Su WhatsApp e Instagram i messaggi affogano le decisioni. Qui sondaggio, conferma e calendario sono al centro — non commenti sparsi in chat.",
+    border: "border-sky-200/80",
+    badgeClass: "bg-sky-100 text-sky-800",
+    iconClass: "bg-sky-100 text-sky-700",
   },
 ] as const;
 
@@ -44,38 +54,29 @@ export function PianificaDemoIntro({ userName, onContinue }: Props) {
             Cos&apos;è <span className="text-primary">LineUp</span>?
           </h2>
           <p className="mt-3 text-center text-sm leading-relaxed text-gray-600">
-            L&apos;app che trasforma &ldquo;ci vediamo?&rdquo; in un piano concreto — dalla Mole al locale giusto,
-            con meno messaggi e più decisioni prese insieme.
+            Tre cose da sapere prima di provare il flusso Pianifica.
           </p>
 
-          <div className="mt-5 rounded-2xl border-2 border-primary bg-gradient-to-br from-primary/15 to-primary/5 px-4 py-4">
-            <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/20">
-                <Sparkles size={22} className="text-primary" strokeWidth={2} aria-hidden />
-              </div>
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-primary">In sintesi</p>
-                <p className="mt-1 text-sm font-semibold leading-snug text-gray-900">
-                  Organizza, vota e conferma le uscite con chi conta per te.
-                </p>
-              </div>
-            </div>
-          </div>
-
           <div className="mt-5 space-y-3">
-            {HIGHLIGHTS.map(({ icon: Icon, title, body }) => (
-              <div
-                key={title}
-                className="flex gap-3 rounded-xl border border-gray-100 bg-white px-3.5 py-3.5 shadow-sm"
+            {INTRO_BANNERS.map(({ id, icon: Icon, badge, title, body, border, badgeClass, iconClass }) => (
+              <article
+                key={id}
+                data-testid={`demo-intro-banner-${id}`}
+                className={`rounded-2xl border-2 bg-white px-4 py-4 shadow-sm ${border}`}
               >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-50">
-                  <Icon size={20} className="text-primary" strokeWidth={2} aria-hidden />
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconClass}`}
+                  >
+                    <Icon size={22} strokeWidth={2} aria-hidden />
+                  </div>
+                  <div className="min-w-0 flex-1 text-left">
+                    <p className={`text-[10px] font-bold uppercase tracking-wide ${badgeClass}`}>{badge}</p>
+                    <h3 className="mt-1 text-sm font-bold leading-snug text-gray-900">{title}</h3>
+                    <p className="mt-1.5 text-xs leading-relaxed text-gray-600 break-words">{body}</p>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1 text-left">
-                  <p className="text-sm font-bold text-gray-900">{title}</p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-gray-600">{body}</p>
-                </div>
-              </div>
+              </article>
             ))}
           </div>
 

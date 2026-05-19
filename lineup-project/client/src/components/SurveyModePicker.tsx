@@ -156,7 +156,7 @@ export function SurveyModePicker({
                 data-recommended={isRecommended ? "true" : undefined}
                 onClick={() => onChange(card.id)}
                 className={cn(
-                  "relative flex min-h-[148px] flex-col rounded-xl border-2 bg-white p-2.5 text-left transition-all active:scale-[0.98]",
+                  "relative flex min-h-[200px] flex-col rounded-xl border-2 bg-white p-3 text-left transition-all active:scale-[0.98]",
                   sel
                     ? "z-[1] border-amber-400 shadow-lg shadow-amber-500/25 ring-[3px] ring-amber-300 ring-offset-2 ring-offset-blue-600"
                     : "border-gray-100 hover:border-gray-200",
@@ -181,15 +181,19 @@ export function SurveyModePicker({
                 </div>
                 <p
                   className={cn(
-                    "text-[11px] font-bold leading-tight text-gray-900 line-clamp-2",
+                    "text-sm font-bold leading-snug text-gray-900",
                     isRecommended && "pr-12",
                     sel && "pl-3",
                   )}
                 >
                   {card.title}
                 </p>
-                <p className="mt-0.5 text-[9px] leading-snug text-gray-500 line-clamp-3">{card.subtitle}</p>
-                <p className="mt-1 text-[8px] font-medium leading-tight text-primary/90 line-clamp-2">{card.hint}</p>
+                <p className="mt-1 text-xs leading-snug text-gray-600">{card.subtitle}</p>
+                <p className="mt-1.5 text-xs font-semibold leading-snug text-primary">{card.hint}</p>
+                <p className="mt-2 text-[11px] leading-snug text-gray-500">
+                  <span className="font-bold text-gray-600">Es. </span>
+                  {card.examples}
+                </p>
               </button>
             );
           })}

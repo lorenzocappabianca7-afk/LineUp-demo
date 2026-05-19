@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { ChevronRight, Megaphone, MessageCircle, Sparkles, Vote } from "lucide-react";
+import { AlertTriangle, ChevronRight, Megaphone, MessageCircle, Sparkles, Vote } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -8,7 +8,7 @@ type Props = {
 };
 
 const CHAT_SURVEY_COPY =
-  "Quando crei l'evento, LineUp apre una chat di gruppo con un sondaggio su data, ora e luogo. Quando tutti sono d'accordo, l'organizzatore tocca il tasto di conferma e l'evento viene aggiunto al calendario LineUp.";
+  "Quando confermi l'evento, LineUp crea una chat di gruppo con il sondaggio scelto. Dopo essersi accordati sui dettagli dell'evento, cliccando il tasto di conferma, l'evento verrà aggiunto al calendario LineUp.";
 
 const PUBLISH_EVENT_COPY =
   "Devi organizzare una festa, un calcetto o una cena tra nuovi amici? LineUp ti permette di pubblicare annunci dei tuoi eventi e i tuoi followers potranno far richiesta di partecipazione. Sarai poi tu che hai organizzato ad accettarli e permetterli di farne parte!";
@@ -20,7 +20,7 @@ function InfoBanner({
   label,
   title,
   body,
-  attentionNote,
+  showVoteChatAttention,
   onContinue,
   continueTestId,
 }: {
@@ -30,8 +30,8 @@ function InfoBanner({
   label: string;
   title: string;
   body: string;
-  /** Vignetta sopra il pulsante Prosegui. */
-  attentionNote?: string;
+  /** Banner attenzione chat/sondaggio sopra Prosegui. */
+  showVoteChatAttention?: boolean;
   onContinue: () => void;
   continueTestId: string;
 }) {
@@ -61,13 +61,31 @@ function InfoBanner({
       <p className="relative mt-4 text-[13px] font-semibold leading-[1.65] text-gray-900 break-words sm:text-[14px] sm:leading-[1.7]">
         {body}
       </p>
-      {attentionNote ? (
-        <p
-          className="relative mt-4 rounded-xl border border-amber-200/80 bg-amber-50/90 px-3 py-2.5 text-[11px] font-semibold leading-snug text-amber-950 break-words"
+      {showVoteChatAttention ? (
+        <aside
+          role="alert"
           data-testid="banner-attention-vote-chat"
+          className="relative mt-5 overflow-hidden rounded-2xl border-2 border-amber-500 bg-gradient-to-br from-amber-100 via-amber-50 to-orange-50 px-4 py-4 shadow-[0_4px_14px_rgba(245,158,11,0.35)] ring-2 ring-amber-400/40"
         >
-          {attentionNote}
-        </p>
+          <div className="flex items-start gap-3">
+            <div
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-md"
+              aria-hidden
+            >
+              <AlertTriangle size={22} strokeWidth={2.5} />
+            </div>
+            <div className="min-w-0 flex-1 pt-0.5">
+              <p className="text-xs font-black uppercase tracking-wider text-amber-800">Attenzione</p>
+              <p className="mt-1.5 text-sm font-bold leading-snug text-amber-950 break-words sm:text-[15px] sm:leading-relaxed">
+                Nella chat del gruppo{" "}
+                <span className="underline decoration-amber-600 decoration-2 underline-offset-2">
+                  possono scrivere solo
+                </span>{" "}
+                chi ha votato il sondaggio.
+              </p>
+            </div>
+          </div>
+        </aside>
       ) : null}
       <button
         type="button"
@@ -143,7 +161,7 @@ export function PianificaGroupLifeAnimation({ onComplete }: Props) {
                 label="Chat e sondaggio"
                 title="Organizza insieme al gruppo"
                 body={CHAT_SURVEY_COPY}
-                attentionNote="Attenzione: solo chi ha votato il sondaggio potrà mandare messaggi nella chat del gruppo."
+                showVoteChatAttention
                 onContinue={goNext}
                 continueTestId="button-prosegui-group-life-demo"
               />
