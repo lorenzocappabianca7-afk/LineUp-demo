@@ -265,11 +265,14 @@ export default function AppPianificaDemo() {
           data-testid="demo-home-scroll"
           className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 overflow-y-auto overscroll-contain px-5 py-8 touch-pan-y [-webkit-overflow-scrolling:touch]"
         >
-          <p className="text-center text-sm text-muted-foreground">
+          <p className="text-center text-sm leading-relaxed text-muted-foreground">
             <span className="font-bold text-foreground">Ciao</span>{" "}
             <span className="font-semibold text-foreground">{name}</span>,{" "}
             <span className="font-bold text-foreground">
-              prova tu stesso a pianificare un evento cliccando sul tasto qui sotto.
+              questa è una simulazione di pianificazione di un evento con LineUp.
+            </span>{" "}
+            <span className="font-bold text-foreground">
+              Prova tu stesso cliccando sul tasto qui sotto.
             </span>
           </p>
 

@@ -6,7 +6,15 @@ import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import {
   CONTACTS, GROUPS, ACTIVITIES, VENUES_BY_ACTIVITY,
-  getCurrentUser, getAvatarColor, getInitials, getMyContacts, getEventChatInviteUrl, venuePollSubtitle, type VenueOption, type ScopriToCreatePrefill
+  getCurrentUser,
+  getAvatarColor,
+  getInitials,
+  getMyContacts,
+  getEventChatInviteUrl,
+  venueFallbackFromUserQuery,
+  venuePollSubtitle,
+  type VenueOption,
+  type ScopriToCreatePrefill,
 } from "@/lib/appUtils";
 import { PLAN_CATEGORIES, PLAN_SUBCATEGORIES, venuePoolKeyForPlanSubcategory } from "@/lib/planCategories";
 import { VenueExternalLinks } from "@/components/VenueExternalLinks";
@@ -271,6 +279,7 @@ export default function AppCreateEvent({
         const AI_DEADLINE_MS = 5500;
         let timedOut = false;
         let quickCount = 0;
+        let quickVenues: VenueOption[] = [];
         const deadline = window.setTimeout(() => {
           timedOut = true;
           ac.abort();
@@ -283,7 +292,7 @@ export default function AppCreateEvent({
           );
           if (quickRes.ok) {
             const quickData = (await quickRes.json()) as { venues?: VenueOption[] };
-            const quickVenues = quickData.venues ?? [];
+            quickVenues = quickData.venues ?? [];
             quickCount = quickVenues.length;
             if (!ac.signal.aborted && quickVenues.length > 0) {
               setAiVenueSuggestions(quickVenues);
@@ -312,15 +321,25 @@ export default function AppCreateEvent({
             );
           }
           if (!r.ok) throw new Error(data?.message || "Ricerca non riuscita");
-          if (!ac.signal.aborted) setAiVenueSuggestions(data.venues ?? []);
+          if (!ac.signal.aborted) {
+            let final = data.venues ?? [];
+            if (final.length === 0) {
+              final =
+                quickVenues.length > 0 ? quickVenues : [venueFallbackFromUserQuery(q)];
+            }
+            setAiVenueSuggestions(final);
+            setAiVenueError(null);
+          }
         } catch (e: unknown) {
           const aborted =
             (e instanceof DOMException && e.name === "AbortError") ||
             (e instanceof Error && e.name === "AbortError");
           if (aborted) {
             if (timedOut && quickCount === 0) {
-              setAiVenueError("Ricerca lenta: prova un altro termine o scegli dalla lista sotto.");
-              setAiVenueSuggestions([]);
+              setAiVenueSuggestions([venueFallbackFromUserQuery(q)]);
+              setAiVenueError(null);
+              setAiVenueLoading(false);
+              setAiVenueRefining(false);
             }
             return;
           }
@@ -367,13 +386,16 @@ export default function AppCreateEvent({
         {renderPreviewGuide("step0")}
         <div
           className="mx-6 mt-2 mb-1 rounded-xl border border-[#25D366]/25 bg-[#E8F8EF] px-3.5 py-2.5"
-          data-testid="banner-whatsapp-contacts-sync"
+          data-testid="banner-demo-contacts-simulation"
           role="note"
         >
           <p className="text-xs leading-snug text-gray-800 sm:text-sm">
-            <span className="font-bold text-[#128C7E]">WhatsApp</span>
-            {" — "}
-            I contatti che vedi qui saranno sincronizzati con quelli della tua rubrica WhatsApp.
+            I <span className="font-bold text-[#128C7E]">gruppi</span> e i{" "}
+            <span className="font-bold text-[#128C7E]">contatti</span> che vedi sotto sono{" "}
+            <span className="font-bold text-[#128C7E]">finti</span> (non{" "}
+            <span className="font-bold text-[#128C7E]">persone reali</span>): servono solo a questa{" "}
+            <span className="font-bold text-[#128C7E]">simulazione</span> di pianificazione con LineUp. In
+            futuro qui compariranno i contatti della tua rubrica WhatsApp.
           </p>
         </div>
         {fromScopriFlow && (
@@ -1115,38 +1137,28 @@ export default function AppCreateEvent({
                             <p className="font-semibold text-gray-900">{venue.name}</p>
                             {isVenueSelected && <CheckCircle2 size={14} className="text-primary shrink-0" />}
                           </div>
-                          <div className="flex items-center gap-3 mt-1 flex-wrap">
-                            <span className="flex items-center gap-0.5 text-xs text-amber-500 font-semibold">
-                              <Star size={10} fill="currentColor" />
-                              {venue.rating}
-                            </span>
-                            <span className="flex items-center gap-0.5 text-xs text-gray-500 min-w-0">
-                              <MapPin size={10} className="shrink-0" />
-                              <span className="truncate">{venuePollSubtitle(venue)}</span>
-                            </span>
-                          </div>
-                          <VenueExternalLinks venue={venue} className="mt-2.5" />
+                          {venue.userTypedFallback ? (
+                            <p className="mt-1 text-xs text-gray-500">Piemonte</p>
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-3 mt-1 flex-wrap">
+                                <span className="flex items-center gap-0.5 text-xs text-amber-500 font-semibold">
+                                  <Star size={10} fill="currentColor" />
+                                  {venue.rating}
+                                </span>
+                                <span className="flex items-center gap-0.5 text-xs text-gray-500 min-w-0">
+                                  <MapPin size={10} className="shrink-0" />
+                                  <span className="truncate">{venuePollSubtitle(venue)}</span>
+                                </span>
+                              </div>
+                              <VenueExternalLinks venue={venue} className="mt-2.5" />
+                            </>
+                          )}
                         </div>
                       </div>
                     </button>
                   );
                 })}
-              {!aiVenueLoading &&
-                !aiVenueRefining &&
-                venueSearch.trim().length >= 2 &&
-                aiVenueSuggestions.length === 0 &&
-                !aiVenueError && (
-                  <div
-                    className="rounded-xl border border-amber-200/90 bg-amber-50 px-3 py-2.5"
-                    data-testid="banner-ai-venue-no-results"
-                    role="note"
-                  >
-                    <p className="text-xs leading-snug text-amber-950">
-                      Ci dispiace che la tua ricerca non abbia dato un risultato, ma l&apos;AI è ancora in fase di
-                      sviluppo.
-                    </p>
-                  </div>
-                )}
             </div>
           )}
 

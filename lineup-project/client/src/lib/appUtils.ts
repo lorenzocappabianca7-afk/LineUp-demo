@@ -52,6 +52,32 @@ export interface VenueOption {
   websiteUrl?: string;
   /** Profilo Instagram ufficiale, se noto. */
   instagramUrl?: string;
+  /** Luogo mostrato dalla query utente quando l’AI non trova risultati (senza link esterni). */
+  userTypedFallback?: boolean;
+}
+
+/** Correzione leggera del testo cercato (maiuscole iniziali). */
+export function formatVenueNameFromUserQuery(query: string): string {
+  const t = query.trim().replace(/\s+/g, " ");
+  if (!t) return t;
+  return t
+    .split(" ")
+    .map((w) => {
+      if (!w) return w;
+      if (w.length <= 3 && w === w.toUpperCase()) return w;
+      return w.charAt(0).toLocaleUpperCase("it-IT") + w.slice(1).toLocaleLowerCase("it-IT");
+    })
+    .join(" ");
+}
+
+/** Anteprima come “trovato” se l’AI non restituisce luoghi (nessun sito / Maps / Instagram). */
+export function venueFallbackFromUserQuery(query: string): VenueOption {
+  return {
+    name: formatVenueNameFromUserQuery(query),
+    rating: 0,
+    distance: "Piemonte",
+    userTypedFallback: true,
+  };
 }
 
 /** Riga sotto il nome: indirizzo curato prima della query Maps (evita vie inventate nell’URL). */
