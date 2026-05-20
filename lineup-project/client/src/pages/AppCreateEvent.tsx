@@ -389,7 +389,7 @@ export default function AppCreateEvent({
           data-testid="banner-demo-contacts-simulation"
           role="note"
         >
-          <p className="text-xs leading-snug text-gray-800 sm:text-sm">
+          <p className="text-sm leading-snug text-gray-800 sm:text-[15px]">
             I <span className="font-bold text-[#128C7E]">gruppi</span> e i{" "}
             <span className="font-bold text-[#128C7E]">contatti</span> che vedi sotto sono{" "}
             <span className="font-bold text-[#128C7E]">finti</span> (non{" "}
