@@ -285,11 +285,14 @@ export default function AppCreateEvent({
           ac.abort();
         }, AI_DEADLINE_MS);
 
+        const venueSearchCtx = new URLSearchParams({ q });
+        if (selectedCategory?.trim()) venueSearchCtx.set("category", selectedCategory.trim());
+        if (selectedSubcategory?.trim()) venueSearchCtx.set("subcategory", selectedSubcategory.trim());
+
         try {
-          const quickRes = await fetch(
-            `/api/app/venues/quick-search?q=${encodeURIComponent(q)}`,
-            { signal: ac.signal },
-          );
+          const quickRes = await fetch(`/api/app/venues/quick-search?${venueSearchCtx}`, {
+            signal: ac.signal,
+          });
           if (quickRes.ok) {
             const quickData = (await quickRes.json()) as { venues?: VenueOption[] };
             quickVenues = quickData.venues ?? [];
@@ -308,7 +311,11 @@ export default function AppCreateEvent({
           const r = await fetch("/api/app/venues/ai-search", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ query: q }),
+            body: JSON.stringify({
+              query: q,
+              category: selectedCategory ?? "",
+              subcategory: selectedSubcategory ?? "",
+            }),
             signal: ac.signal,
           });
           const rawText = await r.text();
@@ -324,8 +331,13 @@ export default function AppCreateEvent({
           if (!ac.signal.aborted) {
             let final = data.venues ?? [];
             if (final.length === 0) {
-              final =
-                quickVenues.length > 0 ? quickVenues : [venueFallbackFromUserQuery(q)];
+              if (quickVenues.length > 0) {
+                final = quickVenues;
+              } else if (selectedSubcategory && allVenues.length > 0) {
+                final = allVenues.slice(0, 3);
+              } else {
+                final = [venueFallbackFromUserQuery(q)];
+              }
             }
             setAiVenueSuggestions(final);
             setAiVenueError(null);
@@ -336,7 +348,11 @@ export default function AppCreateEvent({
             (e instanceof Error && e.name === "AbortError");
           if (aborted) {
             if (timedOut && quickCount === 0) {
-              setAiVenueSuggestions([venueFallbackFromUserQuery(q)]);
+              const timedFallback =
+                selectedSubcategory && allVenues.length > 0
+                  ? allVenues.slice(0, 3)
+                  : [venueFallbackFromUserQuery(q)];
+              setAiVenueSuggestions(timedFallback);
               setAiVenueError(null);
               setAiVenueLoading(false);
               setAiVenueRefining(false);
@@ -357,7 +373,7 @@ export default function AppCreateEvent({
       })();
     }, 180);
     return () => clearTimeout(timer);
-  }, [venueSearch, step, done, fromScopriFlow]);
+  }, [venueSearch, step, done, fromScopriFlow, selectedCategory, selectedSubcategory, allVenues]);
 
   // Step 0: Chi — demo contacts + contatti importati (senza duplicati)
   const importedContacts = getMyContacts();
@@ -1106,7 +1122,9 @@ export default function AppCreateEvent({
 
           {venueSearch.trim().length >= 2 && (
             <div className="space-y-2">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Suggerimenti a Torino</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">
+                {selectedSubcategory ? `Suggerimenti per ${selectedSubcategory}` : "Suggerimenti a Torino"}
+              </p>
               {aiVenueLoading && aiVenueSuggestions.length === 0 && (
                 <p className="text-xs text-gray-400 text-center py-3">Ricerca in corso…</p>
               )}
@@ -1137,8 +1155,10 @@ export default function AppCreateEvent({
                             <p className="font-semibold text-gray-900">{venue.name}</p>
                             {isVenueSelected && <CheckCircle2 size={14} className="text-primary shrink-0" />}
                           </div>
-                          {venue.userTypedFallback ? (
-                            <p className="mt-1 text-xs text-gray-500">Piemonte</p>
+                          {venue.userTypedFallback || venue.syntheticSubcategory ? (
+                            <p className="mt-1 text-xs text-gray-500">
+                              {venue.quartiere || venuePollSubtitle(venue) || "Piemonte"}
+                            </p>
                           ) : (
                             <>
                               <div className="flex items-center gap-3 mt-1 flex-wrap">

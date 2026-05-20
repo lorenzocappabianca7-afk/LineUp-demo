@@ -392,6 +392,8 @@ type ClientVenueSearchJson = {
   instagramUrl?: string;
   /** Zona / quartiere per anteprima (senza via completa). */
   quartiere?: string;
+  /** Nome plausibile inventato dall’AI quando non ci sono match reali coerenti con la sottocategoria. */
+  syntheticSubcategory?: boolean;
 };
 
 const VENUE_AI_SEARCH_CACHE_TTL_MS = 120_000;
@@ -399,19 +401,30 @@ const VENUE_AI_SEARCH_CACHE_MAX = 48;
 type VenueAiSearchCacheEntry = { at: number; venues: ClientVenueSearchJson[] };
 const venueAiSearchCache = new Map<string, VenueAiSearchCacheEntry>();
 
-function venueAiSearchCacheKey(q: string): string {
-  return `v4:${q.trim().toLowerCase().slice(0, 120)}`;
+function venueAiSearchCacheKey(q: string, category?: string, subcategory?: string): string {
+  const cat = (category ?? "").trim().toLowerCase().slice(0, 40);
+  const sub = (subcategory ?? "").trim().toLowerCase().slice(0, 80);
+  return `v5:${cat}::${sub}::${q.trim().toLowerCase().slice(0, 120)}`;
 }
 
-function getVenueAiSearchCached(q: string): ClientVenueSearchJson[] | null {
-  const k = venueAiSearchCacheKey(q);
+function getVenueAiSearchCached(
+  q: string,
+  category?: string,
+  subcategory?: string,
+): ClientVenueSearchJson[] | null {
+  const k = venueAiSearchCacheKey(q, category, subcategory);
   const e = venueAiSearchCache.get(k);
   if (!e || Date.now() - e.at > VENUE_AI_SEARCH_CACHE_TTL_MS) return null;
   return e.venues;
 }
 
-function setVenueAiSearchCached(q: string, venues: ClientVenueSearchJson[]): void {
-  const k = venueAiSearchCacheKey(q);
+function setVenueAiSearchCached(
+  q: string,
+  venues: ClientVenueSearchJson[],
+  category?: string,
+  subcategory?: string,
+): void {
+  const k = venueAiSearchCacheKey(q, category, subcategory);
   if (venueAiSearchCache.size >= VENUE_AI_SEARCH_CACHE_MAX) {
     const first = venueAiSearchCache.keys().next().value;
     if (first !== undefined) venueAiSearchCache.delete(first);
@@ -596,6 +609,181 @@ function tryInstantVenueCatalogOnly(query: string): ClientVenueSearchJson[] | nu
 }
 
 /** Match dal catalogo in testa, poi risultati AI (nomi deduplicati). */
+function clientVenueToAiVenue(v: ClientVenueSearchJson): AiVenue {
+  return {
+    name: v.name,
+    description: v.address || v.quartiere || "",
+    address: v.address || "Torino",
+    rating: v.rating,
+    priceRange: "€€",
+    quartiere: v.quartiere,
+    mapsUrl: v.mapsUrl,
+    websiteUrl: v.websiteUrl,
+    bookingUrl: "",
+  };
+}
+
+function stripExternalLinksForSynthetic(venues: ClientVenueSearchJson[]): ClientVenueSearchJson[] {
+  return venues.map((v) =>
+    v.syntheticSubcategory
+      ? {
+          ...v,
+          mapsUrl: "",
+          websiteUrl: "",
+          instagramUrl: undefined,
+        }
+      : v,
+  );
+}
+
+function filterClientVenuesBySubcategoryIntent(
+  venues: ClientVenueSearchJson[],
+  category: string,
+  subcategory: string,
+): ClientVenueSearchJson[] {
+  if (!subcategory.trim()) return venues;
+  return venues.filter((v) => venueMatchesIntent(clientVenueToAiVenue(v), category, subcategory));
+}
+
+function subcategoryCatalogFallback(
+  query: string,
+  category: string,
+  subcategory: string,
+): ClientVenueSearchJson[] {
+  let hits = fallbackTorinoClientVenuesFromCatalog(query);
+  if (subcategory.trim()) {
+    hits = filterClientVenuesBySubcategoryIntent(hits, category, subcategory);
+  }
+  if (hits.length > 0) return hits.slice(0, 8);
+
+  const pool = getFallbackVenuesForSubcategory(subcategory, category).filter((v) =>
+    venueMatchesIntent(v, category, subcategory),
+  );
+  const qn = searchNormForVenueMatch(query);
+  const scored = pool
+    .map((v) => {
+      const nn = searchNormForVenueMatch(v.name);
+      const blob = `${nn} ${searchNormForVenueMatch(v.description)}`;
+      let d = 99;
+      if (qn.length < 2) d = 0;
+      else if (nn.includes(qn) || qn.includes(nn) || blob.includes(qn)) d = 0;
+      else d = levenshteinDistance(qn, nn);
+      return { v, d };
+    })
+    .filter((x) => qn.length < 2 || x.d <= 6)
+    .sort((a, b) => a.d - b.d || a.v.name.localeCompare(b.v.name, "it"));
+
+  return scored.slice(0, 5).map(({ v }) => aiVenueToClientSearchJson(v));
+}
+
+function parseSyntheticPianificaVenueItems(raw: unknown): ClientVenueSearchJson[] {
+  if (raw === null || typeof raw !== "object") return [];
+  const venuesRaw = (raw as { venues?: unknown }).venues;
+  if (!Array.isArray(venuesRaw)) return [];
+  const out: ClientVenueSearchJson[] = [];
+  for (const item of venuesRaw) {
+    if (item === null || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const name = typeof o.name === "string" ? o.name.trim() : "";
+    if (!name) continue;
+    const rating =
+      typeof o.rating === "number" && o.rating >= 0 && o.rating <= 5
+        ? Math.round(o.rating * 10) / 10
+        : 4.3;
+    const quartiere = typeof o.quartiere === "string" ? o.quartiere.trim() : "Torino";
+    const address =
+      typeof o.address === "string" && o.address.trim()
+        ? o.address.trim()
+        : quartiere;
+    out.push({
+      name,
+      rating,
+      address,
+      distance: "",
+      mapsUrl: "",
+      websiteUrl: "",
+      quartiere,
+      syntheticSubcategory: true,
+    });
+    if (out.length >= 3) break;
+  }
+  return out;
+}
+
+async function generateSyntheticPianificaVenues(
+  openai: OpenAI,
+  query: string,
+  category: string,
+  subcategory: string,
+): Promise<ClientVenueSearchJson[]> {
+  const completion = await withTimeout(
+    openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.45,
+      max_completion_tokens: 360,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: `Rispondi SOLO con JSON: {"venues":[...]}.
+Ogni elemento: name (string, nome commerciale plausibile in Piemonte), quartiere (zona/comune breve in Piemonte), rating (4.0-4.8), address (etichetta zona, senza civico inventato).
+Inventa 2-3 nomi di locali/attività COERENTI con categoria e sottocategoria dell'evento e con l'intento della query utente.
+NON usare marchi famosi se non sei certo che esistano in Piemonte per quella sottocategoria.
+I nomi devono far capire all'utente che la sua scelta (categoria/sottocategoria) è stata capita.`,
+        },
+        {
+          role: "user",
+          content: `Categoria: ${JSON.stringify(category)}
+Sottocategoria: ${JSON.stringify(subcategory)}
+Query ricerca: ${JSON.stringify(query)}`,
+        },
+      ],
+    }),
+    LINEUP_VENUE_AI_SEARCH_MS,
+    "venues-ai-synthetic",
+  );
+  const text = completion.choices[0]?.message?.content;
+  if (!text) return [];
+  try {
+    return parseSyntheticPianificaVenueItems(JSON.parse(text));
+  } catch {
+    return [];
+  }
+}
+
+async function resolveEmptyPianificaVenueSearch(
+  query: string,
+  category: string,
+  subcategory: string,
+  apiKey: string | undefined,
+): Promise<ClientVenueSearchJson[]> {
+  const catalog = subcategoryCatalogFallback(query, category, subcategory);
+  if (catalog.length > 0) return catalog;
+
+  if (!subcategory.trim()) return [];
+
+  if (apiKey) {
+    try {
+      const openai = new OpenAI({ apiKey, timeout: LINEUP_VENUE_AI_SEARCH_MS });
+      const invented = await generateSyntheticPianificaVenues(openai, query, category, subcategory);
+      if (invented.length > 0) return invented;
+    } catch {
+      /* fallback sotto */
+    }
+  }
+
+  return getFallbackVenuesForSubcategory(subcategory, category)
+    .filter((v) => venueMatchesIntent(v, category, subcategory))
+    .slice(0, 3)
+    .map((v) => ({
+      ...aiVenueToClientSearchJson(v),
+      syntheticSubcategory: true,
+      mapsUrl: "",
+      websiteUrl: "",
+      instagramUrl: undefined,
+    }));
+}
+
 function mergeCatalogWithAi(
   catalogHits: ClientVenueSearchJson[],
   ai: ClientVenueSearchJson[],
@@ -1632,9 +1820,21 @@ export async function registerRoutes(
     if (query.length < 2 || query.length > 120) {
       return res.status(400).json({ message: "Query non valida (2–120 caratteri)" });
     }
-    const cached = getVenueAiSearchCached(query);
-    if (cached) return res.json({ venues: cached, source: "cache" });
-    const venues = fallbackTorinoClientVenuesFromCatalog(query);
+    const category = typeof req.query.category === "string" ? req.query.category.trim() : "";
+    const subcategory = typeof req.query.subcategory === "string" ? req.query.subcategory.trim() : "";
+
+    const cached = getVenueAiSearchCached(query, category, subcategory);
+    if (cached) return res.json({ venues: stripExternalLinksForSynthetic(cached), source: "cache" });
+
+    let venues = subcategoryCatalogFallback(query, category, subcategory);
+    if (venues.length === 0) {
+      venues = fallbackTorinoClientVenuesFromCatalog(query);
+      if (subcategory.trim()) {
+        venues = filterClientVenuesBySubcategoryIntent(venues, category, subcategory);
+      }
+    }
+    venues = stripExternalLinksForSynthetic(venues);
+    setVenueAiSearchCached(query, venues, category, subcategory);
     return res.json({ venues, source: "catalog" });
   });
 
@@ -1644,14 +1844,20 @@ export async function registerRoutes(
     if (query.length < 2 || query.length > 120) {
       return res.status(400).json({ message: "Query non valida (2–120 caratteri)" });
     }
+    const category = typeof req.body?.category === "string" ? req.body.category.trim() : "";
+    const subcategory = typeof req.body?.subcategory === "string" ? req.body.subcategory.trim() : "";
 
-    const cached = getVenueAiSearchCached(query);
-    if (cached) return res.json({ venues: cached, source: "cache" });
+    const cached = getVenueAiSearchCached(query, category, subcategory);
+    if (cached) return res.json({ venues: stripExternalLinksForSynthetic(cached), source: "cache" });
 
-    const instant = tryInstantVenueCatalogOnly(query);
-    if (instant) {
-      setVenueAiSearchCached(query, instant);
-      return res.json({ venues: instant, source: "catalog" });
+    let instant = tryInstantVenueCatalogOnly(query);
+    if (instant && subcategory.trim()) {
+      instant = filterClientVenuesBySubcategoryIntent(instant, category, subcategory);
+    }
+    if (instant && instant.length > 0) {
+      const venues = stripExternalLinksForSynthetic(instant);
+      setVenueAiSearchCached(query, venues, category, subcategory);
+      return res.json({ venues, source: "catalog" });
     }
 
     const catalogNameHints = fuzzyCatalogVenueNamesForQuery(query, 10);
@@ -1660,10 +1866,20 @@ export async function registerRoutes(
         ? `\nPossibili nomi nel nostro catalogo Torino (refusi / intento): ${catalogNameHints.map((n) => JSON.stringify(n)).join(", ")}. Preferisci questi se corrispondono all'intento dell'utente.`
         : "";
 
+    const subcategoryBlock = subcategory.trim()
+      ? `\nCONTESTO EVENTO (obbligatorio): categoria ${JSON.stringify(category || "generica")}, sottocategoria ${JSON.stringify(subcategory)}. Ogni risultato deve essere coerente con questa sottocategoria (tipo di attività/luogo che l'utente vuole organizzare).`
+      : "";
+
+    const mealRule = isMealLunchDinnerSubcategory(subcategory)
+      ? "\n- Per PRANZO o CENA: vietati bar, caffè, pasticcerie o gelaterie salvo servizio pasto completo al tavolo."
+      : "";
+
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      const venues = fallbackTorinoClientVenuesFromCatalog(query);
-      setVenueAiSearchCached(query, venues);
+      let venues = await resolveEmptyPianificaVenueSearch(query, category, subcategory, undefined);
+      if (venues.length === 0) venues = fallbackTorinoClientVenuesFromCatalog(query);
+      venues = stripExternalLinksForSynthetic(venues);
+      setVenueAiSearchCached(query, venues, category, subcategory);
       return res.json({ venues });
     }
     try {
@@ -1672,7 +1888,7 @@ export async function registerRoutes(
         openai.chat.completions.create({
           model: "gpt-4o-mini",
           temperature: 0,
-          max_completion_tokens: 420,
+          max_completion_tokens: 480,
           response_format: { type: "json_object" },
           messages: [
             {
@@ -1680,23 +1896,22 @@ export async function registerRoutes(
               content: `Rispondi SOLO con JSON valido, senza markdown: {"venues":[...]}.
 
 FORMATO (array "venues", stesso schema del frontend):
-- Ogni elemento: name (string), address (area/zona generica, senza numero civico inventato), quartiere (comune o quartiere in Piemonte, stringa breve), rating (0-5), mapsUrl (string), websiteUrl (URL ufficiale o null), instagramUrl (URL o null).
-- "venues" è sempre un array (lista): 1 elemento se il match è univoco; 2-3 elementi se più luoghi reali in Piemonte hanno nome molto simile; massimo 3 elementi totali.
+- Ogni elemento: name (string), address (area/zona generica, senza numero civico inventato), quartiere (comune o quartiere in Piemonte, stringa breve), rating (0-5), mapsUrl (string), websiteUrl (URL ufficiale o null), instagramUrl (URL o null), syntheticSubcategory (boolean, opzionale).
+- "venues" è sempre un array: 1 elemento se il match è univoco; 2-3 elementi se più luoghi reali in Piemonte hanno nome molto simile; massimo 3 elementi totali.
 
 REGOLE TASSATIVE:
-1) Geofencing Piemonte: cerca ESCLUSIVAMENTE attività reali nella regione Piemonte, Italia. Anche se l'utente scrive solo il nome del locale o una città, non proporre luoghi fuori Piemonte.
-2) Fuzzy search (refusi): se la query ha errori di ortografia o è un nome parziale, identifica il luogo reale in Piemonte che più si avvicina all'intento (correggi refusi, non inventare nomi generici).
-3) Nomi simili: se più locali reali in Piemonte corrispondono (es. stesso nome in città diverse), restituisci 2-3 candidati distinti (città/comune diversi in quartiere o address) così l'utente sceglie.
-4) Link "magici":
-   - websiteUrl: solo il sito ufficiale se lo conosci con certezza; se c'è incertezza usa null (non inventare URL).
-   - mapsUrl: link di ricerca universale Google Maps, ESATTAMENTE nel formato https://www.google.com/maps/search/?api=1&query=Nome+Locale+Citta+Piemonte con spazi sostituiti da "+" (es. Ristorante+Da+Mario+Alessandria+Piemonte). Usa il comune reale in Piemonte al posto di "Citta". Nessun indirizzo civico inventato.
-5) Qualità: solo locali che esistono o sono ampiamente noti; niente markdown; rating plausibile; address generico ok.`,
+1) Geofencing Piemonte: cerca ESCLUSIVAMENTE attività reali nella regione Piemonte, Italia.
+2) Coerenza sottocategoria: se è indicata una sottocategoria evento, proponi SOLO luoghi adatti a quell'attività (es. Padel → campi/club padel, Cena → ristoranti, Discoteche → discoteche).
+3) Fuzzy search (refusi): correggi refusi su nomi reali in Piemonte; non inventare nomi generici se esiste un locale reale plausibile.
+4) Link: websiteUrl/instagramUrl solo se certi; mapsUrl formato https://www.google.com/maps/search/?api=1&query=Nome+Locale+Comune+Piemonte con "+" al posto degli spazi.
+5) Se NON trovi luoghi reali in Piemonte coerenti con query E sottocategoria, inventa 2-3 nomi plausibili di locali/attività in Piemonte che dimostrino di aver capito la scelta (syntheticSubcategory: true, mapsUrl/websiteUrl/instagramUrl null).
+6) Qualità: rating plausibile; niente markdown.${mealRule}`,
             },
             {
               role: "user",
-              content: `Cerca luoghi in Piemonte per questa query utente: ${JSON.stringify(query)}${hintsBlock}
+              content: `Cerca luoghi in Piemonte per questa query utente: ${JSON.stringify(query)}${subcategoryBlock}${hintsBlock}
 
-Applica geofencing Piemonte, correggi refusi se necessario, e se ci sono omonimi in città diverse restituisci 2-3 opzioni nell'array venues.`,
+Applica geofencing Piemonte, rispetta la sottocategoria evento, correggi refusi se necessario. Se non ci sono match reali coerenti, restituisci suggerimenti inventati ma attinenti (syntheticSubcategory: true).`,
             },
           ],
         }),
@@ -1705,30 +1920,46 @@ Applica geofencing Piemonte, correggi refusi se necessario, e se ci sono omonimi
       );
       const text = completion.choices[0]?.message?.content;
       if (!text) {
-        const venues = fallbackTorinoClientVenuesFromCatalog(query);
-        setVenueAiSearchCached(query, venues);
+        let venues = await resolveEmptyPianificaVenueSearch(query, category, subcategory, apiKey);
+        venues = stripExternalLinksForSynthetic(venues);
+        setVenueAiSearchCached(query, venues, category, subcategory);
         return res.json({ venues });
       }
       let raw: unknown;
       try {
         raw = JSON.parse(text);
       } catch {
-        const venues = fallbackTorinoClientVenuesFromCatalog(query);
-        setVenueAiSearchCached(query, venues);
+        let venues = await resolveEmptyPianificaVenueSearch(query, category, subcategory, apiKey);
+        venues = stripExternalLinksForSynthetic(venues);
+        setVenueAiSearchCached(query, venues, category, subcategory);
         return res.json({ venues });
       }
       const aiParsed = parseTorinoVenueAiItemsLoose(raw);
-      const fb = fallbackTorinoClientVenuesFromCatalog(query);
-      const venues = mergeCatalogWithAi(fb, aiParsed);
+      const syntheticFromAi = parseSyntheticPianificaVenueItems(raw);
+      const fb = subcategoryCatalogFallback(query, category, subcategory);
+      let venues = mergeCatalogWithAi(fb, [...aiParsed, ...syntheticFromAi]);
+      if (subcategory.trim()) {
+        const real = filterClientVenuesBySubcategoryIntent(
+          venues.filter((v) => !v.syntheticSubcategory),
+          category,
+          subcategory,
+        );
+        const invented = venues.filter((v) => v.syntheticSubcategory);
+        venues = [...real, ...invented];
+      }
+      if (venues.length === 0) {
+        venues = await resolveEmptyPianificaVenueSearch(query, category, subcategory, apiKey);
+      }
+      venues = stripExternalLinksForSynthetic(venues);
       if (venues.length === 0) {
         void logAiPipelineSummary({
           route: "POST /api/app/venues/ai-search",
           lines: ["parse_fail", "no_venues_after_merge"],
         });
-        setVenueAiSearchCached(query, []);
+        setVenueAiSearchCached(query, [], category, subcategory);
         return res.json({ venues: [] });
       }
-      setVenueAiSearchCached(query, venues);
+      setVenueAiSearchCached(query, venues, category, subcategory);
       return res.json({ venues });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -1736,8 +1967,10 @@ Applica geofencing Piemonte, correggi refusi se necessario, e se ci sono omonimi
         route: "POST /api/app/venues/ai-search",
         lines: ["error", msg],
       });
-      const venues = fallbackTorinoClientVenuesFromCatalog(query);
-      setVenueAiSearchCached(query, venues);
+      let venues = await resolveEmptyPianificaVenueSearch(query, category, subcategory, apiKey);
+      if (venues.length === 0) venues = fallbackTorinoClientVenuesFromCatalog(query);
+      venues = stripExternalLinksForSynthetic(venues);
+      setVenueAiSearchCached(query, venues, category, subcategory);
       return res.json({ venues });
     }
   });

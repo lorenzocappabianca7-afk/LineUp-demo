@@ -54,6 +54,8 @@ export interface VenueOption {
   instagramUrl?: string;
   /** Luogo mostrato dalla query utente quando l’AI non trova risultati (senza link esterni). */
   userTypedFallback?: boolean;
+  /** Suggerimento inventato ma coerente con categoria/sottocategoria (senza link esterni). */
+  syntheticSubcategory?: boolean;
 }
 
 /** Correzione leggera del testo cercato (maiuscole iniziali). */
