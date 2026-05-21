@@ -90,6 +90,7 @@ export default function AppCreateEvent({
   const [aiVenueRefining, setAiVenueRefining] = useState(false);
   const [aiVenueError, setAiVenueError] = useState<string | null>(null);
   const aiSearchAbortRef = useRef<AbortController | null>(null);
+  const venueSearchSeqRef = useRef(0);
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customSubcategory, setCustomSubcategory] = useState("");
   const [done, setDone] = useState(false);
@@ -220,13 +221,16 @@ export default function AppCreateEvent({
     [fromScopriFlow, selectedDates.length, timeOptionCount, selectedVenues.length],
   );
 
-  const venueKeys = selectedSubcategory
-    ? [venuePoolKeyForPlanSubcategory(selectedSubcategory)].filter((k): k is string => Boolean(k))
-    : [];
-  const allVenues =
-    venueKeys.length === 0
-      ? []
-      : venueKeys.flatMap((k) => VENUES_BY_ACTIVITY[k] ?? VENUES_BY_ACTIVITY.altro);
+  const venuePoolKey = selectedSubcategory
+    ? venuePoolKeyForPlanSubcategory(selectedSubcategory)
+    : null;
+  const allVenues = useMemo(
+    () =>
+      venuePoolKey
+        ? [...(VENUES_BY_ACTIVITY[venuePoolKey] ?? VENUES_BY_ACTIVITY.altro)]
+        : [],
+    [venuePoolKey],
+  );
   const activityVenues = venueSearch.trim()
     ? allVenues.filter(v => v.name.toLowerCase().includes(venueSearch.toLowerCase()))
     : allVenues;
@@ -272,18 +276,22 @@ export default function AppCreateEvent({
       aiSearchAbortRef.current?.abort();
       const ac = new AbortController();
       aiSearchAbortRef.current = ac;
+      const seq = ++venueSearchSeqRef.current;
+      const applyIfCurrent = (fn: () => void) => {
+        if (
+          venueSearchSeqRef.current === seq &&
+          !ac.signal.aborted &&
+          venueSearch.trim() === q
+        ) {
+          fn();
+        }
+      };
+
       setAiVenueLoading(true);
       setAiVenueRefining(false);
       setAiVenueError(null);
       void (async () => {
-        const AI_DEADLINE_MS = 5500;
-        let timedOut = false;
-        let quickCount = 0;
         let quickVenues: VenueOption[] = [];
-        const deadline = window.setTimeout(() => {
-          timedOut = true;
-          ac.abort();
-        }, AI_DEADLINE_MS);
 
         const venueSearchCtx = new URLSearchParams({ q });
         if (selectedCategory?.trim()) venueSearchCtx.set("category", selectedCategory.trim());
@@ -295,12 +303,15 @@ export default function AppCreateEvent({
           });
           if (quickRes.ok) {
             const quickData = (await quickRes.json()) as { venues?: VenueOption[] };
-            quickVenues = quickData.venues ?? [];
-            quickCount = quickVenues.length;
-            if (!ac.signal.aborted && quickVenues.length > 0) {
-              setAiVenueSuggestions(quickVenues);
-              setAiVenueLoading(false);
-              setAiVenueRefining(true);
+            quickVenues = (quickData.venues ?? []).filter(
+              (v) => !v.syntheticSubcategory && !v.userTypedFallback,
+            );
+            if (quickVenues.length > 0) {
+              applyIfCurrent(() => {
+                setAiVenueSuggestions(quickVenues);
+                setAiVenueLoading(false);
+                setAiVenueRefining(true);
+              });
             }
           }
         } catch {
@@ -328,52 +339,58 @@ export default function AppCreateEvent({
             );
           }
           if (!r.ok) throw new Error(data?.message || "Ricerca non riuscita");
-          if (!ac.signal.aborted) {
-            let final = data.venues ?? [];
-            if (final.length === 0) {
-              if (quickVenues.length > 0) {
-                final = quickVenues;
-              } else if (selectedSubcategory && allVenues.length > 0) {
-                final = allVenues.slice(0, 3);
-              } else {
-                final = [venueFallbackFromUserQuery(q)];
-              }
+
+          applyIfCurrent(() => {
+            const fromAi = data.venues ?? [];
+            const aiHasReal = fromAi.some(
+              (v) => !v.syntheticSubcategory && !v.userTypedFallback,
+            );
+            let final: VenueOption[];
+            if (aiHasReal) {
+              final = fromAi;
+            } else if (quickVenues.length > 0) {
+              final = quickVenues;
+            } else if (fromAi.length > 0) {
+              final = fromAi;
+            } else if (!selectedSubcategory?.trim()) {
+              final = [venueFallbackFromUserQuery(q)];
+            } else {
+              final = [];
             }
             setAiVenueSuggestions(final);
             setAiVenueError(null);
-          }
+            setAiVenueLoading(false);
+            setAiVenueRefining(false);
+          });
         } catch (e: unknown) {
           const aborted =
             (e instanceof DOMException && e.name === "AbortError") ||
             (e instanceof Error && e.name === "AbortError");
           if (aborted) {
-            if (timedOut && quickCount === 0) {
-              const timedFallback =
-                selectedSubcategory && allVenues.length > 0
-                  ? allVenues.slice(0, 3)
-                  : [venueFallbackFromUserQuery(q)];
-              setAiVenueSuggestions(timedFallback);
-              setAiVenueError(null);
+            if (venueSearchSeqRef.current === seq) {
               setAiVenueLoading(false);
               setAiVenueRefining(false);
             }
             return;
           }
-          if (!ac.signal.aborted) {
+          applyIfCurrent(() => {
             setAiVenueError(e instanceof Error ? e.message : "Errore ricerca");
-            if (quickCount === 0) setAiVenueSuggestions([]);
-          }
-        } finally {
-          window.clearTimeout(deadline);
-          if (!ac.signal.aborted) {
+            if (quickVenues.length > 0) {
+              setAiVenueSuggestions(quickVenues);
+            } else {
+              setAiVenueSuggestions([]);
+            }
             setAiVenueLoading(false);
             setAiVenueRefining(false);
-          }
+          });
         }
       })();
     }, 180);
-    return () => clearTimeout(timer);
-  }, [venueSearch, step, done, fromScopriFlow, selectedCategory, selectedSubcategory, allVenues]);
+    return () => {
+      clearTimeout(timer);
+      aiSearchAbortRef.current?.abort();
+    };
+  }, [venueSearch, step, done, fromScopriFlow, selectedCategory, selectedSubcategory]);
 
   // Step 0: Chi — demo contacts + contatti importati (senza duplicati)
   const importedContacts = getMyContacts();

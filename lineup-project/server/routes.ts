@@ -401,20 +401,29 @@ const VENUE_AI_SEARCH_CACHE_MAX = 48;
 type VenueAiSearchCacheEntry = { at: number; venues: ClientVenueSearchJson[] };
 const venueAiSearchCache = new Map<string, VenueAiSearchCacheEntry>();
 
-function venueAiSearchCacheKey(q: string, category?: string, subcategory?: string): string {
+type VenueAiSearchCacheKind = "quick" | "ai";
+
+function venueAiSearchCacheKey(
+  q: string,
+  category?: string,
+  subcategory?: string,
+  kind: VenueAiSearchCacheKind = "ai",
+): string {
   const cat = (category ?? "").trim().toLowerCase().slice(0, 40);
   const sub = (subcategory ?? "").trim().toLowerCase().slice(0, 80);
-  return `v5:${cat}::${sub}::${q.trim().toLowerCase().slice(0, 120)}`;
+  return `${kind}:v6:${cat}::${sub}::${q.trim().toLowerCase().slice(0, 120)}`;
 }
 
 function getVenueAiSearchCached(
   q: string,
   category?: string,
   subcategory?: string,
+  kind: VenueAiSearchCacheKind = "ai",
 ): ClientVenueSearchJson[] | null {
-  const k = venueAiSearchCacheKey(q, category, subcategory);
+  const k = venueAiSearchCacheKey(q, category, subcategory, kind);
   const e = venueAiSearchCache.get(k);
   if (!e || Date.now() - e.at > VENUE_AI_SEARCH_CACHE_TTL_MS) return null;
+  if (kind === "ai" && e.venues.length === 0) return null;
   return e.venues;
 }
 
@@ -423,8 +432,10 @@ function setVenueAiSearchCached(
   venues: ClientVenueSearchJson[],
   category?: string,
   subcategory?: string,
+  kind: VenueAiSearchCacheKind = "ai",
 ): void {
-  const k = venueAiSearchCacheKey(q, category, subcategory);
+  if (venues.length === 0) return;
+  const k = venueAiSearchCacheKey(q, category, subcategory, kind);
   if (venueAiSearchCache.size >= VENUE_AI_SEARCH_CACHE_MAX) {
     const first = venueAiSearchCache.keys().next().value;
     if (first !== undefined) venueAiSearchCache.delete(first);
@@ -532,6 +543,11 @@ function parseTorinoVenueAiItemsLoose(raw: unknown): ClientVenueSearchJson[] {
   if (!Array.isArray(venuesRaw)) return [];
   const out: ClientVenueSearchJson[] = [];
   for (const item of venuesRaw) {
+    if (item !== null && typeof item === "object" && (item as { syntheticSubcategory?: unknown }).syntheticSubcategory === true) {
+      out.push(...parseSyntheticPianificaVenueItems({ venues: [item] }));
+      if (out.length >= 5) break;
+      continue;
+    }
     const one = torinoVenueSearchItemSchema.safeParse(item);
     if (!one.success) continue;
     out.push(normalizeClientVenueSearchJsonMaps(mapTorinoVenueItemToClient(one.data)));
@@ -1823,18 +1839,17 @@ export async function registerRoutes(
     const category = typeof req.query.category === "string" ? req.query.category.trim() : "";
     const subcategory = typeof req.query.subcategory === "string" ? req.query.subcategory.trim() : "";
 
-    const cached = getVenueAiSearchCached(query, category, subcategory);
+    const cached = getVenueAiSearchCached(query, category, subcategory, "quick");
     if (cached) return res.json({ venues: stripExternalLinksForSynthetic(cached), source: "cache" });
 
-    let venues = subcategoryCatalogFallback(query, category, subcategory);
-    if (venues.length === 0) {
-      venues = fallbackTorinoClientVenuesFromCatalog(query);
-      if (subcategory.trim()) {
-        venues = filterClientVenuesBySubcategoryIntent(venues, category, subcategory);
-      }
+    let venues = fallbackTorinoClientVenuesFromCatalog(query);
+    if (subcategory.trim()) {
+      venues = filterClientVenuesBySubcategoryIntent(venues, category, subcategory);
     }
-    venues = stripExternalLinksForSynthetic(venues);
-    setVenueAiSearchCached(query, venues, category, subcategory);
+    venues = venues.filter((v) => !v.syntheticSubcategory);
+    if (venues.length > 0) {
+      setVenueAiSearchCached(query, venues, category, subcategory, "quick");
+    }
     return res.json({ venues, source: "catalog" });
   });
 
@@ -1935,9 +1950,15 @@ Applica geofencing Piemonte, rispetta la sottocategoria evento, correggi refusi 
         return res.json({ venues });
       }
       const aiParsed = parseTorinoVenueAiItemsLoose(raw);
-      const syntheticFromAi = parseSyntheticPianificaVenueItems(raw);
-      const fb = subcategoryCatalogFallback(query, category, subcategory);
-      let venues = mergeCatalogWithAi(fb, [...aiParsed, ...syntheticFromAi]);
+      const parsedNames = new Set(aiParsed.map((v) => v.name.trim().toLowerCase()));
+      const syntheticFromAi = parseSyntheticPianificaVenueItems(raw).filter(
+        (v) => !parsedNames.has(v.name.trim().toLowerCase()),
+      );
+      const mergedAi = mergeCatalogWithAi(aiParsed, syntheticFromAi);
+      let venues =
+        mergedAi.length > 0
+          ? mergedAi
+          : mergeCatalogWithAi(subcategoryCatalogFallback(query, category, subcategory), []);
       if (subcategory.trim()) {
         const real = filterClientVenuesBySubcategoryIntent(
           venues.filter((v) => !v.syntheticSubcategory),
@@ -1945,10 +1966,22 @@ Applica geofencing Piemonte, rispetta la sottocategoria evento, correggi refusi 
           subcategory,
         );
         const invented = venues.filter((v) => v.syntheticSubcategory);
-        venues = [...real, ...invented];
+        venues = real.length > 0 ? [...real, ...invented] : invented;
       }
       if (venues.length === 0) {
         venues = await resolveEmptyPianificaVenueSearch(query, category, subcategory, apiKey);
+      }
+      if (
+        subcategory.trim() &&
+        venues.length > 0 &&
+        venues.every((v) => v.syntheticSubcategory)
+      ) {
+        const catalogOnly = filterClientVenuesBySubcategoryIntent(
+          fallbackTorinoClientVenuesFromCatalog(query),
+          category,
+          subcategory,
+        );
+        if (catalogOnly.length > 0) venues = catalogOnly;
       }
       venues = stripExternalLinksForSynthetic(venues);
       if (venues.length === 0) {
@@ -1956,7 +1989,6 @@ Applica geofencing Piemonte, rispetta la sottocategoria evento, correggi refusi 
           route: "POST /api/app/venues/ai-search",
           lines: ["parse_fail", "no_venues_after_merge"],
         });
-        setVenueAiSearchCached(query, [], category, subcategory);
         return res.json({ venues: [] });
       }
       setVenueAiSearchCached(query, venues, category, subcategory);
