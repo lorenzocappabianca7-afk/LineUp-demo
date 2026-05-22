@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { ArrowLeft, Lock, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -103,6 +103,16 @@ export default function PianificaDemoFeedbackAdmin() {
     }
   };
 
+  const averageRatingLabel = useMemo(() => {
+    if (feedbacks.length === 0) return null;
+    const sum = feedbacks.reduce((acc, fb) => acc + fb.rating, 0);
+    const avg = Math.round((sum / feedbacks.length) * 10) / 10;
+    return avg.toLocaleString("it-IT", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    });
+  }, [feedbacks]);
+
   if (!authenticated) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -146,7 +156,19 @@ export default function PianificaDemoFeedbackAdmin() {
         <div>
           <h1 className="text-lg font-bold">Feedback Pianifica</h1>
           <p className="text-xs text-muted-foreground">
-            {feedbacks.length} invii · scorri a sinistra per eliminare
+            {feedbacks.length} invii
+            {averageRatingLabel != null && (
+              <>
+                {" "}
+                · media{" "}
+                <span className="inline-flex items-center gap-0.5 font-medium text-amber-600">
+                  {averageRatingLabel}
+                  <Star size={11} fill="currentColor" aria-hidden />
+                </span>
+              </>
+            )}
+            {" "}
+            · scorri a sinistra per eliminare
           </p>
         </div>
         <Button

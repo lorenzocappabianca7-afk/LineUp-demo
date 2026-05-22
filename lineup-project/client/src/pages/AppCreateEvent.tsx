@@ -68,6 +68,13 @@ export default function AppCreateEvent({
     const guide = getPianificaPreviewGuide(id, fromScopriFlow);
     return <PianificaStepGuide {...guide} variant={variant ?? (id === "step6" ? "onBlue" : "default")} />;
   };
+
+  useEffect(() => {
+    if (previewMode) {
+      setShowCustomInput(false);
+      setCustomSubcategory("");
+    }
+  }, [previewMode]);
   const [surveyMode, setSurveyMode] = useState<CreatorSurveyModeId>(DEFAULT_SURVEY_MODE);
   const [showGroupLifeDemo, setShowGroupLifeDemo] = useState(false);
   const [step, setStep] = useState(0);
@@ -287,6 +294,7 @@ export default function AppCreateEvent({
         }
       };
 
+      setAiVenueSuggestions([]);
       setAiVenueLoading(true);
       setAiVenueRefining(false);
       setAiVenueError(null);
@@ -620,8 +628,7 @@ export default function AppCreateEvent({
                 </button>
               ))}
 
-              {/* Bottone Altro */}
-              {!showCustomInput && (
+              {!previewMode && !showCustomInput && (
                 <button
                   data-testid="subcategory-altro"
                   onClick={() => setShowCustomInput(true)}
@@ -633,8 +640,7 @@ export default function AppCreateEvent({
               )}
             </div>
 
-            {/* Input personalizzato */}
-            {showCustomInput && (
+            {!previewMode && showCustomInput && (
               <div className="mt-4 flex gap-2">
                 <input
                   autoFocus

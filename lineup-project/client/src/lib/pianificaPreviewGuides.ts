@@ -27,13 +27,13 @@ const GUIDES: Record<PreviewGuideId, GuideContent> = {
     stepLabel: "Passo 2 di 7",
     title: "Che tipo di attività?",
     body: "Indica la categoria che descrive meglio la tua proposta (cibo, sport, cultura…).",
-    action: "Tocca una delle card colorate per scegliere la categoria.",
+    action: "Tocca una delle card per scegliere la categoria.",
   },
   "step1-sub": {
     stepLabel: "Passo 2 di 7",
     title: "Sottocategoria",
     body: "Rendi l’evento più chiaro per il gruppo: aperitivo, cena, padel, museo, ecc.",
-    action: "Seleziona una o più pillole; se non trovi l’attività, usa Altro e scrivila tu.",
+    action: "Seleziona una pillola tra quelle proposte, poi premi Continua in basso.",
   },
   step2: {
     stepLabel: "Passo 3 di 7",
