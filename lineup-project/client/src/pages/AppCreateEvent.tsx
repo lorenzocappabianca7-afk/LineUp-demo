@@ -58,6 +58,8 @@ interface AppCreateEventProps {
   previewProfile?: PreviewProfile;
   /** Demo: il genitore (modale) mostra la schermata completamento — evita scroll annidati. */
   onPreviewComplete?: () => void;
+  /** Demo: animazione «Dopo la creazione» visibile (il modale nasconde la X). */
+  onPreviewGroupLifeChange?: (active: boolean) => void;
 }
 
 export default function AppCreateEvent({
@@ -66,6 +68,7 @@ export default function AppCreateEvent({
   previewMode,
   previewProfile,
   onPreviewComplete,
+  onPreviewGroupLifeChange,
 }: AppCreateEventProps) {
   const fromScopriFlow = Boolean(fromScopri && fromScopri.venues.length > 0);
 
@@ -137,6 +140,16 @@ export default function AppCreateEvent({
     setShowGroupLifeDemo(false);
     onPreviewComplete?.();
   }, [onPreviewComplete]);
+
+  useEffect(() => {
+    if (!previewMode) return;
+    onPreviewGroupLifeChange?.(showGroupLifeDemo);
+  }, [previewMode, showGroupLifeDemo, onPreviewGroupLifeChange]);
+
+  useEffect(() => {
+    if (!previewMode) return;
+    return () => onPreviewGroupLifeChange?.(false);
+  }, [previewMode, onPreviewGroupLifeChange]);
 
   const copyInviteLink = async () => {
     if (!inviteEventUrl) return;

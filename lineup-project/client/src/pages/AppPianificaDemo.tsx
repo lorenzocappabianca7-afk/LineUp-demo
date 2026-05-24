@@ -40,6 +40,7 @@ export default function AppPianificaDemo() {
   const [modalPhase, setModalPhase] = useState<"wizard" | "complete">("wizard");
   /** Dopo «Grazie di cuore!»: il modale non si chiude (né torna al tasto Pianifica). */
   const [completionThanksLocked, setCompletionThanksLocked] = useState(false);
+  const [groupLifeDemoActive, setGroupLifeDemoActive] = useState(false);
   const [gateDone, setGateDone] = useState(false);
   const [introDone, setIntroDone] = useState(false);
   const [name, setName] = useState("");
@@ -136,11 +137,13 @@ export default function AppPianificaDemo() {
     setSheetOpen(false);
     setModalPhase("wizard");
     setCompletionThanksLocked(false);
+    setGroupLifeDemoActive(false);
   }, [completionThanksLocked, modalPhase]);
 
   const openSheet = useCallback(() => {
     setCompletionThanksLocked(false);
     setModalPhase("wizard");
+    setGroupLifeDemoActive(false);
     setSheetOpen(true);
   }, []);
 
@@ -316,6 +319,7 @@ export default function AppPianificaDemo() {
             onClick={(e) => e.stopPropagation()}
           >
           <div className="absolute inset-[3px] flex min-h-0 flex-col rounded-[17px] bg-white">
+            {!groupLifeDemoActive && (
             <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-4 pb-3 pt-4 sm:px-6 sm:pb-4 sm:pt-5">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Nuovo evento</h2>
@@ -336,6 +340,7 @@ export default function AppPianificaDemo() {
                 <span className="h-11 w-11 shrink-0" aria-hidden />
               )}
             </div>
+            )}
             <div
               className={cn(
                 "flex min-h-0 flex-1 flex-col",
@@ -384,6 +389,7 @@ export default function AppPianificaDemo() {
                   previewMode
                   previewProfile={demoProfile ?? undefined}
                   onPreviewComplete={() => setModalPhase("complete")}
+                  onPreviewGroupLifeChange={setGroupLifeDemoActive}
                   onClose={closeSheet}
                 />
               )}

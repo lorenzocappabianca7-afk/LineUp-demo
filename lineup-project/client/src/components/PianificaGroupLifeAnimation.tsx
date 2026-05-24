@@ -21,6 +21,7 @@ function InfoBanner({
   title,
   body,
   showVoteChatAttention,
+  compact,
   onContinue,
   continueTestId,
 }: {
@@ -32,22 +33,31 @@ function InfoBanner({
   body: string;
   /** Banner attenzione chat/sondaggio sopra Prosegui. */
   showVoteChatAttention?: boolean;
+  /** Layout più compatto (primo step «Dopo la creazione»). */
+  compact?: boolean;
   onContinue: () => void;
   continueTestId: string;
 }) {
   return (
     <article
       data-testid={testId}
-      className="relative w-full shrink-0 overflow-hidden rounded-2xl border-2 border-primary/30 bg-gradient-to-br from-[#F4FAFF] via-white to-primary/5 px-4 pb-6 pt-5 shadow-xl animate-in fade-in duration-500 fill-mode-both motion-reduce:animate-none"
+      className={cn(
+        "relative w-full shrink-0 overflow-hidden rounded-2xl border-2 border-primary/30 bg-gradient-to-br from-[#F4FAFF] via-white to-primary/5 shadow-xl animate-in fade-in duration-500 fill-mode-both motion-reduce:animate-none",
+        compact ? "px-3 pb-4 pt-3.5" : "px-4 pb-6 pt-5",
+      )}
     >
       <div
-        className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-primary/10"
+        className={cn(
+          "pointer-events-none absolute -right-10 -top-10 rounded-full bg-primary/10",
+          compact ? "h-24 w-24" : "h-32 w-32",
+        )}
         aria-hidden
       />
-      <div className="relative flex items-start gap-3">
+      <div className="relative flex items-start gap-2.5">
         <div
           className={cn(
-            "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-white shadow-md",
+            "flex shrink-0 items-center justify-center rounded-2xl text-white shadow-md",
+            compact ? "h-10 w-10 rounded-xl" : "h-12 w-12",
             iconWrapClass,
           )}
         >
@@ -55,26 +65,51 @@ function InfoBanner({
         </div>
         <div className="min-w-0 flex-1 pt-0.5">
           <p className="text-[10px] font-bold uppercase tracking-wide text-primary">{label}</p>
-          <h3 className="mt-1 text-base font-bold leading-snug text-gray-900 break-words">{title}</h3>
+          <h3
+            className={cn(
+              "mt-0.5 font-bold leading-snug text-gray-900 break-words",
+              compact ? "text-[15px]" : "mt-1 text-base",
+            )}
+          >
+            {title}
+          </h3>
         </div>
       </div>
-      <p className="relative mt-4 text-[13px] font-semibold leading-[1.65] text-gray-900 break-words sm:text-[14px] sm:leading-[1.7]">
+      <p
+        className={cn(
+          "relative font-semibold text-gray-900 break-words",
+          compact
+            ? "mt-2.5 text-[11.5px] leading-[1.55]"
+            : "mt-4 text-[13px] leading-[1.65] sm:text-[14px] sm:leading-[1.7]",
+        )}
+      >
         {body}
       </p>
       {showVoteChatAttention ? (
         <aside
           role="alert"
           data-testid="banner-attention-vote-chat"
-          className="relative mt-4 overflow-hidden rounded-xl border-2 border-amber-500 bg-gradient-to-br from-amber-100 via-amber-50 to-orange-50 px-3 py-2.5 shadow-[0_3px_10px_rgba(245,158,11,0.28)] ring-1 ring-amber-400/35"
+          className={cn(
+            "relative overflow-hidden rounded-lg border-2 border-amber-500 bg-gradient-to-br from-amber-100 via-amber-50 to-orange-50 shadow-[0_2px_8px_rgba(245,158,11,0.22)] ring-1 ring-amber-400/35",
+            compact ? "mt-2.5 px-2.5 py-2" : "mt-4 rounded-xl px-3 py-2.5 shadow-[0_3px_10px_rgba(245,158,11,0.28)]",
+          )}
         >
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <div
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm"
+              className={cn(
+                "flex shrink-0 items-center justify-center rounded-md bg-amber-500 text-white shadow-sm",
+                compact ? "h-6 w-6" : "h-8 w-8 rounded-lg",
+              )}
               aria-hidden
             >
-              <AlertTriangle size={17} strokeWidth={2.5} />
+              <AlertTriangle size={compact ? 14 : 17} strokeWidth={2.5} />
             </div>
-            <p className="min-w-0 flex-1 text-xs font-bold leading-snug text-amber-950 break-words">
+            <p
+              className={cn(
+                "min-w-0 flex-1 font-bold leading-snug text-amber-950 break-words",
+                compact ? "text-[10px]" : "text-xs",
+              )}
+            >
               Nella chat del gruppo, possono scrivere solo coloro che hanno votato il sondaggio
             </p>
           </div>
@@ -84,7 +119,10 @@ function InfoBanner({
         type="button"
         data-testid={continueTestId}
         onClick={onContinue}
-        className="relative mt-5 flex min-h-12 w-full touch-manipulation items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-primary to-primary/80 py-3.5 text-base font-bold text-primary-foreground shadow-lg shadow-primary/25 active:scale-[0.98] motion-reduce:active:scale-100"
+        className={cn(
+          "relative flex w-full touch-manipulation items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-primary to-primary/80 font-bold text-primary-foreground shadow-lg shadow-primary/25 active:scale-[0.98] motion-reduce:active:scale-100",
+          compact ? "mt-3 min-h-11 py-3 text-sm" : "mt-5 min-h-12 py-3.5 text-base",
+        )}
       >
         Prosegui
         <ChevronRight size={18} strokeWidth={2.5} aria-hidden />
@@ -126,35 +164,46 @@ export function PianificaGroupLifeAnimation({ onComplete }: Props) {
     >
       <div
         data-testid="group-life-header"
-        className="relative z-10 shrink-0 border-b border-primary/15 bg-white px-4 pt-3 pb-4 shadow-sm"
+        className={cn(
+          "relative z-10 shrink-0 border-b border-primary/15 bg-white px-4 shadow-sm",
+          step === 0 ? "pt-2.5 pb-2" : "pt-3 pb-4",
+        )}
       >
         <p className="text-center text-[10px] font-bold uppercase tracking-wide text-primary">Dopo la creazione</p>
-        <p className="mt-1 text-center text-sm font-bold text-gray-900">Cosa succede su LineUp</p>
-        <p className="mt-1 text-center text-[11px] text-gray-500">
+        <p className="mt-0.5 text-center text-sm font-bold text-gray-900">Cosa succede su LineUp</p>
+        <p className="mt-0.5 text-center text-[11px] text-gray-500">
           {step === 0 ? "1 di 2 · Chat, sondaggio e calendario" : "2 di 2 · Pubblica il tuo evento"}
         </p>
         {step === 0 ? (
-          <div className="mt-4 border-t border-primary/10 pt-4 text-center" data-testid="group-life-intro">
-            <p className="text-lg font-bold text-emerald-600 sm:text-xl">Perfetto,</p>
-            <p className="mt-1 text-sm font-semibold leading-snug text-gray-900 sm:text-[15px]">
+          <div className="mt-2 border-t border-primary/10 pt-2 text-center" data-testid="group-life-intro">
+            <p className="text-base font-bold text-emerald-600">Perfetto,</p>
+            <p className="mt-0.5 text-xs font-semibold leading-snug text-gray-900">
               hai creato la chat/gruppo per il tuo evento, cosa succede ora?
             </p>
           </div>
         ) : null}
       </div>
 
-      <div className="relative z-0 flex min-h-0 flex-1 flex-col items-center justify-start overflow-y-auto overscroll-y-contain px-4 pt-3 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <div
+        className={cn(
+          "relative z-0 flex min-h-0 flex-1 flex-col items-center px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]",
+          step === 0
+            ? "justify-start overflow-hidden pt-1.5"
+            : "justify-start overflow-y-auto overscroll-y-contain py-4 pt-3",
+        )}
+      >
         <div className="flex w-full max-w-[340px] flex-col">
           {step === 0 ? (
             <>
               <InfoBanner
                 testId="banner-chat-survey-demo"
-                icon={<MessageCircle size={22} strokeWidth={2.25} />}
+                icon={<MessageCircle size={20} strokeWidth={2.25} />}
                 iconWrapClass="bg-gradient-to-br from-primary to-primary/75 shadow-primary/25"
                 label="Chat e sondaggio"
                 title="Organizza insieme al gruppo"
                 body={CHAT_SURVEY_COPY}
                 showVoteChatAttention
+                compact
                 onContinue={goNext}
                 continueTestId="button-prosegui-group-life-demo"
               />
@@ -173,14 +222,25 @@ export function PianificaGroupLifeAnimation({ onComplete }: Props) {
           )}
         </div>
 
-        <div className="mx-auto mt-5 h-1.5 w-full max-w-[340px] overflow-hidden rounded-full bg-gray-200" aria-hidden>
+        <div
+          className={cn(
+            "mx-auto h-1 w-full max-w-[340px] overflow-hidden rounded-full bg-gray-200",
+            step === 0 ? "mt-2 shrink-0" : "mt-5 h-1.5",
+          )}
+          aria-hidden
+        >
           <div
             className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out"
             style={{ width: `${progressPct}%` }}
           />
         </div>
 
-        <div className="mx-auto mt-4 flex max-w-[340px] items-center justify-center gap-4 text-[10px] font-medium text-gray-500">
+        <div
+          className={cn(
+            "mx-auto flex max-w-[340px] shrink-0 items-center justify-center gap-4 text-[10px] font-medium text-gray-500",
+            step === 0 ? "mt-2" : "mt-4",
+          )}
+        >
           <span className={cn("flex items-center gap-1", step === 0 && "font-bold text-primary")}>
             <Vote size={12} aria-hidden />
             Sondaggio
