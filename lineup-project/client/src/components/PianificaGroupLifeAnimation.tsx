@@ -18,20 +18,20 @@ const CHAT_SURVEY_COPY =
   "Quando confermi l'evento, LineUp crea la chat di gruppo con il sondaggio scelto. Mentre il gruppo si accorda su data, ora e luogo, l'AI segue la conversazione: quando capisce che siete d'accordo, aggiunge in automatico l'evento al calendario del tuo telefono, con il luogo, il giorno e l'orario decisi.";
 
 const PUBLISH_EVENT_COPY =
-  "Pubblica l'evento oltre al tuo gruppo: raggiungi persone che seguono il tuo profilo e allarga il piano.";
+  "Devi organizzare una festa, un calcetto o una cena tra nuovi amici? LineUp ti permette di pubblicare annunci dei tuoi eventi e i tuoi followers potranno far richiesta di partecipazione. Sarai poi tu che hai organizzato ad accettarli e permetterli di farne parte!";
 
 const PUBLISH_PARTICIPATION_STEPS = [
   {
     title: "Posti disponibili",
-    text: "Nell'annuncio indichi quanti posti sono liberi.",
+    text: "Nell'annuncio pubblicato segni quanti posti sono liberi per l'evento.",
   },
   {
-    title: "Richieste",
-    text: "Gli utenti interessati chiedono di partecipare.",
+    title: "Richieste di partecipazione",
+    text: "Gli utenti interessati inviano una richiesta per unirsi.",
   },
   {
     title: "Accetti o rifiuti",
-    text: "Decidi tu chi aggiungere al gruppo.",
+    text: "Decidi tu, uno per uno, chi aggiungere al gruppo e chi lasciare fuori.",
   },
 ] as const;
 
@@ -44,7 +44,8 @@ function InfoBanner({
   body,
   showVoteChatAttention,
   hideContinue,
-  compactPublish,
+  fillSpace,
+  capHeight,
   onContinue,
   continueTestId,
 }: {
@@ -56,28 +57,19 @@ function InfoBanner({
   body: string;
   showVoteChatAttention?: boolean;
   hideContinue?: boolean;
-  /** Banner pubblicazione più basso (lascia spazio ai 3 step sotto). */
-  compactPublish?: boolean;
+  /** Il banner riempie lo spazio fino al pulsante Prosegui (facciata 1). */
+  fillSpace?: boolean;
+  /** Limita l’altezza del banner (facciata 2) per lasciare spazio ai 3 step. */
+  capHeight?: boolean;
   onContinue: () => void;
   continueTestId: string;
 }) {
-  return (
-    <article
-      data-testid={testId}
-      className={cn(
-        "relative isolate w-full shrink-0 overflow-hidden animate-in fade-in duration-500 fill-mode-both motion-reduce:animate-none",
-        DEMO_CARD_CLASS,
-        compactPublish ? "px-3.5 pb-3.5 pt-3" : "px-4 pb-5 pt-4",
-      )}
-    >
-      <div
-        className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-primary/10"
-        aria-hidden
-      />
+  const bodyBlock = (
+    <>
       <div className="relative flex items-start gap-3">
         <div
           className={cn(
-            "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white shadow-md",
+            "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-white shadow-md",
             iconWrapClass,
           )}
         >
@@ -85,44 +77,62 @@ function InfoBanner({
         </div>
         <div className="min-w-0 flex-1 pt-0.5">
           <p className="text-[10px] font-bold uppercase tracking-wide text-primary">{label}</p>
-          <h3 className="mt-0.5 text-base font-bold leading-snug text-gray-900 break-words">{title}</h3>
+          <h3 className="mt-1 text-lg font-bold leading-snug text-gray-900 break-words">{title}</h3>
         </div>
       </div>
-      <p
-        className={cn(
-          "relative font-semibold text-gray-900 break-words",
-          compactPublish
-            ? "mt-2 text-[11px] leading-snug"
-            : "mt-3 text-xs leading-[1.6] sm:text-[13px] sm:leading-[1.65]",
-        )}
-      >
+      <p className="relative mt-3 text-sm font-semibold leading-[1.65] text-gray-900 break-words sm:text-[15px] sm:leading-[1.7]">
         {body}
       </p>
       {showVoteChatAttention ? (
         <aside
           role="alert"
           data-testid="banner-attention-vote-chat"
-          className="relative mt-3 overflow-hidden rounded-xl border border-amber-500 bg-gradient-to-br from-amber-100 via-amber-50 to-orange-50 px-3 py-2.5 shadow-[0_2px_8px_rgba(245,158,11,0.2)]"
+          className="relative mt-4 overflow-hidden rounded-xl border border-amber-500 bg-gradient-to-br from-amber-100 via-amber-50 to-orange-50 px-3 py-3 shadow-[0_2px_8px_rgba(245,158,11,0.2)]"
         >
           <div className="flex items-center gap-2.5">
             <div
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm"
               aria-hidden
             >
-              <AlertTriangle size={15} strokeWidth={2.5} />
+              <AlertTriangle size={17} strokeWidth={2.5} />
             </div>
-            <p className="min-w-0 flex-1 text-[11px] font-bold leading-snug text-amber-950 break-words sm:text-xs">
+            <p className="min-w-0 flex-1 text-xs font-bold leading-snug text-amber-950 break-words sm:text-[13px]">
               Nella chat del gruppo, possono scrivere solo coloro che hanno votato il sondaggio
             </p>
           </div>
         </aside>
       ) : null}
+    </>
+  );
+
+  return (
+    <article
+      data-testid={testId}
+      className={cn(
+        "relative isolate w-full overflow-hidden px-4 pt-4 animate-in fade-in duration-500 fill-mode-both motion-reduce:animate-none",
+        DEMO_CARD_CLASS,
+        fillSpace ? "grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-3 pb-4" : "shrink-0 pb-5",
+        capHeight &&
+          "flex h-[10.25rem] min-h-0 shrink-0 flex-col overflow-hidden sm:h-auto sm:max-h-[13rem]",
+      )}
+    >
+      <div
+        className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-primary/10"
+        aria-hidden
+      />
+      {fillSpace || capHeight ? (
+        <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]">
+          {bodyBlock}
+        </div>
+      ) : (
+        <div className="relative">{bodyBlock}</div>
+      )}
       {!hideContinue ? (
         <button
           type="button"
           data-testid={continueTestId}
           onClick={onContinue}
-          className={cn("relative mt-4", DEMO_CTA_CLASS)}
+          className={cn("relative z-10 mt-0 shrink-0", DEMO_CTA_CLASS)}
         >
           Prosegui
           <ChevronRight size={18} strokeWidth={2.5} aria-hidden />
@@ -132,30 +142,75 @@ function InfoBanner({
   );
 }
 
-/** Tre passaggi sotto il banner pubblicazione (spazio bianco del modale). */
-function PublishParticipationFlow() {
+function PublishStepCard({
+  index,
+  title,
+  text,
+  emphasize,
+}: {
+  index: number;
+  title: string;
+  text: string;
+  emphasize?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-start gap-2.5 rounded-xl bg-white text-left shadow-sm ring-1 ring-sky-100",
+        emphasize ? "px-3 py-3" : "px-2.5 py-2",
+      )}
+    >
+      <span
+        className={cn(
+          "flex shrink-0 items-center justify-center rounded-full bg-sky-500 font-bold text-white",
+          emphasize ? "h-8 w-8 text-xs" : "h-7 w-7 text-[11px]",
+        )}
+        aria-hidden
+      >
+        {index}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className={cn("font-bold leading-snug text-gray-900", emphasize ? "text-sm" : "text-xs")}>
+          {title}
+        </p>
+        <p
+          className={cn(
+            "mt-0.5 font-medium leading-snug text-gray-600",
+            emphasize ? "text-xs sm:text-[13px]" : "text-[11px] sm:text-xs",
+          )}
+        >
+          {text}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** Tre passaggi sotto il banner pubblicazione; l’ultimo arriva vicino a Prosegui. */
+function PublishParticipationFlow({ fillSpace }: { fillSpace?: boolean }) {
   return (
     <ol
-      className="flex w-full flex-col gap-0"
+      className={cn(
+        "flex w-full flex-col",
+        fillSpace && "min-h-0 flex-1 justify-between gap-1 py-0.5",
+      )}
       data-testid="publish-participation-flow"
       aria-label="Come funzionano posti e richieste"
     >
       {PUBLISH_PARTICIPATION_STEPS.map((item, index) => (
-        <li key={item.title} className="flex flex-col">
-          <div className="flex items-start gap-2 rounded-lg bg-white px-2 py-1.5 shadow-sm ring-1 ring-sky-100">
-            <span
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-500 text-[10px] font-bold text-white"
-              aria-hidden
-            >
-              {index + 1}
-            </span>
-            <div className="min-w-0 flex-1 text-left">
-              <p className="text-[11px] font-bold leading-tight text-gray-900">{item.title}</p>
-              <p className="mt-px text-[10px] font-medium leading-snug text-gray-600">{item.text}</p>
-            </div>
-          </div>
+        <li key={item.title} className="flex shrink-0 flex-col">
+          <PublishStepCard
+            index={index + 1}
+            title={item.title}
+            text={item.text}
+            emphasize={index === 2}
+          />
           {index < PUBLISH_PARTICIPATION_STEPS.length - 1 ? (
-            <ChevronDown className="mx-auto h-3.5 w-3.5 shrink-0 text-sky-400" strokeWidth={2.5} aria-hidden />
+            <ChevronDown
+              className="mx-auto my-0.5 h-4 w-4 shrink-0 text-sky-400"
+              strokeWidth={2.5}
+              aria-hidden
+            />
           ) : null}
         </li>
       ))}
@@ -202,9 +257,12 @@ export function PianificaGroupLifeAnimation({ onComplete }: Props) {
           {step === 0 ? "1 di 2 · Chat, sondaggio e calendario" : "2 di 2 · Pubblica il tuo evento"}
         </p>
         {step === 0 ? (
-          <div className="mt-3 border-t border-primary/10 pt-3 text-center" data-testid="group-life-intro">
-            <p className="text-lg font-bold text-emerald-600">Perfetto,</p>
-            <p className="mt-1 text-sm font-semibold leading-snug text-gray-900">
+          <div
+            className="mt-2 border-t border-primary/10 pt-2.5 text-center sm:mt-3 sm:pt-3"
+            data-testid="group-life-intro"
+          >
+            <p className="text-lg font-bold text-emerald-600 sm:text-xl">Perfetto,</p>
+            <p className="mt-1 text-sm font-semibold leading-snug text-gray-900 sm:text-[15px]">
               hai creato la chat/gruppo per il tuo evento, cosa succede ora?
             </p>
           </div>
@@ -213,62 +271,56 @@ export function PianificaGroupLifeAnimation({ onComplete }: Props) {
 
       <div
         className={cn(
-          "relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden px-4 pt-4",
+          "relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden px-4 pt-3",
           "pb-[max(0.75rem,env(safe-area-inset-bottom))]",
         )}
       >
         <div className={cn(DEMO_MODAL_CONTENT, "flex min-h-0 flex-1 flex-col")}>
-          <div
-            className={cn(
-              "flex min-h-0 flex-1 flex-col",
-              step === 0
-                ? "overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]"
-                : "overflow-hidden",
-            )}
-          >
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {step === 0 ? (
               <InfoBanner
                 testId="banner-chat-survey-demo"
-                icon={<MessageCircle size={22} strokeWidth={2.25} />}
+                icon={<MessageCircle size={24} strokeWidth={2.25} />}
                 iconWrapClass="bg-gradient-to-br from-primary to-primary/75 shadow-primary/25"
                 label="Chat e sondaggio"
                 title="Organizza insieme al gruppo"
                 body={CHAT_SURVEY_COPY}
                 showVoteChatAttention
+                fillSpace
                 onContinue={goNext}
                 continueTestId="button-prosegui-group-life-demo"
               />
             ) : (
-              <>
+              <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] gap-2.5 overflow-hidden sm:gap-3">
                 <InfoBanner
                   testId="banner-publish-group-fixed"
-                  icon={<Megaphone size={20} strokeWidth={2.25} />}
+                  icon={<Megaphone size={24} strokeWidth={2.25} />}
                   iconWrapClass="bg-gradient-to-br from-sky-400 to-sky-600 shadow-sky-500/30"
                   label="Pubblica con LineUp"
                   title="Raggiungi più persone"
                   body={PUBLISH_EVENT_COPY}
                   hideContinue
-                  compactPublish
+                  capHeight
                   onContinue={goNext}
                   continueTestId="button-prosegui-group-life-demo"
                 />
-                <div className="mt-2 min-h-0 flex-1 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]">
-                  <PublishParticipationFlow />
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                  <PublishParticipationFlow fillSpace />
                 </div>
                 <button
                   type="button"
                   data-testid="button-prosegui-group-life-demo"
                   onClick={goNext}
-                  className={cn("relative mt-2 shrink-0", DEMO_CTA_CLASS)}
+                  className={cn("relative z-10 shrink-0", DEMO_CTA_CLASS)}
                 >
                   Prosegui
                   <ChevronRight size={18} strokeWidth={2.5} aria-hidden />
                 </button>
-              </>
+              </div>
             )}
           </div>
 
-          <div className="mt-4 shrink-0">
+          <div className="mt-3 shrink-0">
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200/90" aria-hidden>
               <div
                 className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out"
