@@ -73,26 +73,18 @@ async function findTextOverlaps(page) {
           continue;
         }
 
-        const aPublishBanner = a.closest('[data-testid="banner-publish-group-fixed"]');
-        const bPublishBanner = b.closest('[data-testid="banner-publish-group-fixed"]');
-        const aPublishFlow = a.closest('[data-testid="publish-participation-flow"]');
-        const bPublishFlow = b.closest('[data-testid="publish-participation-flow"]');
-        if ((aPublishBanner && bPublishFlow) || (bPublishBanner && aPublishFlow)) continue;
-
-        const aInPublishFlow = a.closest('[data-testid="publish-participation-flow"]');
-        const bInPublishFlow = b.closest('[data-testid="publish-participation-flow"]');
-        const aIsProsegui = aId === "button-prosegui-group-life-demo";
-        const bIsProsegui = bId === "button-prosegui-group-life-demo";
-        if ((aInPublishFlow && bIsProsegui) || (bInPublishFlow && aIsProsegui)) continue;
-
         const proseguiBtn = a.closest('[data-testid="pianifica-group-life-demo"]')
           ?.querySelector('[data-testid="button-prosegui-group-life-demo"]');
         const aInChatBanner = a.closest('[data-testid="banner-chat-survey-demo"]');
         const bInChatBanner = b.closest('[data-testid="banner-chat-survey-demo"]');
+        const aInPublishBanner = a.closest('[data-testid="banner-publish-group-fixed"]');
+        const bInPublishBanner = b.closest('[data-testid="banner-publish-group-fixed"]');
         if (
           proseguiBtn &&
           ((aInChatBanner && (b === proseguiBtn || proseguiBtn.contains(b))) ||
-            (bInChatBanner && (a === proseguiBtn || proseguiBtn.contains(a))))
+            (bInChatBanner && (a === proseguiBtn || proseguiBtn.contains(a))) ||
+            (aInPublishBanner && (b === proseguiBtn || proseguiBtn.contains(b))) ||
+            (bInPublishBanner && (a === proseguiBtn || proseguiBtn.contains(a))))
         ) {
           continue;
         }
@@ -205,7 +197,7 @@ const SCENARIOS = [
       await page.click('[data-testid="button-survey-mode-continue"]');
       await page.waitForSelector('[data-testid="pianifica-group-life-demo"]');
       await page.click('[data-testid="button-prosegui-group-life-demo"]');
-      await page.waitForSelector('[data-testid="publish-participation-flow"]');
+      await page.waitForSelector('[data-testid="banner-publish-group-fixed"]');
     },
   },
   {

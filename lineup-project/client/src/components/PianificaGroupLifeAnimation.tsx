@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, Megaphone, MessageCircle, Sparkles, Vote } from "lucide-react";
+import { AlertTriangle, ChevronRight, Megaphone, MessageCircle, Sparkles, Vote } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DEMO_CARD_CLASS,
@@ -20,21 +20,6 @@ const CHAT_SURVEY_COPY =
 const PUBLISH_EVENT_COPY =
   "Devi organizzare una festa, un calcetto o una cena tra nuovi amici? LineUp ti permette di pubblicare annunci dei tuoi eventi e i tuoi followers potranno far richiesta di partecipazione. Sarai poi tu che hai organizzato ad accettarli e permetterli di farne parte!";
 
-const PUBLISH_PARTICIPATION_STEPS = [
-  {
-    title: "Posti disponibili",
-    text: "Nell'annuncio pubblicato segni quanti posti sono liberi per l'evento.",
-  },
-  {
-    title: "Richieste di partecipazione",
-    text: "Gli utenti interessati inviano una richiesta per unirsi.",
-  },
-  {
-    title: "Accetti o rifiuti",
-    text: "Decidi tu, uno per uno, chi aggiungere al gruppo e chi lasciare fuori.",
-  },
-] as const;
-
 function InfoBanner({
   testId,
   icon,
@@ -45,7 +30,6 @@ function InfoBanner({
   showVoteChatAttention,
   hideContinue,
   fillSpace,
-  capHeight,
   onContinue,
   continueTestId,
 }: {
@@ -57,10 +41,8 @@ function InfoBanner({
   body: string;
   showVoteChatAttention?: boolean;
   hideContinue?: boolean;
-  /** Il banner riempie lo spazio fino al pulsante Prosegui (facciata 1). */
+  /** Il banner riempie lo spazio fino al pulsante Prosegui. */
   fillSpace?: boolean;
-  /** Limita l’altezza del banner (facciata 2) per lasciare spazio ai 3 step. */
-  capHeight?: boolean;
   onContinue: () => void;
   continueTestId: string;
 }) {
@@ -87,16 +69,16 @@ function InfoBanner({
         <aside
           role="alert"
           data-testid="banner-attention-vote-chat"
-          className="relative mt-4 overflow-hidden rounded-xl border border-amber-500 bg-gradient-to-br from-amber-100 via-amber-50 to-orange-50 px-3 py-3 shadow-[0_2px_8px_rgba(245,158,11,0.2)]"
+          className="relative mt-3.5 overflow-hidden rounded-xl border border-amber-500 bg-gradient-to-br from-amber-100 via-amber-50 to-orange-50 px-2.5 py-2.5 shadow-[0_2px_8px_rgba(245,158,11,0.2)]"
         >
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <div
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-amber-500 text-white shadow-sm"
               aria-hidden
             >
-              <AlertTriangle size={17} strokeWidth={2.5} />
+              <AlertTriangle size={15} strokeWidth={2.5} />
             </div>
-            <p className="min-w-0 flex-1 text-xs font-bold leading-snug text-amber-950 break-words sm:text-[13px]">
+            <p className="min-w-0 flex-1 text-[11px] font-bold leading-snug text-amber-950 break-words sm:text-xs">
               Nella chat del gruppo, possono scrivere solo coloro che hanno votato il sondaggio
             </p>
           </div>
@@ -112,15 +94,13 @@ function InfoBanner({
         "relative isolate w-full overflow-hidden px-4 pt-4 animate-in fade-in duration-500 fill-mode-both motion-reduce:animate-none",
         DEMO_CARD_CLASS,
         fillSpace ? "grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-3 pb-4" : "shrink-0 pb-5",
-        capHeight &&
-          "flex h-[10.25rem] min-h-0 shrink-0 flex-col overflow-hidden sm:h-auto sm:max-h-[13rem]",
       )}
     >
       <div
         className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-primary/10"
         aria-hidden
       />
-      {fillSpace || capHeight ? (
+      {fillSpace ? (
         <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]">
           {bodyBlock}
         </div>
@@ -139,82 +119,6 @@ function InfoBanner({
         </button>
       ) : null}
     </article>
-  );
-}
-
-function PublishStepCard({
-  index,
-  title,
-  text,
-  emphasize,
-}: {
-  index: number;
-  title: string;
-  text: string;
-  emphasize?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex items-start gap-2.5 rounded-xl bg-white text-left shadow-sm ring-1 ring-sky-100",
-        emphasize ? "px-3 py-3" : "px-2.5 py-2",
-      )}
-    >
-      <span
-        className={cn(
-          "flex shrink-0 items-center justify-center rounded-full bg-sky-500 font-bold text-white",
-          emphasize ? "h-8 w-8 text-xs" : "h-7 w-7 text-[11px]",
-        )}
-        aria-hidden
-      >
-        {index}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className={cn("font-bold leading-snug text-gray-900", emphasize ? "text-sm" : "text-xs")}>
-          {title}
-        </p>
-        <p
-          className={cn(
-            "mt-0.5 font-medium leading-snug text-gray-600",
-            emphasize ? "text-xs sm:text-[13px]" : "text-[11px] sm:text-xs",
-          )}
-        >
-          {text}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-/** Tre passaggi sotto il banner pubblicazione; l’ultimo arriva vicino a Prosegui. */
-function PublishParticipationFlow({ fillSpace }: { fillSpace?: boolean }) {
-  return (
-    <ol
-      className={cn(
-        "flex w-full flex-col",
-        fillSpace && "min-h-0 flex-1 justify-between gap-1 py-0.5",
-      )}
-      data-testid="publish-participation-flow"
-      aria-label="Come funzionano posti e richieste"
-    >
-      {PUBLISH_PARTICIPATION_STEPS.map((item, index) => (
-        <li key={item.title} className="flex shrink-0 flex-col">
-          <PublishStepCard
-            index={index + 1}
-            title={item.title}
-            text={item.text}
-            emphasize={index === 2}
-          />
-          {index < PUBLISH_PARTICIPATION_STEPS.length - 1 ? (
-            <ChevronDown
-              className="mx-auto my-0.5 h-4 w-4 shrink-0 text-sky-400"
-              strokeWidth={2.5}
-              aria-hidden
-            />
-          ) : null}
-        </li>
-      ))}
-    </ol>
   );
 }
 
@@ -271,7 +175,8 @@ export function PianificaGroupLifeAnimation({ onComplete }: Props) {
 
       <div
         className={cn(
-          "relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden px-4 pt-3",
+          "relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden px-4",
+          step === 1 ? "pt-5 sm:pt-6" : "pt-3",
           "pb-[max(0.75rem,env(safe-area-inset-bottom))]",
         )}
       >
@@ -291,32 +196,17 @@ export function PianificaGroupLifeAnimation({ onComplete }: Props) {
                 continueTestId="button-prosegui-group-life-demo"
               />
             ) : (
-              <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] gap-2.5 overflow-hidden sm:gap-3">
-                <InfoBanner
-                  testId="banner-publish-group-fixed"
-                  icon={<Megaphone size={24} strokeWidth={2.25} />}
-                  iconWrapClass="bg-gradient-to-br from-sky-400 to-sky-600 shadow-sky-500/30"
-                  label="Pubblica con LineUp"
-                  title="Raggiungi più persone"
-                  body={PUBLISH_EVENT_COPY}
-                  hideContinue
-                  capHeight
-                  onContinue={goNext}
-                  continueTestId="button-prosegui-group-life-demo"
-                />
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                  <PublishParticipationFlow fillSpace />
-                </div>
-                <button
-                  type="button"
-                  data-testid="button-prosegui-group-life-demo"
-                  onClick={goNext}
-                  className={cn("relative z-10 shrink-0", DEMO_CTA_CLASS)}
-                >
-                  Prosegui
-                  <ChevronRight size={18} strokeWidth={2.5} aria-hidden />
-                </button>
-              </div>
+              <InfoBanner
+                testId="banner-publish-group-fixed"
+                icon={<Megaphone size={24} strokeWidth={2.25} />}
+                iconWrapClass="bg-gradient-to-br from-sky-400 to-sky-600 shadow-sky-500/30"
+                label="Pubblica con LineUp"
+                title="Raggiungi più persone"
+                body={PUBLISH_EVENT_COPY}
+                fillSpace
+                onContinue={goNext}
+                continueTestId="button-prosegui-group-life-demo"
+              />
             )}
           </div>
 
