@@ -169,6 +169,22 @@ const SCENARIOS = [
     },
   },
   {
+    id: "group-life-step1",
+    async setup(page) {
+      await page.goto(`${BASE}/prova-pianifica`, { waitUntil: "networkidle" });
+      await fillDemoGate(page);
+      await page.click('[data-testid="button-demo-gate-confirm"]');
+      await page.click('[data-testid="button-demo-intro-continue"]');
+      await page.click('[data-testid="button-pianifica-demo-page"]');
+      await page.waitForSelector('[role="dialog"]');
+      await runWizardToSurvey(page);
+      await page.click('[data-testid="button-survey-mode-continue"]');
+      await page.waitForSelector('[data-testid="pianifica-group-life-demo"]');
+      await page.click('[data-testid="button-prosegui-group-life-demo"]');
+      await page.waitForSelector('[data-testid="publish-participation-flow"]');
+    },
+  },
+  {
     id: "completion",
     async setup(page) {
       await page.goto(`${BASE}/prova-pianifica`, { waitUntil: "networkidle" });

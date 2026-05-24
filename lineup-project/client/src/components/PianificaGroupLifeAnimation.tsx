@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { AlertTriangle, ChevronRight, Megaphone, MessageCircle, Sparkles, Vote } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Megaphone, MessageCircle, Sparkles, Vote } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DEMO_CARD_CLASS,
@@ -18,7 +18,22 @@ const CHAT_SURVEY_COPY =
   "Quando confermi l'evento, LineUp crea la chat di gruppo con il sondaggio scelto. Mentre il gruppo si accorda su data, ora e luogo, l'AI segue la conversazione: quando capisce che siete d'accordo, aggiunge in automatico l'evento al calendario del tuo telefono, con il luogo, il giorno e l'orario decisi.";
 
 const PUBLISH_EVENT_COPY =
-  "Devi organizzare una festa, un calcetto o una cena tra nuovi amici? LineUp ti permette di pubblicare annunci dei tuoi eventi e i tuoi followers potranno far richiesta di partecipazione. Sarai poi tu che hai organizzato ad accettarli e permetterli di farne parte!";
+  "Pubblica l'evento oltre al tuo gruppo: raggiungi persone che seguono il tuo profilo e allarga il piano.";
+
+const PUBLISH_PARTICIPATION_STEPS = [
+  {
+    title: "Posti disponibili",
+    text: "Nell'annuncio indichi quanti posti sono liberi.",
+  },
+  {
+    title: "Richieste",
+    text: "Gli utenti interessati chiedono di partecipare.",
+  },
+  {
+    title: "Accetti o rifiuti",
+    text: "Decidi tu chi aggiungere al gruppo.",
+  },
+] as const;
 
 function InfoBanner({
   testId,
@@ -28,6 +43,8 @@ function InfoBanner({
   title,
   body,
   showVoteChatAttention,
+  hideContinue,
+  compactPublish,
   onContinue,
   continueTestId,
 }: {
@@ -38,6 +55,9 @@ function InfoBanner({
   title: string;
   body: string;
   showVoteChatAttention?: boolean;
+  hideContinue?: boolean;
+  /** Banner pubblicazione più basso (lascia spazio ai 3 step sotto). */
+  compactPublish?: boolean;
   onContinue: () => void;
   continueTestId: string;
 }) {
@@ -45,8 +65,9 @@ function InfoBanner({
     <article
       data-testid={testId}
       className={cn(
-        "relative isolate w-full shrink-0 overflow-hidden px-4 pb-5 pt-4 animate-in fade-in duration-500 fill-mode-both motion-reduce:animate-none",
+        "relative isolate w-full shrink-0 overflow-hidden animate-in fade-in duration-500 fill-mode-both motion-reduce:animate-none",
         DEMO_CARD_CLASS,
+        compactPublish ? "px-3.5 pb-3.5 pt-3" : "px-4 pb-5 pt-4",
       )}
     >
       <div
@@ -67,7 +88,14 @@ function InfoBanner({
           <h3 className="mt-0.5 text-base font-bold leading-snug text-gray-900 break-words">{title}</h3>
         </div>
       </div>
-      <p className="relative mt-3 text-xs font-semibold leading-[1.6] text-gray-900 break-words sm:text-[13px] sm:leading-[1.65]">
+      <p
+        className={cn(
+          "relative font-semibold text-gray-900 break-words",
+          compactPublish
+            ? "mt-2 text-[11px] leading-snug"
+            : "mt-3 text-xs leading-[1.6] sm:text-[13px] sm:leading-[1.65]",
+        )}
+      >
         {body}
       </p>
       {showVoteChatAttention ? (
@@ -89,16 +117,49 @@ function InfoBanner({
           </div>
         </aside>
       ) : null}
-      <button
-        type="button"
-        data-testid={continueTestId}
-        onClick={onContinue}
-        className={cn("relative mt-4", DEMO_CTA_CLASS)}
-      >
-        Prosegui
-        <ChevronRight size={18} strokeWidth={2.5} aria-hidden />
-      </button>
+      {!hideContinue ? (
+        <button
+          type="button"
+          data-testid={continueTestId}
+          onClick={onContinue}
+          className={cn("relative mt-4", DEMO_CTA_CLASS)}
+        >
+          Prosegui
+          <ChevronRight size={18} strokeWidth={2.5} aria-hidden />
+        </button>
+      ) : null}
     </article>
+  );
+}
+
+/** Tre passaggi sotto il banner pubblicazione (spazio bianco del modale). */
+function PublishParticipationFlow() {
+  return (
+    <ol
+      className="flex w-full flex-col gap-0"
+      data-testid="publish-participation-flow"
+      aria-label="Come funzionano posti e richieste"
+    >
+      {PUBLISH_PARTICIPATION_STEPS.map((item, index) => (
+        <li key={item.title} className="flex flex-col">
+          <div className="flex items-start gap-2 rounded-lg bg-white px-2 py-1.5 shadow-sm ring-1 ring-sky-100">
+            <span
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-500 text-[10px] font-bold text-white"
+              aria-hidden
+            >
+              {index + 1}
+            </span>
+            <div className="min-w-0 flex-1 text-left">
+              <p className="text-[11px] font-bold leading-tight text-gray-900">{item.title}</p>
+              <p className="mt-px text-[10px] font-medium leading-snug text-gray-600">{item.text}</p>
+            </div>
+          </div>
+          {index < PUBLISH_PARTICIPATION_STEPS.length - 1 ? (
+            <ChevronDown className="mx-auto h-3.5 w-3.5 shrink-0 text-sky-400" strokeWidth={2.5} aria-hidden />
+          ) : null}
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -157,7 +218,14 @@ export function PianificaGroupLifeAnimation({ onComplete }: Props) {
         )}
       >
         <div className={cn(DEMO_MODAL_CONTENT, "flex min-h-0 flex-1 flex-col")}>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]">
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 flex-col",
+              step === 0
+                ? "overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]"
+                : "overflow-hidden",
+            )}
+          >
             {step === 0 ? (
               <InfoBanner
                 testId="banner-chat-survey-demo"
@@ -171,16 +239,32 @@ export function PianificaGroupLifeAnimation({ onComplete }: Props) {
                 continueTestId="button-prosegui-group-life-demo"
               />
             ) : (
-              <InfoBanner
-                testId="banner-publish-group-fixed"
-                icon={<Megaphone size={22} strokeWidth={2.25} />}
-                iconWrapClass="bg-gradient-to-br from-sky-400 to-sky-600 shadow-sky-500/30"
-                label="Pubblica con LineUp"
-                title="Raggiungi più persone"
-                body={PUBLISH_EVENT_COPY}
-                onContinue={goNext}
-                continueTestId="button-prosegui-group-life-demo"
-              />
+              <>
+                <InfoBanner
+                  testId="banner-publish-group-fixed"
+                  icon={<Megaphone size={20} strokeWidth={2.25} />}
+                  iconWrapClass="bg-gradient-to-br from-sky-400 to-sky-600 shadow-sky-500/30"
+                  label="Pubblica con LineUp"
+                  title="Raggiungi più persone"
+                  body={PUBLISH_EVENT_COPY}
+                  hideContinue
+                  compactPublish
+                  onContinue={goNext}
+                  continueTestId="button-prosegui-group-life-demo"
+                />
+                <div className="mt-2 min-h-0 flex-1 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]">
+                  <PublishParticipationFlow />
+                </div>
+                <button
+                  type="button"
+                  data-testid="button-prosegui-group-life-demo"
+                  onClick={goNext}
+                  className={cn("relative mt-2 shrink-0", DEMO_CTA_CLASS)}
+                >
+                  Prosegui
+                  <ChevronRight size={18} strokeWidth={2.5} aria-hidden />
+                </button>
+              </>
             )}
           </div>
 
