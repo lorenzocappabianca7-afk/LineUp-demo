@@ -8,15 +8,15 @@ const VARIANT_STYLES: Record<
   { border: string; badge: string }
 > = {
   primary: {
-    border: "border-2 border-primary",
+    border: "border border-primary/35",
     badge: "bg-primary/15 text-primary",
   },
   sky: {
-    border: "border-2 border-sky-400",
+    border: "border border-sky-400/50",
     badge: "bg-sky-400/20 text-sky-700",
   },
   navy: {
-    border: "border-2 border-[#1e3a5f]",
+    border: "border border-[#1e3a5f]/40",
     badge: "bg-[#1e3a5f]/12 text-[#1e3a5f]",
   },
 };
@@ -35,7 +35,7 @@ function TeaserBanner({ variant, badge, title, body, icon, "data-testid": testId
   return (
     <article
       data-testid={testId}
-      className={`rounded-2xl px-4 py-4 shadow-sm ${styles.border} bg-[#F4FAFF]`}
+      className={`rounded-2xl px-4 py-4 shadow-lg ${styles.border} bg-gradient-to-br from-[#F4FAFF] via-white to-primary/5`}
     >
       <div className="flex items-start gap-3">
         <div

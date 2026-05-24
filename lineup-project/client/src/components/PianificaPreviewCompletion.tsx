@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { CheckCircle2, ChevronDown, Star } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { PianificaPreviewTeasers } from "@/components/PianificaPreviewTeasers";
 import { readStoredDemoProfile, type PreviewProfile } from "@/lib/pianificaDemoProfile";
+import { DEMO_CARD_CLASS, DEMO_CTA_CLASS, DEMO_MODAL_CONTENT } from "@/lib/pianificaDemoLayout";
 
 export type { PreviewProfile };
 
@@ -122,10 +124,10 @@ export function PianificaPreviewCompletion({
   if (feedbackSent) {
     return (
       <div
-        className="flex flex-col items-center px-4 py-8 pb-10 text-center"
+        className={cn(DEMO_MODAL_CONTENT, "flex flex-col items-center px-4 py-8 pb-10 text-center")}
         data-testid="preview-completion-thanks"
       >
-        <div className="w-full max-w-sm rounded-2xl border-2 border-primary bg-[#F4FAFF] px-6 py-8 shadow-md">
+        <div className={cn("w-full px-6 py-8", DEMO_CARD_CLASS)}>
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
             <CheckCircle2 size={36} className="text-emerald-500" />
           </div>
@@ -141,7 +143,7 @@ export function PianificaPreviewCompletion({
   return (
     <>
       <div
-        className="flex w-full flex-col items-stretch px-4 pb-6 pt-3 text-center"
+        className={cn(DEMO_MODAL_CONTENT, "flex w-full flex-col items-stretch px-4 pb-6 pt-4 text-center")}
         data-testid="preview-completion-content"
       >
         <div className="mx-auto mb-4 flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-emerald-50">
@@ -226,7 +228,7 @@ export function PianificaPreviewCompletion({
             data-testid="button-submit-demo-feedback"
             disabled={rating == null || submitting || !effectiveProfile}
             onClick={() => void submitFeedback()}
-            className="mt-4 flex min-h-12 w-full touch-manipulation items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/75 py-3.5 text-base font-semibold text-primary-foreground disabled:opacity-40"
+            className={cn("mt-4 disabled:opacity-40", DEMO_CTA_CLASS)}
           >
             {submitting ? "Invio in corso…" : "Invia feedback"}
           </button>

@@ -11,6 +11,7 @@ import {
 import { useBodyScrollLock, releaseBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { DEMO_COMPLETION_SCROLL_TEST_ID } from "@/lib/demoModalScroll";
 import { cn } from "@/lib/utils";
+import { DEMO_SURFACE_CLASS } from "@/lib/pianificaDemoLayout";
 import { setCurrentUser } from "@/lib/appUtils";
 import {
   isValidBirthYearInput,
@@ -318,7 +319,12 @@ export default function AppPianificaDemo() {
             style={{ animation: "expandFromPianifica 420ms cubic-bezier(0.2,0,0,1) forwards" }}
             onClick={(e) => e.stopPropagation()}
           >
-          <div className="absolute inset-[3px] flex min-h-0 flex-col rounded-[17px] bg-white">
+          <div
+            className={cn(
+              "absolute inset-[3px] flex min-h-0 flex-col rounded-[17px] bg-white",
+              (modalPhase === "wizard" || groupLifeDemoActive) && "overflow-hidden",
+            )}
+          >
             {!groupLifeDemoActive && (
             <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-4 pb-3 pt-4 sm:px-6 sm:pb-4 sm:pt-5">
               <div>
@@ -344,7 +350,7 @@ export default function AppPianificaDemo() {
             <div
               className={cn(
                 "flex min-h-0 flex-1 flex-col",
-                modalPhase === "wizard" && "overflow-hidden rounded-b-[17px]",
+                (modalPhase === "wizard" || groupLifeDemoActive) && "overflow-hidden rounded-b-[17px]",
               )}
             >
               {modalPhase === "complete" ? (
@@ -356,7 +362,8 @@ export default function AppPianificaDemo() {
                     ref={completionScrollRef}
                     data-testid={DEMO_COMPLETION_SCROLL_TEST_ID}
                     className={cn(
-                      "min-h-0 flex-1 basis-0 grow overflow-x-hidden overflow-y-scroll overscroll-y-auto bg-white touch-pan-y [-webkit-overflow-scrolling:touch] [touch-action:pan-y]",
+                      "min-h-0 flex-1 basis-0 grow overflow-x-hidden overflow-y-scroll overscroll-y-auto touch-pan-y [-webkit-overflow-scrolling:touch] [touch-action:pan-y]",
+                      DEMO_SURFACE_CLASS,
                       completionCanScrollMore && "pb-[5.75rem]",
                     )}
                     style={{ WebkitOverflowScrolling: "touch" }}
@@ -370,7 +377,12 @@ export default function AppPianificaDemo() {
                     )}
                   </main>
                   {completionCanScrollMore && (
-                    <footer className="z-10 shrink-0 border-t border-gray-200 bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-6px_16px_rgba(0,0,0,0.08)]">
+                    <footer
+                      className={cn(
+                        "z-10 shrink-0 border-t border-primary/15 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-6px_16px_rgba(0,0,0,0.08)]",
+                        DEMO_SURFACE_CLASS,
+                      )}
+                    >
                       <button
                         type="button"
                         data-testid="button-scroll-completion-hint"
