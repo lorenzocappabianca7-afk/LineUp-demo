@@ -8,7 +8,7 @@ type Props = {
 };
 
 const CHAT_SURVEY_COPY =
-  "Quando confermi l'evento, LineUp crea una chat di gruppo con il sondaggio scelto. Dopo essersi accordati sui dettagli dell'evento, cliccando il tasto di conferma, l'evento verrà aggiunto al calendario LineUp.";
+  "Quando confermi l'evento, LineUp crea la chat di gruppo con il sondaggio scelto. Mentre il gruppo si accorda su data, ora e luogo, l'AI segue la conversazione: quando capisce che siete d'accordo, aggiunge in automatico l'evento al calendario del tuo telefono, con il luogo, il giorno e l'orario decisi.";
 
 const PUBLISH_EVENT_COPY =
   "Devi organizzare una festa, un calcetto o una cena tra nuovi amici? LineUp ti permette di pubblicare annunci dei tuoi eventi e i tuoi followers potranno far richiesta di partecipazione. Sarai poi tu che hai organizzato ad accettarli e permetterli di farne parte!";

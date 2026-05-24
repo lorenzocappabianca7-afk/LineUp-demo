@@ -11,12 +11,18 @@ import {
   getInitials,
   getMyContacts,
   getEventChatInviteUrl,
+  isRealVenueSearchResult,
   venueFallbackFromUserQuery,
   venuePollSubtitle,
   type VenueOption,
   type ScopriToCreatePrefill,
 } from "@/lib/appUtils";
-import { PLAN_CATEGORIES, PLAN_SUBCATEGORIES, venuePoolKeyForPlanSubcategory } from "@/lib/planCategories";
+import {
+  PLAN_CATEGORIES,
+  PLAN_SUBCATEGORIES,
+  subcategoryUsesExactTimeOnly,
+  venuePoolKeyForPlanSubcategory,
+} from "@/lib/planCategories";
 import { VenueExternalLinks } from "@/components/VenueExternalLinks";
 import { SurveyModePicker } from "@/components/SurveyModePicker";
 import { PianificaStepGuide } from "@/components/PianificaStepGuide";
@@ -244,11 +250,23 @@ export default function AppCreateEvent({
 
   const catLabelForBanner = PLAN_CATEGORIES.find(c => c.key === selectedCategory)?.label ?? "";
 
+  const exactTimeOnly = subcategoryUsesExactTimeOnly(selectedSubcategory);
+
   const selectSubcategory = (sub: string) => {
     const trimmed = sub.trim();
     if (!trimmed) return;
+    if (subcategoryUsesExactTimeOnly(trimmed)) {
+      setSelectedTimeWindows([]);
+    }
     setSelectedSubcategory((prev) => (prev === trimmed ? null : trimmed));
   };
+
+  useEffect(() => {
+    if (step !== 3 || done || fromScopriFlow) return;
+    if (!subcategoryUsesExactTimeOnly(selectedSubcategory)) return;
+    setSelectedTimeWindows([]);
+    setStep(selectedDates.length > 0 ? 4 : 5);
+  }, [step, done, fromScopriFlow, selectedSubcategory, selectedDates.length]);
 
   const toggleVenue = (venue: VenueOption) => {
     setSelectedVenues(prev =>
@@ -349,21 +367,14 @@ export default function AppCreateEvent({
           if (!r.ok) throw new Error(data?.message || "Ricerca non riuscita");
 
           applyIfCurrent(() => {
-            const fromAi = data.venues ?? [];
-            const aiHasReal = fromAi.some(
-              (v) => !v.syntheticSubcategory && !v.userTypedFallback,
-            );
+            const fromAi = (data.venues ?? []).filter(isRealVenueSearchResult);
             let final: VenueOption[];
-            if (aiHasReal) {
+            if (fromAi.length > 0) {
               final = fromAi;
             } else if (quickVenues.length > 0) {
               final = quickVenues;
-            } else if (fromAi.length > 0) {
-              final = fromAi;
-            } else if (!selectedSubcategory?.trim()) {
-              final = [venueFallbackFromUserQuery(q)];
             } else {
-              final = [];
+              final = [venueFallbackFromUserQuery(q)];
             }
             setAiVenueSuggestions(final);
             setAiVenueError(null);
@@ -806,7 +817,11 @@ export default function AppCreateEvent({
           </button>
           <button
             data-testid="button-step-2-next"
-            onClick={() => setStep(3)}
+            onClick={() =>
+              setStep(
+                exactTimeOnly ? (selectedDates.length > 0 ? 4 : 5) : 3,
+              )
+            }
             disabled={!canProceed2}
             className="flex-1 min-h-12 touch-manipulation rounded-xl py-3.5 text-base font-semibold text-white bg-black transition-opacity disabled:opacity-40"
           >
@@ -996,7 +1011,7 @@ export default function AppCreateEvent({
 
         <div className="px-6 py-4 shrink-0 border-t border-gray-100 flex gap-3">
           <button
-            onClick={() => setStep(3)}
+            onClick={() => setStep(exactTimeOnly ? 2 : 3)}
             className="px-5 min-h-12 touch-manipulation rounded-xl py-3.5 text-base font-semibold text-gray-600 bg-gray-100"
           >
             Indietro
@@ -1025,7 +1040,9 @@ export default function AppCreateEvent({
               setSelectedVenues([]);
               setVenueSearch("");
             }
-            setStep(selectedDates.length > 0 ? 4 : 3);
+            setStep(
+              selectedDates.length > 0 ? 4 : exactTimeOnly ? 2 : 3,
+            );
           }}
           className="px-5 min-h-12 touch-manipulation rounded-xl py-3.5 text-base font-semibold text-gray-600 bg-gray-100"
         >

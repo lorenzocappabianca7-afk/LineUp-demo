@@ -394,6 +394,8 @@ type ClientVenueSearchJson = {
   quartiere?: string;
   /** Nome plausibile inventato dall’AI quando non ci sono match reali coerenti con la sottocategoria. */
   syntheticSubcategory?: boolean;
+  /** Fallback lato client: testo digitato dall’utente senza link. */
+  userTypedFallback?: boolean;
 };
 
 const VENUE_AI_SEARCH_CACHE_TTL_MS = 120_000;
@@ -650,6 +652,42 @@ function stripExternalLinksForSynthetic(venues: ClientVenueSearchJson[]): Client
         }
       : v,
   );
+}
+
+function isRealPianificaSearchVenue(v: ClientVenueSearchJson): boolean {
+  return !v.syntheticSubcategory && !v.userTypedFallback;
+}
+
+/** Solo locali reali dal catalogo (con link Maps/sito quando disponibili). */
+function catalogRealVenuesForPianificaQuery(
+  query: string,
+  category: string,
+  subcategory: string,
+): ClientVenueSearchJson[] {
+  let venues = mergeCatalogWithAi(
+    fallbackTorinoClientVenuesFromCatalog(query),
+    subcategoryCatalogFallback(query, category, subcategory),
+  );
+  venues = venues.filter(isRealPianificaSearchVenue);
+  if (subcategory.trim()) {
+    venues = filterClientVenuesBySubcategoryIntent(venues, category, subcategory);
+  }
+  return venues.map((v) => normalizeClientVenueSearchJsonMaps(v)).slice(0, 8);
+}
+
+function finalizePianificaAiSearchVenues(
+  aiVenues: ClientVenueSearchJson[],
+  query: string,
+  category: string,
+  subcategory: string,
+): ClientVenueSearchJson[] {
+  let venues = aiVenues.filter(isRealPianificaSearchVenue);
+  if (subcategory.trim()) {
+    venues = filterClientVenuesBySubcategoryIntent(venues, category, subcategory);
+  }
+  venues = venues.map((v) => normalizeClientVenueSearchJsonMaps(v));
+  if (venues.length > 0) return venues.slice(0, 8);
+  return catalogRealVenuesForPianificaQuery(query, category, subcategory);
 }
 
 function filterClientVenuesBySubcategoryIntent(
@@ -1891,10 +1929,8 @@ export async function registerRoutes(
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      let venues = await resolveEmptyPianificaVenueSearch(query, category, subcategory, undefined);
-      if (venues.length === 0) venues = fallbackTorinoClientVenuesFromCatalog(query);
-      venues = stripExternalLinksForSynthetic(venues);
-      setVenueAiSearchCached(query, venues, category, subcategory);
+      const venues = catalogRealVenuesForPianificaQuery(query, category, subcategory);
+      if (venues.length > 0) setVenueAiSearchCached(query, venues, category, subcategory);
       return res.json({ venues });
     }
     try {
@@ -1918,15 +1954,15 @@ REGOLE TASSATIVE:
 1) Geofencing Piemonte: cerca ESCLUSIVAMENTE attività reali nella regione Piemonte, Italia.
 2) Coerenza sottocategoria: se è indicata una sottocategoria evento, proponi SOLO luoghi adatti a quell'attività (es. Padel → campi/club padel, Cena → ristoranti, Discoteche → discoteche).
 3) Fuzzy search (refusi): correggi refusi su nomi reali in Piemonte; non inventare nomi generici se esiste un locale reale plausibile.
-4) Link: websiteUrl/instagramUrl solo se certi; mapsUrl formato https://www.google.com/maps/search/?api=1&query=Nome+Locale+Comune+Piemonte con "+" al posto degli spazi.
-5) Se NON trovi luoghi reali in Piemonte coerenti con query E sottocategoria, inventa 2-3 nomi plausibili di locali/attività in Piemonte che dimostrino di aver capito la scelta (syntheticSubcategory: true, mapsUrl/websiteUrl/instagramUrl null).
+4) Link obbligatori per ogni locale REALE trovato: mapsUrl (formato https://www.google.com/maps/search/?api=1&query=Nome+Locale+Comune+Piemonte con "+"), websiteUrl e instagramUrl se li conosci con certezza, altrimenti null (non inventare URL).
+5) Se NON esiste alcun locale reale in Piemonte che corrisponda alla query (anche dopo refusi), restituisci {"venues":[]} — NON inventare nomi e NON usare syntheticSubcategory.
 6) Qualità: rating plausibile; niente markdown.${mealRule}`,
             },
             {
               role: "user",
-              content: `Cerca luoghi in Piemonte per questa query utente: ${JSON.stringify(query)}${subcategoryBlock}${hintsBlock}
+              content: `Cerca luoghi REALI in Piemonte per questa query utente: ${JSON.stringify(query)}${subcategoryBlock}${hintsBlock}
 
-Applica geofencing Piemonte, rispetta la sottocategoria evento, correggi refusi se necessario. Se non ci sono match reali coerenti, restituisci suggerimenti inventati ma attinenti (syntheticSubcategory: true).`,
+Applica geofencing Piemonte, rispetta la sottocategoria, correggi refusi. Se trovi il locale, includi mapsUrl e link ufficiali quando certi. Se non esiste un match reale, venues deve essere un array vuoto.`,
             },
           ],
         }),
@@ -1935,59 +1971,24 @@ Applica geofencing Piemonte, rispetta la sottocategoria evento, correggi refusi 
       );
       const text = completion.choices[0]?.message?.content;
       if (!text) {
-        let venues = await resolveEmptyPianificaVenueSearch(query, category, subcategory, apiKey);
-        venues = stripExternalLinksForSynthetic(venues);
-        setVenueAiSearchCached(query, venues, category, subcategory);
+        const venues = catalogRealVenuesForPianificaQuery(query, category, subcategory);
+        if (venues.length > 0) setVenueAiSearchCached(query, venues, category, subcategory);
         return res.json({ venues });
       }
       let raw: unknown;
       try {
         raw = JSON.parse(text);
       } catch {
-        let venues = await resolveEmptyPianificaVenueSearch(query, category, subcategory, apiKey);
-        venues = stripExternalLinksForSynthetic(venues);
-        setVenueAiSearchCached(query, venues, category, subcategory);
+        const venues = catalogRealVenuesForPianificaQuery(query, category, subcategory);
+        if (venues.length > 0) setVenueAiSearchCached(query, venues, category, subcategory);
         return res.json({ venues });
       }
       const aiParsed = parseTorinoVenueAiItemsLoose(raw);
-      const parsedNames = new Set(aiParsed.map((v) => v.name.trim().toLowerCase()));
-      const syntheticFromAi = parseSyntheticPianificaVenueItems(raw).filter(
-        (v) => !parsedNames.has(v.name.trim().toLowerCase()),
-      );
-      const mergedAi = mergeCatalogWithAi(aiParsed, syntheticFromAi);
-      let venues =
-        mergedAi.length > 0
-          ? mergedAi
-          : mergeCatalogWithAi(subcategoryCatalogFallback(query, category, subcategory), []);
-      if (subcategory.trim()) {
-        const real = filterClientVenuesBySubcategoryIntent(
-          venues.filter((v) => !v.syntheticSubcategory),
-          category,
-          subcategory,
-        );
-        const invented = venues.filter((v) => v.syntheticSubcategory);
-        venues = real.length > 0 ? [...real, ...invented] : invented;
-      }
-      if (venues.length === 0) {
-        venues = await resolveEmptyPianificaVenueSearch(query, category, subcategory, apiKey);
-      }
-      if (
-        subcategory.trim() &&
-        venues.length > 0 &&
-        venues.every((v) => v.syntheticSubcategory)
-      ) {
-        const catalogOnly = filterClientVenuesBySubcategoryIntent(
-          fallbackTorinoClientVenuesFromCatalog(query),
-          category,
-          subcategory,
-        );
-        if (catalogOnly.length > 0) venues = catalogOnly;
-      }
-      venues = stripExternalLinksForSynthetic(venues);
+      const venues = finalizePianificaAiSearchVenues(aiParsed, query, category, subcategory);
       if (venues.length === 0) {
         void logAiPipelineSummary({
           route: "POST /api/app/venues/ai-search",
-          lines: ["parse_fail", "no_venues_after_merge"],
+          lines: ["no_real_venue_for_query"],
         });
         return res.json({ venues: [] });
       }
@@ -1999,10 +2000,8 @@ Applica geofencing Piemonte, rispetta la sottocategoria evento, correggi refusi 
         route: "POST /api/app/venues/ai-search",
         lines: ["error", msg],
       });
-      let venues = await resolveEmptyPianificaVenueSearch(query, category, subcategory, apiKey);
-      if (venues.length === 0) venues = fallbackTorinoClientVenuesFromCatalog(query);
-      venues = stripExternalLinksForSynthetic(venues);
-      setVenueAiSearchCached(query, venues, category, subcategory);
+      const venues = catalogRealVenuesForPianificaQuery(query, category, subcategory);
+      if (venues.length > 0) setVenueAiSearchCached(query, venues, category, subcategory);
       return res.json({ venues });
     }
   });

@@ -10,8 +10,7 @@ const IDLE_MS = 3000;
 
 export type PianificaPreviewCompletionProps = {
   profile: PreviewProfile;
-  onClose: () => void;
-  /** Dopo l’invio del feedback: niente pulsante Chiudi (il modale resta sulla schermata di ringraziamento). */
+  /** Dopo l’invio del feedback: il modale resta sulla schermata di ringraziamento. */
   onFeedbackSent?: () => void;
   /** Contenitore scroll gestito dal modale (AppPianificaDemo) — un solo layer, iOS-safe. */
   scrollRootRef: RefObject<HTMLElement | null>;
@@ -21,7 +20,6 @@ export type PianificaPreviewCompletionProps = {
 /** Solo contenuto: nessun overflow/scroll qui (evita blocchi Safari). */
 export function PianificaPreviewCompletion({
   profile,
-  onClose,
   onFeedbackSent,
   scrollRootRef,
   onScrollActivity,
@@ -233,15 +231,6 @@ export function PianificaPreviewCompletion({
             {submitting ? "Invio in corso…" : "Invia feedback"}
           </button>
         </div>
-
-        <button
-          type="button"
-          data-testid="button-close-preview-completion"
-          onClick={onClose}
-          className="mt-4 w-full rounded-xl border border-gray-200 bg-white py-3 text-sm font-semibold text-gray-700 active:bg-gray-50"
-        >
-          Chiudi
-        </button>
       </div>
 
       {showScrollHint && !hasScrolledToFeedback && (

@@ -180,22 +180,39 @@ async function run() {
   const feedbackEnd = await page.locator('[data-testid="button-submit-demo-feedback"]').isVisible();
   if (!feedbackEnd) fail("feedback-not-visible-end-scroll", {});
 
-  // Chiudi modale → body sbloccato, wizard reset al riaprire
-  await page.click('[data-testid="button-close-create-demo"]');
-  await page.waitForTimeout(200);
+  if (await page.locator('[data-testid="button-close-create-demo"]').isVisible()) {
+    fail("close-visible-on-completion", {});
+  }
+  if ((await page.locator('[data-testid="button-close-preview-completion"]').count()) > 0) {
+    fail("chiudi-on-completion", {});
+  }
+
+  const boxComplete = await page.locator('[role="dialog"]').boundingBox();
+  if (boxComplete) {
+    await page.mouse.click(boxComplete.x + 8, boxComplete.y + 8);
+    await page.waitForTimeout(300);
+    if ((await page.locator('[role="dialog"]').count()) === 0) fail("backdrop-closed-completion", {});
+  }
+
+  await page.click('[data-testid="feedback-star-5"]');
+  await page.click('[data-testid="button-submit-demo-feedback"]');
+  await page.waitForSelector('[data-testid="preview-completion-thanks"]', { timeout: 15000 });
+
+  await page.reload({ waitUntil: "networkidle" });
   const bodyUnlocked = await page.evaluate(
     () => document.body.style.position !== "fixed" && document.body.style.overflow !== "hidden",
   );
-  if (!bodyUnlocked) fail("body-unlock-after-close", await page.evaluate(() => document.body.style));
+  if (!bodyUnlocked) fail("body-unlock-after-reload", await page.evaluate(() => document.body.style));
 
   await page.click('[data-testid="button-pianifica-demo-page"]');
+  await page.waitForSelector('[role="dialog"]');
   await page.waitForSelector('[data-testid="wizard-step-scroll"]');
   const wizardAgain = await page.evaluate(() => !!document.querySelector('[data-testid="wizard-step-scroll"]'));
   if (!wizardAgain) fail("wizard-not-reset-on-reopen", {});
 
   await page.click('[data-testid="button-close-create-demo"]');
+  await page.waitForTimeout(200);
 
-  // Backdrop chiude modale
   await page.click('[data-testid="button-pianifica-demo-page"]');
   await page.waitForSelector('[role="dialog"]');
   const box = await page.locator('[role="dialog"]').boundingBox();

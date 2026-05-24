@@ -121,3 +121,9 @@ export function venuePoolKeyForPlanSubcategory(label: string): string {
   const n = label.trim().toLowerCase();
   return SUBCATEGORY_TO_VENUE_POOL[n] ?? n;
 }
+
+/** Pasti: solo orario preciso (slider), non fasce mattina/pomeriggio/sera. */
+export function subcategoryUsesExactTimeOnly(subcategoryLabel: string | null | undefined): boolean {
+  const n = subcategoryLabel?.trim().toLowerCase() ?? "";
+  return n === "cena" || n === "pranzo" || n === "colazione" || n === "brunch";
+}

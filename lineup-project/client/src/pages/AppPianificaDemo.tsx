@@ -132,11 +132,11 @@ export default function AppPianificaDemo() {
       : readStoredDemoProfile();
 
   const closeSheet = useCallback(() => {
-    if (completionThanksLocked) return;
+    if (completionThanksLocked || modalPhase === "complete") return;
     setSheetOpen(false);
     setModalPhase("wizard");
     setCompletionThanksLocked(false);
-  }, [completionThanksLocked]);
+  }, [completionThanksLocked, modalPhase]);
 
   const openSheet = useCallback(() => {
     setCompletionThanksLocked(false);
@@ -321,7 +321,7 @@ export default function AppPianificaDemo() {
                 <h2 className="text-lg font-bold text-gray-900">Nuovo evento</h2>
                 <p className="mt-0.5 text-xs font-medium text-amber-700">Modalità prova</p>
               </div>
-              {!completionThanksLocked && (
+              {modalPhase === "wizard" && !completionThanksLocked && (
                 <button
                   type="button"
                   data-testid="button-close-create-demo"
@@ -332,7 +332,9 @@ export default function AppPianificaDemo() {
                   <X size={18} className="text-gray-600" />
                 </button>
               )}
-              {completionThanksLocked && <span className="h-11 w-11 shrink-0" aria-hidden />}
+              {(modalPhase === "complete" || completionThanksLocked) && (
+                <span className="h-11 w-11 shrink-0" aria-hidden />
+              )}
             </div>
             <div
               className={cn(
@@ -357,7 +359,6 @@ export default function AppPianificaDemo() {
                     {demoProfile && (
                     <PianificaPreviewCompletion
                       profile={demoProfile}
-                      onClose={closeSheet}
                       onFeedbackSent={() => setCompletionThanksLocked(true)}
                       scrollRootRef={completionScrollRef}
                     />

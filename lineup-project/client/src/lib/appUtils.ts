@@ -72,6 +72,11 @@ export function formatVenueNameFromUserQuery(query: string): string {
     .join(" ");
 }
 
+/** Luogo reale da catalogo/AI (con link esterni), non fallback testo utente né inventato. */
+export function isRealVenueSearchResult(venue: VenueOption): boolean {
+  return !venue.userTypedFallback && !venue.syntheticSubcategory;
+}
+
 /** Anteprima come “trovato” se l’AI non restituisce luoghi (nessun sito / Maps / Instagram). */
 export function venueFallbackFromUserQuery(query: string): VenueOption {
   return {

@@ -69,7 +69,7 @@ const GUIDES: Record<PreviewGuideId, GuideContent> = {
     stepLabel: "Fine prova",
     title: "Hai completato la simulazione",
     body: "Hai visto tutte le fasi del tasto Pianifica: inviti, attività, date, orari, luoghi e sondaggio.",
-    action: "Premi Chiudi per uscire. Nell’app reale potrai aprire la chat dell’evento.",
+    action: "Scorri fino al feedback, vota con le stelle e premi Invia feedback.",
   },
 };
 

@@ -167,8 +167,6 @@ export default function PianificaDemoFeedbackAdmin() {
                 </span>
               </>
             )}
-            {" "}
-            · scorri a sinistra per eliminare
           </p>
         </div>
         <Button
