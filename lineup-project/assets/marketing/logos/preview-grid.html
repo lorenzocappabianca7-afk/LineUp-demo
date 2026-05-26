@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <title>LineUp — 10 loghi</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 2160px;
+      height: 3840px;
+      font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+      background: #f8fafc;
+      padding: 80px;
+    }
+    h1 {
+      text-align: center;
+      font-size: 56px;
+      font-weight: 800;
+      color: #111827;
+      margin-bottom: 12px;
+    }
+    .sub {
+      text-align: center;
+      font-size: 28px;
+      color: #6b7280;
+      margin-bottom: 64px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 48px;
+    }
+    .cell {
+      background: #fff;
+      border-radius: 32px;
+      padding: 48px 40px 40px;
+      box-shadow: 0 8px 40px rgba(59, 130, 246, 0.08);
+      border: 1px solid #e5e7eb;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 520px;
+    }
+    .cell.dark {
+      background: linear-gradient(145deg, #1e3a5f, #0f172a);
+      border-color: #334155;
+    }
+    .num {
+      align-self: flex-start;
+      font-size: 22px;
+      font-weight: 800;
+      color: #3b82f6;
+      margin-bottom: 8px;
+    }
+    .cell.dark .num { color: #93c5fd; }
+    .name {
+      font-size: 26px;
+      font-weight: 800;
+      color: #111827;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+    .cell.dark .name { color: #f9fafb; }
+    .desc {
+      font-size: 18px;
+      color: #6b7280;
+      text-align: center;
+      margin-bottom: 32px;
+      line-height: 1.4;
+      max-width: 420px;
+    }
+    .cell.dark .desc { color: #94a3b8; }
+    .art {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+    }
+    .art img {
+      max-width: 280px;
+      max-height: 200px;
+      width: auto;
+      height: auto;
+    }
+    .art.icon img {
+      max-width: 160px;
+      max-height: 160px;
+    }
+  </style>
+</head>
+<body>
+  <h1>LineUp — 10 proposte logo</h1>
+  <p class="sub">Dal wordmark al simbolo · blu #3B82F6 · minimal e giovane</p>
+  <div class="grid">
+    <div class="cell">
+      <span class="num">01</span>
+      <p class="name">Wordmark nero</p>
+      <p class="desc">Solo titolo, pulito e diretto</p>
+      <div class="art"><img src="logo-01-wordmark.svg" alt="" /></div>
+    </div>
+    <div class="cell">
+      <span class="num">02</span>
+      <p class="name">Wordmark accent</p>
+      <p class="desc">Line nero + Up blu — energia verso l'alto</p>
+      <div class="art"><img src="logo-02-wordmark-accent.svg" alt="" /></div>
+    </div>
+    <div class="cell dark">
+      <span class="num">03</span>
+      <p class="name">Monogramma LU</p>
+      <p class="desc">Icona app, quadrata arrotondata</p>
+      <div class="art icon"><img src="logo-03-monogram.svg" alt="" /></div>
+    </div>
+    <div class="cell">
+      <span class="num">04</span>
+      <p class="name">Fila in formazione</p>
+      <p class="desc">Tre cerchi — il gruppo allineato</p>
+      <div class="art icon"><img src="logo-04-lineup-dots.svg" alt="" /></div>
+    </div>
+    <div class="cell">
+      <span class="num">05</span>
+      <p class="name">Gruppo in fila</p>
+      <p class="desc">Persone in lineup, chi al centro guida</p>
+      <div class="art icon"><img src="logo-05-people-row.svg" alt="" /></div>
+    </div>
+    <div class="cell dark">
+      <span class="num">06</span>
+      <p class="name">L verso l'alto</p>
+      <p class="desc">Iniziale + freccia — organizza e sali</p>
+      <div class="art icon"><img src="logo-06-l-arrow.svg" alt="" /></div>
+    </div>
+    <div class="cell">
+      <span class="num">07</span>
+      <p class="name">Rete gruppo</p>
+      <p class="desc">Connessioni — chat e accordo</p>
+      <div class="art icon"><img src="logo-07-connected.svg" alt="" /></div>
+    </div>
+    <div class="cell">
+      <span class="num">08</span>
+      <p class="name">Voto / OK</p>
+      <p class="desc">Sondaggio e decisione condivisa</p>
+      <div class="art icon"><img src="logo-08-vote-check.svg" alt="" /></div>
+    </div>
+    <div class="cell dark">
+      <span class="num">09</span>
+      <p class="name">Calendario</p>
+      <p class="desc">Date e pianificazione eventi</p>
+      <div class="art icon"><img src="logo-09-calendar-min.svg" alt="" /></div>
+    </div>
+    <div class="cell">
+      <span class="num">10</span>
+      <p class="name">Chat attiva</p>
+      <p class="desc">Conversazione + azione (evento)</p>
+      <div class="art icon"><img src="logo-10-chat-pulse.svg" alt="" /></div>
+    </div>
+  </div>
+</body>
+</html>

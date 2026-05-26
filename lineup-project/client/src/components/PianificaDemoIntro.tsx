@@ -32,9 +32,9 @@ const INTRO_BANNERS = [
     badge: "Novità",
     title: "Perché LineUp",
     body: "Grazie all'AI, LineUp supporta te e i tuoi amici nella programmazione delle vostre attività, tiene traccia dei tuoi eventi futuri e ti mette in contatto con persone con i tuoi stessi interessi.",
-    border: "border-sky-200/80",
-    badgeClass: "bg-sky-100 text-sky-800",
-    iconClass: "bg-sky-100 text-sky-700",
+    border: "border-primary/25",
+    badgeClass: "bg-primary/15 text-primary",
+    iconClass: "bg-primary/15 text-primary",
   },
 ] as const;
 

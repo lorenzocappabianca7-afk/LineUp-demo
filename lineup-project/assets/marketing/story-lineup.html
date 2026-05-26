@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <title>LineUp Story</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 1080px;
+      height: 1920px;
+      overflow: hidden;
+      font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+      background: linear-gradient(180deg, #dbeafe 0%, #f4faff 28%, #ffffff 55%, #f0f9ff 100%);
+      color: #1f2937;
+    }
+    .story {
+      width: 1080px;
+      height: 1920px;
+      padding: 64px 52px 56px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+    .dots {
+      position: absolute;
+      inset: 0;
+      background-image: radial-gradient(circle, rgba(59, 130, 246, 0.08) 1.5px, transparent 1.5px);
+      background-size: 28px 28px;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .blob {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(50px);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .blob-1 { width: 380px; height: 380px; background: #60a5fa; top: -120px; right: -80px; opacity: 0.5; }
+    .blob-2 { width: 340px; height: 340px; background: #a5d8ff; bottom: 200px; left: -120px; opacity: 0.45; }
+    .blob-3 { width: 200px; height: 200px; background: #fbbf24; top: 380px; left: 60px; opacity: 0.2; }
+
+    .badge-top {
+      position: relative;
+      z-index: 2;
+      align-self: center;
+      background: linear-gradient(135deg, #fbbf24, #f59e0b);
+      color: #78350f;
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 12px 24px;
+      border-radius: 999px;
+      box-shadow: 0 4px 16px rgba(245, 158, 11, 0.4);
+      margin-bottom: 20px;
+    }
+
+    .header { position: relative; z-index: 2; text-align: center; }
+    .logo {
+      font-size: 96px;
+      font-weight: 800;
+      letter-spacing: -3px;
+      color: #000000;
+      line-height: 1;
+      text-shadow: 0 2px 0 rgba(255,255,255,0.8);
+    }
+    .hook {
+      margin-top: 20px;
+      font-size: 38px;
+      font-weight: 800;
+      line-height: 1.2;
+      color: #1d4ed8;
+      letter-spacing: -0.5px;
+    }
+    .tagline {
+      margin-top: 16px;
+      font-size: 28px;
+      font-weight: 600;
+      line-height: 1.4;
+      color: #374151;
+      max-width: 880px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .pills {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 22px;
+    }
+    .pill {
+      padding: 12px 22px;
+      border-radius: 999px;
+      background: #fff;
+      border: 2px solid #93c5fd;
+      color: #2563eb;
+      font-size: 20px;
+      font-weight: 700;
+      box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
+    }
+    .pill-hot {
+      background: #eff6ff;
+      border-color: #3b82f6;
+    }
+
+    /* Mini chat decor */
+    .chat-deco {
+      position: relative;
+      z-index: 2;
+      margin: 28px auto 8px;
+      max-width: 520px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transform: rotate(-2deg);
+    }
+    .bubble {
+      padding: 14px 20px;
+      border-radius: 18px;
+      font-size: 18px;
+      font-weight: 600;
+      max-width: 85%;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+    }
+    .bubble-gray {
+      align-self: flex-start;
+      background: #e5e7eb;
+      color: #4b5563;
+      border-bottom-left-radius: 4px;
+    }
+    .bubble-blue {
+      align-self: flex-end;
+      background: linear-gradient(135deg, #3b82f6, #60a5fa);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+      font-weight: 700;
+    }
+
+    .cards {
+      position: relative;
+      z-index: 2;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 22px;
+      margin: 16px 0 28px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 22px;
+      padding: 28px 32px;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      box-shadow: 0 10px 36px rgba(59, 130, 246, 0.14);
+      border: 2px solid rgba(147, 197, 253, 0.5);
+      position: relative;
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 20%;
+      bottom: 20%;
+      width: 5px;
+      border-radius: 0 4px 4px 0;
+      background: linear-gradient(180deg, #3b82f6, #60a5fa);
+    }
+    .card-num {
+      position: absolute;
+      top: -10px;
+      right: 20px;
+      background: #3b82f6;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 800;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .icon {
+      width: 68px;
+      height: 68px;
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 34px;
+      flex-shrink: 0;
+    }
+    .icon-ai { background: linear-gradient(135deg, #dbeafe, #93c5fd); }
+    .icon-pub { background: linear-gradient(135deg, #e0f2fe, #38bdf8); }
+    .icon-book { background: linear-gradient(135deg, #d1fae5, #6ee7b7); }
+    .card h3 { font-size: 28px; font-weight: 800; color: #111827; }
+    .card p { margin-top: 6px; font-size: 22px; font-weight: 600; color: #6b7280; line-height: 1.3; }
+
+    .social-proof {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      font-size: 22px;
+      font-weight: 700;
+      color: #6b7280;
+      margin-bottom: 20px;
+    }
+    .social-proof span { color: #2563eb; }
+
+    .cta-wrap { position: relative; z-index: 2; text-align: center; margin-bottom: 24px; }
+    .cta {
+      background: linear-gradient(135deg, #2563eb, #60a5fa);
+      color: #fff;
+      border-radius: 28px;
+      padding: 32px 28px;
+      box-shadow: 0 16px 48px rgba(37, 99, 235, 0.45);
+      border: 3px solid rgba(255,255,255,0.35);
+      position: relative;
+    }
+    .cta-arrow {
+      font-size: 48px;
+      line-height: 1;
+      margin-bottom: 8px;
+      animation: none;
+    }
+    .cta-main {
+      font-size: 34px;
+      font-weight: 800;
+      line-height: 1.22;
+      letter-spacing: -0.5px;
+    }
+    .cta-sub {
+      margin-top: 12px;
+      font-size: 22px;
+      font-weight: 600;
+      opacity: 0.92;
+    }
+    .cta-tags {
+      margin-top: 16px;
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .cta-tag {
+      background: rgba(255,255,255,0.22);
+      padding: 8px 16px;
+      border-radius: 999px;
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .link-box {
+      position: relative;
+      z-index: 2;
+      flex-shrink: 0;
+      min-height: 168px;
+      border: 3px dashed #3b82f6;
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.9);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 28px;
+      box-shadow: inset 0 0 0 6px rgba(59, 130, 246, 0.06);
+    }
+    .link-box .finger { font-size: 40px; margin-bottom: 8px; }
+    .link-box p {
+      font-size: 26px;
+      font-weight: 700;
+      color: #4b5563;
+      line-height: 1.35;
+    }
+    .link-box strong { color: #2563eb; }
+
+    .footer {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      margin-top: 22px;
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .footer-item {
+      font-size: 18px;
+      font-weight: 700;
+      color: #9ca3af;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .float {
+      position: absolute;
+      z-index: 1;
+      pointer-events: none;
+      font-size: 36px;
+      opacity: 0.4;
+    }
+    .f1 { top: 180px; right: 32px; transform: rotate(12deg); }
+    .f2 { top: 520px; left: 24px; font-size: 28px; transform: rotate(-8deg); }
+    .f3 { top: 900px; right: 40px; font-size: 32px; }
+    .f4 { bottom: 340px; left: 48px; font-size: 30px; transform: rotate(6deg); }
+    .f5 { top: 260px; left: 80px; font-size: 24px; opacity: 0.25; }
+
+  </style>
+</head>
+<body>
+  <div class="story">
+    <div class="dots"></div>
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+    <span class="float f1">🎉</span>
+    <span class="float f2">⚽</span>
+    <span class="float f3">🍕</span>
+    <span class="float f4">✨</span>
+    <span class="float f5">💬</span>
+
+    <span class="badge-top">Provalo ora</span>
+
+    <header class="header">
+      <div class="logo">LineUp</div>
+      <p class="hook">Basta caos in chat.<br />Organizza in 2 minuti.</p>
+      <p class="tagline">L'app che mette d'accordo il gruppo su uscite, date e posti — con AI, eventi pubblici e prenotazioni.</p>
+      <div class="pills">
+        <span class="pill pill-hot">✨ Demo gratis</span>
+        <span class="pill">⏱ 2 minuti</span>
+        <span class="pill">📱 Zero download</span>
+      </div>
+    </header>
+
+    <div class="chat-deco" aria-hidden="true">
+      <div class="bubble bubble-gray">"Dai quando usciamo???"</div>
+      <div class="bubble bubble-gray">"Io venerdì, tu?"</div>
+      <div class="bubble bubble-blue">Con LineUp si sistema da sola ✓</div>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <span class="card-num">1</span>
+        <div class="icon icon-ai">✨</div>
+        <div>
+          <h3>Supporto AI</h3>
+          <p>Date, ora e luogo — senza stress</p>
+        </div>
+      </div>
+      <div class="card">
+        <span class="card-num">2</span>
+        <div class="icon icon-pub">📣</div>
+        <div>
+          <h3>Pubblica eventi</h3>
+          <p>Calcetto, cena, festa: chi vuoi si unisce</p>
+        </div>
+      </div>
+      <div class="card">
+        <span class="card-num">3</span>
+        <div class="icon icon-book">📲</div>
+        <div>
+          <h3>Prenotazioni in app</h3>
+          <p>Posti e richieste, tutto qui</p>
+        </div>
+      </div>
+    </div>
+
+    <p class="social-proof">👀 <span>Curioso?</span> Prova la simulazione come se fosse l'app vera</p>
+
+    <div class="cta-wrap">
+      <div class="cta">
+        <div class="cta-arrow">👇</div>
+        <p class="cta-main">Apri il link e prova<br />la simulazione LineUp</p>
+        <p class="cta-sub">Tocchi, esplori, capisci subito se fa per te</p>
+        <div class="cta-tags">
+          <span class="cta-tag">Nessuna registrazione</span>
+          <span class="cta-tag">Subito sul telefono</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="link-box">
+      <span class="finger">👆</span>
+      <p><strong>Sticker Link qui</strong><br />Incolla l'URL della demo</p>
+    </div>
+
+    <div class="footer">
+      <span class="footer-item">🔒 Demo sicura</span>
+      <span class="footer-item">🇮🇹 Fatto per noi</span>
+      <span class="footer-item">💙 Gratis</span>
+    </div>
+  </div>
+</body>
+</html>

@@ -5,7 +5,7 @@ type PianificaStepGuideProps = {
   title: string;
   body: string;
   action: string;
-  /** Su sfondo blu (es. scelta sondaggio): card bianca, testi scuri leggibili. */
+  /** Su sfondo primary (es. scelta sondaggio): card bianca, testi scuri leggibili. */
   variant?: "default" | "onBlue";
 };
 
@@ -35,7 +35,7 @@ export function PianificaStepGuide({
       <p
         className={cn(
           "text-[11px] font-bold uppercase tracking-wide",
-          onBlue ? "text-blue-700" : "text-primary",
+          "text-primary",
         )}
       >
         {stepLabel}
@@ -50,7 +50,7 @@ export function PianificaStepGuide({
         {body}
       </p>
       <p className="mt-2.5 text-sm font-semibold leading-snug text-gray-900">
-        <span className={onBlue ? "text-blue-700" : "text-primary"}>Cosa fare ora:</span> {action}
+        <span className="text-primary">Cosa fare ora:</span> {action}
       </p>
     </div>
   );

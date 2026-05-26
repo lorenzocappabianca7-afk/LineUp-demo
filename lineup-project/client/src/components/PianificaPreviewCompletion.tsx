@@ -213,7 +213,7 @@ export function PianificaPreviewCompletion({
             disabled={feedbackSent}
             placeholder="Cosa ti è piaciuto? Cosa miglioreresti?"
             rows={4}
-            className="mt-2 w-full resize-none rounded-xl border border-gray-200 bg-[#F4FAFF] px-3 py-3 text-base text-gray-900 outline-none placeholder:text-gray-400 focus:border-primary disabled:opacity-60"
+            className="mt-2 w-full resize-none rounded-xl border border-gray-200 bg-[#F0FBFC] px-3 py-3 text-base text-gray-900 outline-none placeholder:text-gray-400 focus:border-primary disabled:opacity-60"
           />
 
           {effectiveProfile && (

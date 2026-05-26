@@ -18,7 +18,7 @@ export type PollOptionButtonProps = {
   className?: string;
   /** Opzione con più voti (pareggio incluso). */
   showTopBadge?: boolean;
-  /** Sfondo blu dietro: pulsante bianco (chat / dettaglio evento). */
+  /** Sfondo primary dietro: pulsante bianco (chat / dettaglio evento). */
   variant?: "default" | "onBlue";
 };
 
@@ -54,7 +54,7 @@ export function PollOptionButton({
         "active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50",
         onBlue
           ? selected
-            ? "border-primary bg-blue-50 ring-2 ring-primary/20 shadow-sm"
+            ? "border-primary bg-primary/10 ring-2 ring-primary/20 shadow-sm"
             : "border-gray-200/90 bg-white shadow-sm hover:border-primary/35 hover:bg-gray-50/90"
           : selected
             ? "border-primary bg-primary/[0.04] ring-1 ring-primary/15"

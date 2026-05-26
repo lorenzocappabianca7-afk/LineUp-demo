@@ -317,13 +317,13 @@ export default function AppEventDetail() {
             )}
 
             {/* Sondaggi: sfondo blu, opzioni bianche */}
-            <div className="space-y-4 rounded-2xl bg-blue-600 p-3 shadow-sm">
+            <div className="space-y-4 rounded-2xl bg-primary p-3 shadow-sm">
             {/* Venue voting — prima del giorno */}
             <section>
               <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-white">
                 📍 Dove?
                 {event.venueOptions.length > 1 && (
-                  <span className="text-[11px] font-normal text-blue-200">
+                  <span className="text-[11px] font-normal text-primary-foreground/75">
                     ({votes.filter((v) => v.voteType === "venue").length} voti)
                   </span>
                 )}
@@ -331,7 +331,7 @@ export default function AppEventDetail() {
               {event.venueOptions.length <= 1 ? (
                 <div className="space-y-1.5">
                   {event.venueOptions.length === 0 ? (
-                    <p className="text-[11px] text-blue-200 px-1">Nessun luogo indicato nel sondaggio.</p>
+                    <p className="text-[11px] text-primary-foreground/75 px-1">Nessun luogo indicato nel sondaggio.</p>
                   ) : (
                     event.venueOptions.map((venue) => (
                       <div key={venue.name} className="relative">
@@ -408,7 +408,7 @@ export default function AppEventDetail() {
               <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-white">
                 📅 Quando?
                 {event.dateOptions.length > 1 && (
-                  <span className="text-[11px] font-normal text-blue-200">
+                  <span className="text-[11px] font-normal text-primary-foreground/75">
                     ({votes.filter((v) => v.voteType === "date").length} voti)
                   </span>
                 )}
@@ -456,7 +456,7 @@ export default function AppEventDetail() {
               <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-white">
                 🕐 A che ora?
                 {event.timeOptions.length > 1 && (
-                  <span className="text-[11px] font-normal text-blue-200">
+                  <span className="text-[11px] font-normal text-primary-foreground/75">
                     ({votes.filter((v) => v.voteType === "time").length} voti)
                   </span>
                 )}

@@ -79,7 +79,7 @@ function InfoBanner({
               <AlertTriangle size={15} strokeWidth={2.5} />
             </div>
             <p className="min-w-0 flex-1 text-[11px] font-bold leading-snug text-amber-950 break-words sm:text-xs">
-              Nella chat del gruppo, possono scrivere solo coloro che hanno votato il sondaggio
+              Nella chat del gruppo si può scrivere solo dopo che tutti hanno votato il sondaggio
             </p>
           </div>
         </aside>

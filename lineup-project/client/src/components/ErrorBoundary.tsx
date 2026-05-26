@@ -33,12 +33,12 @@ export default class ErrorBoundary extends Component<Props, State> {
 
     return (
       <div
-        className="fixed inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-[#F4FAFF] via-[#FFF9E6] to-white px-5 py-10"
+        className="fixed inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-[#F0FBFC] via-[#FFF9E6] to-white px-5 py-10"
         data-testid="lineup-crash-screen"
         role="alert"
       >
         <div className="w-full max-w-sm rounded-2xl border-2 border-primary/30 bg-white px-6 py-8 text-center shadow-lg">
-          <p className="text-3xl font-extrabold tracking-tight text-[#4A9BD9]">LineUp</p>
+          <p className="text-3xl font-extrabold tracking-tight text-primary">LineUp</p>
           <h1 className="mt-4 text-lg font-bold leading-snug text-gray-900">{title}</h1>
           <p className="mt-3 text-sm leading-relaxed text-gray-600">{lead}</p>
           <p className="mt-3 text-sm font-semibold leading-relaxed text-gray-800">{team}</p>

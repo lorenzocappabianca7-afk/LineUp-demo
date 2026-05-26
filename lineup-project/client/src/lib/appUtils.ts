@@ -220,7 +220,7 @@ function safeParseJson<T>(val: any, fallback: T): T {
 }
 
 export const ACTIVITIES: Record<string, { label: string; emoji: string; color: string; bg: string }> = {
-  aperitivo:  { label: "Aperitivo",  emoji: "🍸", color: "#8ABFE8", bg: "#EBF5FB" },
+  aperitivo:  { label: "Aperitivo",  emoji: "🍸", color: "#37B6BD", bg: "#E8F7F8" },
   padel:      { label: "Padel",      emoji: "🎾", color: "#10b981", bg: "#D1FAE5" },
   cena:       { label: "Cena",       emoji: "🍽️", color: "#f97316", bg: "#FEF3C7" },
   pizza:      { label: "Pizza",      emoji: "🍕", color: "#ef4444", bg: "#FEE2E2" },
@@ -250,7 +250,7 @@ export function getActivity(key: string) {
 }
 
 export const AVATAR_COLORS: Record<string, string> = {
-  Io: "#8ABFE8",
+  Io: "#37B6BD",
   Giovanni: "#f97316",
   Elena: "#10b981",
   Marco: "#8b5cf6",

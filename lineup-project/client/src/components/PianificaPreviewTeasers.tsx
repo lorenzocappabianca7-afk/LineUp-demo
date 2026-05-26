@@ -35,7 +35,7 @@ function TeaserBanner({ variant, badge, title, body, icon, "data-testid": testId
   return (
     <article
       data-testid={testId}
-      className={`rounded-2xl px-4 py-4 shadow-lg ${styles.border} bg-gradient-to-br from-[#F4FAFF] via-white to-primary/5`}
+      className={`rounded-2xl px-4 py-4 shadow-lg ${styles.border} bg-gradient-to-br from-[#F0FBFC] via-white to-primary/5`}
     >
       <div className="flex items-start gap-3">
         <div

@@ -68,13 +68,13 @@ function ModePreview({ id }: { id: CreatorSurveyModeId }) {
     <div
       className={cn(
         base,
-        "flex items-center justify-center gap-1 h-[38px] bg-gradient-to-br from-violet-50 to-blue-50",
+        "flex items-center justify-center gap-1 h-[38px] bg-gradient-to-br from-violet-50 to-primary/10",
       )}
     >
       <Sparkles className="h-3.5 w-3.5 text-violet-500" aria-hidden />
       <div className="flex flex-col gap-0.5">
         <div className="h-1 w-8 rounded-full bg-violet-300/80" />
-        <div className="h-1 w-6 rounded-full bg-blue-300/70" />
+        <div className="h-1 w-6 rounded-full bg-primary/40" />
       </div>
     </div>
   );
@@ -92,17 +92,17 @@ export function SurveyModePicker({
   const rec = recommendedId && SURVEY_MODE_CARDS.some((c) => c.id === recommendedId) ? recommendedId : undefined;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-blue-600">
+    <div className="flex h-full min-h-0 flex-col bg-primary">
       <div
         data-testid="survey-mode-scroll"
-        className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain bg-blue-600 pb-4 no-scrollbar [-webkit-overflow-scrolling:touch]"
+        className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain bg-primary pb-4 no-scrollbar [-webkit-overflow-scrolling:touch]"
       >
         {previewGuide ? <PianificaStepGuide {...previewGuide} variant="onBlue" /> : null}
         {onBack ? (
           <button
             type="button"
             onClick={onBack}
-            className="mx-5 mb-2 flex items-center gap-1.5 text-xs font-semibold text-blue-100 hover:text-white"
+            className="mx-5 mb-2 flex items-center gap-1.5 text-xs font-semibold text-primary-foreground/85 hover:text-primary-foreground"
           >
             <ChevronLeft size={16} />
             Indietro ai luoghi
@@ -128,7 +128,7 @@ export function SurveyModePicker({
                 className={cn(
                   "relative flex min-h-[200px] flex-col rounded-xl border-2 bg-white p-3 text-left transition-all active:scale-[0.98]",
                   sel
-                    ? "z-[1] border-amber-400 shadow-lg shadow-amber-500/25 ring-[3px] ring-amber-300 ring-offset-2 ring-offset-blue-600"
+                    ? "z-[1] border-amber-400 shadow-lg shadow-amber-500/25 ring-[3px] ring-amber-300 ring-offset-2 ring-offset-primary"
                     : "border-gray-100 hover:border-gray-200",
                   isRecommended && !sel && "border-amber-200 ring-1 ring-amber-200/60",
                   (sel || isRecommended) && "pt-5",
@@ -175,13 +175,13 @@ export function SurveyModePicker({
           })}
         </div>
       </div>
-      <div className="shrink-0 border-t border-blue-500/40 bg-blue-700/50 px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="shrink-0 border-t border-primary-foreground/20 bg-primary/90 px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <button
           type="button"
           data-testid="button-survey-mode-continue"
           onClick={onContinue}
           disabled={isSubmitting}
-          className="min-h-12 w-full touch-manipulation rounded-xl bg-white py-3 text-base font-bold text-blue-700 shadow-md active:opacity-90 disabled:opacity-50"
+          className="min-h-12 w-full touch-manipulation rounded-xl bg-white py-3 text-base font-bold text-primary shadow-md active:opacity-90 disabled:opacity-50"
         >
           {isSubmitting ? "Creazione in corso…" : "Crea evento con questo sondaggio"}
         </button>

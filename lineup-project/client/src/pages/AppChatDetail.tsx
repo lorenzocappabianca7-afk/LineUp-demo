@@ -839,14 +839,14 @@ function RecapBanner({
     <div
       className={
         isPlanning
-          ? "flex min-w-0 flex-1 items-center gap-3 text-left text-blue-50"
+          ? "flex min-w-0 flex-1 items-center gap-3 text-left text-primary-foreground"
           : "flex min-w-0 flex-1 items-center gap-3 text-left"
       }
     >
       {!topVenue && !topDate && !topTime ? (
         <span
           className={
-            isPlanning ? "text-xs italic text-blue-200" : "text-xs text-muted-foreground italic"
+            isPlanning ? "text-xs italic text-primary-foreground/75" : "text-xs text-muted-foreground italic"
           }
         >
           Nessun voto ancora — tocca per votare
@@ -861,7 +861,7 @@ function RecapBanner({
                   : "flex min-w-0 items-center gap-1 truncate text-xs font-semibold text-foreground"
               }
             >
-              <MapPin size={11} className={isPlanning ? "text-blue-200" : "text-emerald-500"} />
+              <MapPin size={11} className={isPlanning ? "text-primary-foreground/75" : "text-emerald-500"} />
               {topVenue}
             </span>
           )}
@@ -873,7 +873,7 @@ function RecapBanner({
                   : "flex shrink-0 items-center gap-1 text-xs font-semibold text-foreground"
               }
             >
-              <Clock size={11} className={isPlanning ? "text-blue-200" : "text-emerald-500"} />
+              <Clock size={11} className={isPlanning ? "text-primary-foreground/75" : "text-emerald-500"} />
               {topDate}{topTime ? ` · ${topTime}` : ""}
             </span>
           )}
@@ -896,7 +896,7 @@ function RecapBanner({
     <div
       className={
         isPlanning
-          ? "border-b border-blue-800/35 bg-blue-600"
+          ? "border-b border-primary/40 bg-primary"
           : "border-b border-border bg-gradient-to-b from-emerald-500/[0.08] to-background"
       }
     >
@@ -913,9 +913,9 @@ function RecapBanner({
           {summaryInner}
           {isPlanning &&
             (expanded ? (
-              <ChevronUp size={16} className="shrink-0 text-blue-200" />
+              <ChevronUp size={16} className="shrink-0 text-primary-foreground/75" />
             ) : (
-              <ChevronDown size={16} className="shrink-0 text-blue-200/80" />
+              <ChevronDown size={16} className="shrink-0 text-primary-foreground/65" />
             ))}
         </button>
       )}
@@ -1027,7 +1027,7 @@ function RecapBanner({
                     </Badge>
                   )}
                   {!myVotedHere && (
-                    <span className="ml-auto text-[10px] font-medium text-blue-100">tocca per votare</span>
+                    <span className="ml-auto text-[10px] font-medium text-primary-foreground/85">tocca per votare</span>
                   )}
                 </CardHeader>
                 <CardContent className="space-y-1.5 p-0 px-1 pb-2 pt-0">

@@ -329,7 +329,7 @@ export default function AppPianificaDemo() {
             <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-4 pb-3 pt-4 sm:px-6 sm:pb-4 sm:pt-5">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Nuovo evento</h2>
-                <p className="mt-0.5 text-xs font-medium text-amber-700">Modalità prova</p>
+                <p className="mt-0.5 text-xs font-semibold text-primary-dark">Modalità prova</p>
               </div>
               {modalPhase === "wizard" && !completionThanksLocked && (
                 <button

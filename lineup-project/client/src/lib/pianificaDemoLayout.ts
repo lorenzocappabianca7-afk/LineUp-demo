@@ -2,10 +2,11 @@
 export const DEMO_MODAL_CONTENT =
   "mx-auto w-full max-w-[340px]";
 
-export const DEMO_SURFACE_CLASS = "bg-[#F4FAFF]";
+/** @see LINEUP_SURFACE in lineupBrand.ts */
+export const DEMO_SURFACE_CLASS = "bg-[#F0FBFC]";
 
 export const DEMO_CARD_CLASS =
-  "rounded-2xl border border-primary/35 bg-gradient-to-br from-[#F4FAFF] via-white to-primary/5 shadow-lg";
+  "rounded-2xl border border-primary/35 bg-gradient-to-br from-[#F0FBFC] via-white to-primary/5 shadow-lg";
 
 export const DEMO_SECTION_HEADER_CLASS =
   "relative z-10 shrink-0 border-b border-primary/15 bg-white px-4 pt-3 pb-3 shadow-sm";

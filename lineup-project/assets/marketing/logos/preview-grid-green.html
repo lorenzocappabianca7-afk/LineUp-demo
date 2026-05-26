@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <title>LineUp — loghi verdi</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 2160px;
+      font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+      background: linear-gradient(180deg, #ecfdf5 0%, #f8fafc 100%);
+      padding: 72px;
+    }
+    h1 { text-align: center; font-size: 52px; font-weight: 800; color: #064e3b; }
+    .sub { text-align: center; font-size: 26px; color: #047857; margin: 12px 0 48px; }
+    .section { font-size: 32px; font-weight: 800; color: #059669; margin: 40px 0 28px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 36px;
+      margin-bottom: 48px;
+    }
+    .cell {
+      background: #fff;
+      border-radius: 28px;
+      padding: 36px 28px 32px;
+      box-shadow: 0 6px 28px rgba(5, 150, 105, 0.1);
+      border: 1px solid #d1fae5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 380px;
+    }
+    .cell.dark {
+      background: linear-gradient(145deg, #064e3b, #022c22);
+      border-color: #065f46;
+    }
+    .num { align-self: flex-start; font-size: 20px; font-weight: 800; color: #059669; }
+    .cell.dark .num { color: #6ee7b7; }
+    .name { font-size: 22px; font-weight: 800; color: #111827; margin: 8px 0 6px; text-align: center; }
+    .cell.dark .name { color: #ecfdf5; }
+    .desc { font-size: 16px; color: #6b7280; text-align: center; margin-bottom: 24px; }
+    .cell.dark .desc { color: #a7f3d0; }
+    .art { flex: 1; display: flex; align-items: center; justify-content: center; }
+    .art img { max-width: 140px; max-height: 140px; }
+    .fav { font-size: 14px; color: #059669; font-weight: 700; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>LineUp — Rete (#7) + lettera L</h1>
+  <p class="sub">Verde smeraldo #059669 · non WhatsApp (#25D366)</p>
+
+  <p class="section">Modello rete (come il #7)</p>
+  <div class="grid">
+    <div class="cell dark">
+      <span class="num">07★</span>
+      <p class="name">Rete classica</p>
+      <p class="desc">Il tuo preferito, versione verde</p>
+      <div class="art"><img src="logo-07-connected-green.svg" alt="" /></div>
+      <span class="fav">Preferito</span>
+    </div>
+    <div class="cell">
+      <span class="num">11</span>
+      <p class="name">Hub centrale</p>
+      <p class="desc">Un nodo guida, quattro intorno</p>
+      <div class="art"><img src="logo-11-connected-hub.svg" alt="" /></div>
+    </div>
+    <div class="cell">
+      <span class="num">12</span>
+      <p class="name">Fila collegata</p>
+      <p class="desc">Gruppo in lineup orizzontale</p>
+      <div class="art"><img src="logo-12-connected-line.svg" alt="" /></div>
+    </div>
+    <div class="cell">
+      <span class="num">13</span>
+      <p class="name">Triangolo</p>
+      <p class="desc">Tre nodi, accordo di gruppo</p>
+      <div class="art"><img src="logo-13-connected-triangle.svg" alt="" /></div>
+    </div>
+    <div class="cell dark">
+      <span class="num">14</span>
+      <p class="name">Stella / pentagono</p>
+      <p class="desc">Rete ampia, molti collegati</p>
+      <div class="art"><img src="logo-14-connected-pentagon.svg" alt="" /></div>
+    </div>
+    <div class="cell">
+      <span class="num">15</span>
+      <p class="name">Doppio vertice</p>
+      <p class="desc">Due sopra, uno sotto — sintesi</p>
+      <div class="art"><img src="logo-15-connected-dual.svg" alt="" /></div>
+    </div>
+  </div>
+
+  <p class="section">Solo lettera L</p>
+  <div class="grid">
+    <div class="cell">
+      <span class="num">16</span>
+      <p class="name">L tratto</p>
+      <p class="desc">Minimal, linea pulita</p>
+      <div class="art"><img src="logo-16-l-stroke.svg" alt="" /></div>
+    </div>
+    <div class="cell dark">
+      <span class="num">17</span>
+      <p class="name">L nel cerchio</p>
+      <p class="desc">Icona app, sfondo chiaro</p>
+      <div class="art"><img src="logo-17-l-circle.svg" alt="" /></div>
+    </div>
+    <div class="cell">
+      <span class="num">18</span>
+      <p class="name">L piena</p>
+      <p class="desc">Geometrica, bold</p>
+      <div class="art"><img src="logo-18-l-filled.svg" alt="" /></div>
+    </div>
+    <div class="cell">
+      <span class="num">19</span>
+      <p class="name">L arrotondata</p>
+      <p class="desc">Morbida, friendly</p>
+      <div class="art"><img src="logo-19-l-rounded.svg" alt="" /></div>
+    </div>
+    <div class="cell dark">
+      <span class="num">20</span>
+      <p class="name">L + punto</p>
+      <p class="desc">L con accento — “inizio evento”</p>
+      <div class="art"><img src="logo-20-l-dot.svg" alt="" /></div>
+    </div>
+  </div>
+</body>
+</html>
