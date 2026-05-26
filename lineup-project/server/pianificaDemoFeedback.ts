@@ -9,6 +9,22 @@ type FeedbackMailTransporter = ReturnType<typeof nodemailer.createTransport>;
 let cachedFeedbackTransporter: FeedbackMailTransporter | null = null;
 let cachedFeedbackTransportKey = "";
 
+/** Gmail app password: spazi/newline dalla copia vanno rimossi. */
+export function normalizeSmtpPass(raw: string): string {
+  return raw.replace(/\s+/g, "").trim();
+}
+
+function getSmtpConfig(): { host: string; port: number; user: string; pass: string } | null {
+  const host = process.env.SMTP_HOST?.trim();
+  const user = process.env.SMTP_USER?.trim();
+  const passRaw = process.env.SMTP_PASS?.trim();
+  if (!host || !user || !passRaw) return null;
+  const pass = normalizeSmtpPass(passRaw);
+  if (!pass) return null;
+  const port = Number(process.env.SMTP_PORT ?? "587");
+  return { host, port, user, pass };
+}
+
 function getFeedbackMailTransporter(
   host: string,
   port: number,
@@ -23,6 +39,7 @@ function getFeedbackMailTransporter(
     host,
     port,
     secure: port === 465,
+    requireTLS: port === 587,
     auth: { user, pass },
     connectionTimeout: SMTP_TIMEOUT_MS,
     greetingTimeout: SMTP_TIMEOUT_MS,
@@ -124,31 +141,181 @@ function buildThankYouMailContent(payload: PianificaDemoFeedbackPayload) {
   return { subject, text, html };
 }
 
-function lineupMailFrom(): string {
-  const raw = process.env.SMTP_FROM?.trim() || LINEUP_OFFICIAL_EMAIL;
-  if (raw.includes("<")) return raw;
-  return `LineUp <${raw}>`;
+function lineupMailFrom(smtpUser: string): string {
+  const raw = process.env.SMTP_FROM?.trim();
+  if (raw?.includes("<")) return raw;
+  const address = raw || smtpUser || LINEUP_OFFICIAL_EMAIL;
+  return `LineUp <${address}>`;
 }
 
-async function sendViaSmtp(options: {
+function resendMailFrom(): string {
+  return process.env.RESEND_FROM?.trim() || `LineUp <${LINEUP_OFFICIAL_EMAIL}>`;
+}
+
+function getResendApiKey(): string | null {
+  const key = process.env.RESEND_API_KEY?.trim();
+  return key || null;
+}
+
+const RENDER_SMTP_BLOCKED_HINT =
+  "Su Render piano gratuito le porte SMTP (587/465) sono bloccate → Connection timeout. Usa RESEND_API_KEY (HTTPS) oppure passa al piano Render a pagamento per Gmail SMTP.";
+
+async function sendViaResend(options: {
   to: string;
   subject: string;
   text: string;
   html: string;
   replyTo?: string;
-}): Promise<boolean> {
-  const host = process.env.SMTP_HOST?.trim();
-  const port = Number(process.env.SMTP_PORT ?? "587");
-  const user = process.env.SMTP_USER?.trim();
-  const pass = process.env.SMTP_PASS?.trim();
-  if (!host || !user || !pass) return false;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const apiKey = getResendApiKey();
+  if (!apiKey) return { ok: false, error: "RESEND_API_KEY non impostata" };
+
+  const toList = options.to
+    .split(/[,;]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (toList.length === 0) return { ok: false, error: "Destinatario mancante" };
+
   try {
-    const transporter = getFeedbackMailTransporter(host, port, user, pass);
-    await transporter.sendMail({ from: lineupMailFrom(), ...options });
-    return true;
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: resendMailFrom(),
+        to: toList,
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+        ...(options.replyTo ? { reply_to: options.replyTo } : {}),
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      const msg = `Resend ${res.status}${body ? `: ${body.slice(0, 280)}` : ""}`;
+      console.error(`[pianifica-demo] ${msg}`);
+      return { ok: false, error: msg };
+    }
+    return { ok: true };
   } catch (e) {
-    console.warn("pianifica-demo SMTP send failed:", e);
-    return false;
+    const msg = smtpErrorMessage(e);
+    console.error(`[pianifica-demo] Resend send failed (to=${options.to}):`, msg);
+    return { ok: false, error: msg };
+  }
+}
+
+function smtpErrorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  return String(e);
+}
+
+async function sendViaSmtp(
+  cfg: { host: string; port: number; user: string; pass: string },
+  options: {
+    to: string;
+    subject: string;
+    text: string;
+    html: string;
+    replyTo?: string;
+  },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const transporter = getFeedbackMailTransporter(cfg.host, cfg.port, cfg.user, cfg.pass);
+    await transporter.sendMail({ from: lineupMailFrom(cfg.user), ...options });
+    return { ok: true };
+  } catch (e) {
+    const msg = smtpErrorMessage(e);
+    console.error(`[pianifica-demo] SMTP send failed (to=${options.to}):`, msg);
+    return { ok: false, error: msg };
+  }
+}
+
+/** Diagnostica email demo (admin): Resend (consigliato su Render free) o SMTP. */
+export async function testPianificaDemoSmtp(sendProbeTo?: string): Promise<{
+  configured: boolean;
+  channel?: "resend" | "smtp";
+  verifyOk: boolean;
+  probeSent: boolean;
+  error?: string;
+  hint?: string;
+}> {
+  const resendKey = getResendApiKey();
+  if (resendKey) {
+    if (!sendProbeTo?.trim()) {
+      return { configured: true, channel: "resend", verifyOk: true, probeSent: false };
+    }
+    const probe = await sendViaResend({
+      to: sendProbeTo.trim(),
+      subject: "[LineUp] Test email demo (Resend)",
+      text: "Se leggi questa mail, Resend su Render funziona.",
+      html: "<p>Se leggi questa mail, <strong>Resend</strong> su Render funziona.</p>",
+    });
+    if (!probe.ok) {
+      return {
+        configured: true,
+        channel: "resend",
+        verifyOk: false,
+        probeSent: false,
+        error: probe.error,
+        hint:
+          "Su Resend verifica il dominio o il mittente in RESEND_FROM. Per test rapido: RESEND_FROM=LineUp <onboarding@resend.dev>",
+      };
+    }
+    return { configured: true, channel: "resend", verifyOk: true, probeSent: true };
+  }
+
+  const cfg = getSmtpConfig();
+  if (!cfg) {
+    return {
+      configured: false,
+      verifyOk: false,
+      probeSent: false,
+      hint:
+        "Render free blocca SMTP. Aggiungi RESEND_API_KEY (resend.com) oppure SMTP_* solo su piano Render a pagamento.",
+    };
+  }
+  try {
+    const transporter = getFeedbackMailTransporter(cfg.host, cfg.port, cfg.user, cfg.pass);
+    await transporter.verify();
+    if (!sendProbeTo?.trim()) {
+      return { configured: true, channel: "smtp", verifyOk: true, probeSent: false };
+    }
+    const probe = await sendViaSmtp(cfg, {
+      to: sendProbeTo.trim(),
+      subject: "[LineUp] Test SMTP demo",
+      text: "Se leggi questa mail, SMTP su Render funziona.",
+      html: "<p>Se leggi questa mail, <strong>SMTP su Render</strong> funziona.</p>",
+    });
+    if (!probe.ok) {
+      const hint = probe.error.includes("timeout")
+        ? RENDER_SMTP_BLOCKED_HINT
+        : "Controlla SMTP_FROM e che SMTP_USER sia lineuplf@gmail.com.";
+      return {
+        configured: true,
+        channel: "smtp",
+        verifyOk: true,
+        probeSent: false,
+        error: probe.error,
+        hint,
+      };
+    }
+    return { configured: true, channel: "smtp", verifyOk: true, probeSent: true };
+  } catch (e) {
+    const msg = smtpErrorMessage(e);
+    console.error("[pianifica-demo] SMTP verify failed:", msg);
+    const hint = /timeout/i.test(msg)
+      ? RENDER_SMTP_BLOCKED_HINT
+      : "Password per le app errata o SMTP_USER diverso dall'account Google della password.";
+    return {
+      configured: true,
+      channel: "smtp",
+      verifyOk: false,
+      probeSent: false,
+      error: msg,
+      hint,
+    };
   }
 }
 
@@ -160,57 +327,129 @@ function escapeHtml(s: string) {
     .replace(/"/g, "&quot;");
 }
 
-/** Notifica admin + ringraziamento utente (opzionale SMTP). Il feedback è già su Postgres. */
+type DemoEmailChannel = "resend" | "smtp" | "log";
+
+async function sendDemoMailPair(
+  send: (options: {
+    to: string;
+    subject: string;
+    text: string;
+    html: string;
+    replyTo?: string;
+  }) => Promise<{ ok: true } | { ok: false; error: string }>,
+  payload: PianificaDemoFeedbackPayload,
+  recipients: string[],
+): Promise<{
+  adminDelivered: boolean;
+  thankYouDelivered: boolean;
+  error?: string;
+}> {
+  const adminMail = buildMailContent(payload);
+  const thankYouMail = buildThankYouMailContent(payload);
+  const [adminResult, thankYouResult] = await Promise.all([
+    send({
+      to: recipients.join(", "),
+      replyTo: payload.email,
+      subject: adminMail.subject,
+      text: adminMail.text,
+      html: adminMail.html,
+    }),
+    send({
+      to: payload.email,
+      replyTo: LINEUP_OFFICIAL_EMAIL,
+      subject: thankYouMail.subject,
+      text: thankYouMail.text,
+      html: thankYouMail.html,
+    }),
+  ]);
+  const error = !adminResult.ok
+    ? adminResult.error
+    : !thankYouResult.ok
+      ? thankYouResult.error
+      : undefined;
+  return {
+    adminDelivered: adminResult.ok,
+    thankYouDelivered: thankYouResult.ok,
+    error,
+  };
+}
+
+/** Notifica admin + ringraziamento utente. Su Render free: usa Resend (HTTPS), non Gmail SMTP. */
 export async function notifyPianificaDemoFeedbackByEmail(
   payload: PianificaDemoFeedbackPayload,
 ): Promise<{
   delivered: boolean;
-  channel: "smtp" | "log";
+  channel: DemoEmailChannel;
   adminDelivered: boolean;
   thankYouDelivered: boolean;
+  smtpError?: string;
 }> {
-  const adminMail = buildMailContent(payload);
-  const thankYouMail = buildThankYouMailContent(payload);
   const recipients = getFeedbackRecipients();
-  const adminDelivered = await sendViaSmtp({
-    to: recipients.join(", "),
-    replyTo: payload.email,
-    subject: adminMail.subject,
-    text: adminMail.text,
-    html: adminMail.html,
-  });
+  const resendKey = getResendApiKey();
+  const cfg = getSmtpConfig();
 
-  const thankYouDelivered = await sendViaSmtp({
-    to: payload.email,
-    replyTo: LINEUP_OFFICIAL_EMAIL,
-    subject: thankYouMail.subject,
-    text: thankYouMail.text,
-    html: thankYouMail.html,
-  });
+  let channel: DemoEmailChannel = "log";
+  let adminDelivered = false;
+  let thankYouDelivered = false;
+  let smtpError: string | undefined;
+
+  if (resendKey) {
+    channel = "resend";
+    const result = await sendDemoMailPair(sendViaResend, payload, recipients);
+    adminDelivered = result.adminDelivered;
+    thankYouDelivered = result.thankYouDelivered;
+    smtpError = result.error;
+  } else if (cfg) {
+    channel = "smtp";
+    const result = await sendDemoMailPair(
+      (opts) => sendViaSmtp(cfg, opts),
+      payload,
+      recipients,
+    );
+    adminDelivered = result.adminDelivered;
+    thankYouDelivered = result.thankYouDelivered;
+    smtpError = result.error;
+    if (smtpError?.includes("timeout")) {
+      console.warn(`[pianifica-demo] ${RENDER_SMTP_BLOCKED_HINT}`);
+    }
+  } else {
+    console.warn("[pianifica-demo] Email non configurata: imposta RESEND_API_KEY o SMTP_*");
+  }
 
   if (adminDelivered || thankYouDelivered) {
+    console.log(
+      `[pianifica-demo] email channel=${channel} admin=${adminDelivered} thankYou=${thankYouDelivered} → ${payload.email}`,
+    );
     return {
       delivered: adminDelivered && thankYouDelivered,
-      channel: "smtp",
+      channel,
       adminDelivered,
       thankYouDelivered,
+      smtpError,
     };
   }
 
   try {
     await logAiPipelineSummary({
-      route: "POST /api/app/pianifica-demo/feedback [no-smtp]",
+      route: `POST /api/app/pianifica-demo/feedback [no-email:${channel}]`,
       lines: [
         `admin to: ${recipients.join(", ")}`,
         `thank-you to: ${payload.email}`,
         `name: ${payload.name}`,
         `rating: ${payload.rating}/5`,
         `comment: ${payload.comment?.trim() || "(vuoto)"}`,
-        "— Configura SMTP_* con account lineuplf@gmail.com per invio reale.",
+        smtpError ? `error: ${smtpError}` : "",
+        "— Render free: RESEND_API_KEY. Oppure piano Render a pagamento + Gmail SMTP.",
       ],
     });
   } catch (e) {
     console.warn("pianifica-demo feedback log failed:", e);
   }
-  return { delivered: false, channel: "log", adminDelivered: false, thankYouDelivered: false };
+  return {
+    delivered: false,
+    channel: "log",
+    adminDelivered: false,
+    thankYouDelivered: false,
+    smtpError,
+  };
 }

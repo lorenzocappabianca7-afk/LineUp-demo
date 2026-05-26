@@ -31,3 +31,8 @@ services:
         sync: false
       - key: PIANIFICA_DEMO_FEEDBACK_TO
         value: lineuplf@gmail.com
+      # Consigliato su piano free (SMTP 587/465 bloccato da Render)
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        sync: false

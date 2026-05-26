@@ -58,7 +58,12 @@ app.use("/api/app/pianifica-demo/feedback", writeLimiter);
 // ── Request timeout (30s per AI, 10s per tutto il resto) ──
 app.use((req: Request, res: Response, next: NextFunction) => {
   const timeout =
-    req.path.startsWith("/api/scopri") || req.path.startsWith("/api/app/venues/ai-search") ? 30_000 : 10_000;
+    req.path.startsWith("/api/scopri") || req.path.startsWith("/api/app/venues/ai-search")
+      ? 30_000
+      : req.path === "/api/app/pianifica-demo/feedback" ||
+          req.path === "/api/app/pianifica-demo/admin/smtp-test"
+        ? 25_000
+        : 10_000;
   res.setTimeout(timeout, () => {
     if (!res.headersSent) res.status(503).json({ message: "Richiesta scaduta, riprova." });
   });

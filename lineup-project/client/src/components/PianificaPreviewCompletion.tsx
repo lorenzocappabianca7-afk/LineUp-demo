@@ -5,7 +5,6 @@ import { useToast } from "@/hooks/use-toast";
 import { PianificaPreviewTeasers } from "@/components/PianificaPreviewTeasers";
 import { readStoredDemoProfile, type PreviewProfile } from "@/lib/pianificaDemoProfile";
 import { DEMO_CARD_CLASS, DEMO_CTA_CLASS, DEMO_MODAL_CONTENT } from "@/lib/pianificaDemoLayout";
-import { LINEUP_OFFICIAL_EMAIL } from "@/lib/lineupContact";
 
 export type { PreviewProfile };
 
@@ -136,13 +135,6 @@ export function PianificaPreviewCompletion({
           <p className="mt-3 text-sm leading-relaxed text-gray-900">
             Il tuo contributo ci aiuta a costruire LineUp insieme a chi lo userà.
           </p>
-          {effectiveProfile?.email && (
-            <p className="mt-3 text-xs leading-relaxed text-gray-500">
-              Ti abbiamo inviato un&apos;email di ringraziamento a{" "}
-              <span className="font-medium text-gray-700">{effectiveProfile.email}</span> da{" "}
-              <span className="font-medium text-gray-700">{LINEUP_OFFICIAL_EMAIL}</span>.
-            </p>
-          )}
         </div>
       </div>
     );
@@ -224,33 +216,12 @@ export function PianificaPreviewCompletion({
             className="mt-2 w-full resize-none rounded-xl border border-gray-200 bg-[#F0FBFC] px-3 py-3 text-base text-gray-900 outline-none placeholder:text-gray-400 focus:border-primary disabled:opacity-60"
           />
 
-          {effectiveProfile && (
-            <p className="mt-3 text-[11px] text-gray-500">
-              Invio come <span className="font-semibold text-gray-700">{effectiveProfile.name}</span> (
-              {effectiveProfile.email})
-            </p>
-          )}
-
-          <p
-            className="mt-4 text-center text-[10px] leading-snug text-gray-500"
-            data-testid="demo-feedback-email-consent"
-          >
-            Cliccando &quot;Invia feedback&quot;, autorizzi LineUp a inviarti email da{" "}
-            <a
-              href={`mailto:${LINEUP_OFFICIAL_EMAIL}`}
-              className="font-medium text-gray-600 underline decoration-gray-300 underline-offset-2"
-            >
-              {LINEUP_OFFICIAL_EMAIL}
-            </a>{" "}
-            per tenerti sempre aggiornato su novità e sviluppi dell&apos;app.
-          </p>
-
           <button
             type="button"
             data-testid="button-submit-demo-feedback"
             disabled={rating == null || submitting || !effectiveProfile}
             onClick={() => void submitFeedback()}
-            className={cn("mt-3 disabled:opacity-40", DEMO_CTA_CLASS)}
+            className={cn("mt-5 disabled:opacity-40", DEMO_CTA_CLASS)}
           >
             {submitting ? "Invio in corso…" : "Invia feedback"}
           </button>

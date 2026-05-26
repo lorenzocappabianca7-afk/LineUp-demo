@@ -5,7 +5,10 @@ import { storage } from "./storage";
 import { z } from "zod";
 import OpenAI from "openai";
 import { logAiExchange, logAiPipelineSummary } from "./aiLog";
-import { notifyPianificaDemoFeedbackByEmail } from "./pianificaDemoFeedback";
+import {
+  notifyPianificaDemoFeedbackByEmail,
+  testPianificaDemoSmtp,
+} from "./pianificaDemoFeedback";
 import {
   addPianificaDemoFeedback,
   deletePianificaDemoFeedback,
@@ -1770,32 +1773,29 @@ export async function registerRoutes(
         rating: input.rating,
         comment: input.comment,
       };
-      void notifyPianificaDemoFeedbackByEmail(payload)
-        .then((notify) => {
-          void logAiPipelineSummary({
-            route: "POST /api/app/pianifica-demo/feedback",
-            lines: [
-              `id: ${saved.id}`,
-              `name: ${input.name}`,
-              `email: ${input.email}`,
-              `birthYear: ${input.birthYear}`,
-              `rating: ${input.rating}/5`,
-              `channel: ${notify.channel}`,
-              `adminEmail: ${notify.adminDelivered}`,
-              `thankYouEmail: ${notify.thankYouDelivered}`,
-              "persist: postgres",
-              "notify: async",
-            ],
-          });
-        })
-        .catch((e) => {
-          console.warn("pianifica-demo feedback email (async):", e);
-        });
+      const notify = await notifyPianificaDemoFeedbackByEmail(payload);
+      void logAiPipelineSummary({
+        route: "POST /api/app/pianifica-demo/feedback",
+        lines: [
+          `id: ${saved.id}`,
+          `name: ${input.name}`,
+          `email: ${input.email}`,
+          `birthYear: ${input.birthYear}`,
+          `rating: ${input.rating}/5`,
+          `channel: ${notify.channel}`,
+          `adminEmail: ${notify.adminDelivered}`,
+          `thankYouEmail: ${notify.thankYouDelivered}`,
+          notify.smtpError ? `smtpError: ${notify.smtpError}` : "smtpError: (none)",
+          "persist: postgres",
+        ],
+      });
 
       return res.status(201).json({
         ok: true,
         id: saved.id,
         saved: true,
+        emailSent: notify.adminDelivered && notify.thankYouDelivered,
+        emailPartial: notify.adminDelivered || notify.thankYouDelivered,
       });
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -1806,6 +1806,29 @@ export async function registerRoutes(
         message: "Impossibile salvare il feedback. Riprova tra poco.",
         saved: false,
       });
+    }
+  });
+
+  /** Test SMTP demo (password admin). Body opzionale: { probeTo: "tua@email.com" } */
+  app.post("/api/app/pianifica-demo/admin/smtp-test", async (req, res) => {
+    try {
+      const { password, probeTo } = z
+        .object({
+          password: z.string().min(1).max(120),
+          probeTo: z.string().email().optional(),
+        })
+        .parse(req.body);
+      if (!verifyPianificaDemoAdminPassword(password)) {
+        return res.status(401).json({ message: "Password non valida" });
+      }
+      const result = await testPianificaDemoSmtp(probeTo);
+      return res.json(result);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0]?.message ?? "Dati non validi" });
+      }
+      console.error("pianifica-demo/admin/smtp-test:", err);
+      return res.status(500).json({ message: "Test SMTP non riuscito" });
     }
   });
 
