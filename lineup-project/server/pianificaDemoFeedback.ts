@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { LINEUP_OFFICIAL_EMAIL } from "@shared/lineupContact";
 import { logAiPipelineSummary } from "./aiLog";
 
 const SMTP_TIMEOUT_MS = 8_000;
@@ -31,10 +32,7 @@ function getFeedbackMailTransporter(
   return cachedFeedbackTransporter;
 }
 
-export const PIANIFICA_DEMO_FEEDBACK_RECIPIENTS = [
-  "lorenzo.cappabianca7@gmail.com",
-  "federico.bossotti@gmail.com",
-] as const;
+export const PIANIFICA_DEMO_FEEDBACK_RECIPIENTS = [LINEUP_OFFICIAL_EMAIL] as const;
 
 export type PianificaDemoFeedbackPayload = {
   name: string;
@@ -46,13 +44,14 @@ export type PianificaDemoFeedbackPayload = {
 
 function getFeedbackRecipients(): string[] {
   const fromEnv = process.env.PIANIFICA_DEMO_FEEDBACK_TO?.trim();
-  if (fromEnv) {
-    return fromEnv
-      .split(/[,;]/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
-  return [...PIANIFICA_DEMO_FEEDBACK_RECIPIENTS];
+  const extra = fromEnv
+    ? fromEnv
+        .split(/[,;]/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+  const merged = new Set<string>([...PIANIFICA_DEMO_FEEDBACK_RECIPIENTS, ...extra]);
+  return [...merged];
 }
 
 function buildMailContent(payload: PianificaDemoFeedbackPayload) {
@@ -76,17 +75,81 @@ function buildMailContent(payload: PianificaDemoFeedbackPayload) {
   ].join("\n");
   const html = `
     <div style="font-family:system-ui,sans-serif;color:#111;max-width:520px">
-      <h2 style="color:#4a8fc4;margin:0 0 12px">Feedback demo Pianifica</h2>
+      <h2 style="color:#37b6bd;margin:0 0 12px">Feedback demo Pianifica</h2>
       <p><strong>Nome:</strong> ${escapeHtml(payload.name)}</p>
       <p><strong>Email:</strong> ${escapeHtml(payload.email)}</p>
       <p><strong>Anno di nascita:</strong> ${payload.birthYear}</p>
       <p><strong>Voto:</strong> ${payload.rating}/5 <span style="color:#f59e0b">${stars}</span></p>
       <p><strong>Suggerimenti / consigli:</strong></p>
-      <p style="white-space:pre-wrap;background:#f4faff;border:1px solid #8abfe8;border-radius:12px;padding:12px">${escapeHtml(commentBlock)}</p>
+      <p style="white-space:pre-wrap;background:#f0fbfc;border:1px solid #37b6bd;border-radius:12px;padding:12px">${escapeHtml(commentBlock)}</p>
       <p style="font-size:12px;color:#666">${escapeHtml(new Date().toLocaleString("it-IT", { timeZone: "Europe/Rome" }))}</p>
     </div>
   `;
   return { subject, text, html };
+}
+
+function buildThankYouMailContent(payload: PianificaDemoFeedbackPayload) {
+  const firstName = payload.name.trim().split(/\s+/)[0] || payload.name.trim() || "ciao";
+  const subject = "Grazie per aver provato LineUp";
+  const text = [
+    `Ciao ${firstName},`,
+    "",
+    "Grazie di cuore per aver provato la demo di LineUp e per aver condiviso il tuo feedback con noi.",
+    "",
+    `Il tuo voto (${payload.rating}/5) e i tuoi suggerimenti ci aiutano a capire cosa funziona già bene e cosa possiamo migliorare, passo dopo passo, per rendere più semplice organizzare uscite ed eventi con gli amici.`,
+    "",
+    "Come hai autorizzato inviando il feedback, ti terremo aggiornato via email sulle novità più importanti di LineUp — sempre da questo indirizzo ufficiale:",
+    LINEUP_OFFICIAL_EMAIL,
+    "",
+    "Nel frattempo, grazie ancora per il tempo che ci hai dedicato: costruiamo LineUp insieme a chi la userà.",
+    "",
+    "A presto,",
+    "Il team LineUp",
+  ].join("\n");
+  const html = `
+    <div style="font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#1f2937;max-width:520px;line-height:1.55">
+      <div style="background:linear-gradient(135deg,#37b6bd 0%,#2a9aa1 100%);border-radius:16px 16px 0 0;padding:28px 24px;color:#fff">
+        <p style="margin:0;font-size:13px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;opacity:0.9">LineUp</p>
+        <h1 style="margin:10px 0 0;font-size:22px;font-weight:800;line-height:1.3">Grazie, ${escapeHtml(firstName)}!</h1>
+      </div>
+      <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 16px 16px;padding:24px">
+        <p style="margin:0 0 14px">Grazie di cuore per aver provato la <strong>demo di LineUp</strong> e per aver condiviso il tuo feedback con noi.</p>
+        <p style="margin:0 0 14px">Il tuo voto <strong>${payload.rating}/5</strong> e i tuoi suggerimenti ci aiutano a capire cosa funziona già bene e cosa possiamo migliorare, passo dopo passo, per rendere più semplice organizzare uscite ed eventi con gli amici.</p>
+        <p style="margin:0 0 14px">Come hai autorizzato inviando il feedback, ti terremo aggiornato via email sulle novità più importanti di LineUp — sempre da <a href="mailto:${LINEUP_OFFICIAL_EMAIL}" style="color:#2a9aa1;font-weight:600">${LINEUP_OFFICIAL_EMAIL}</a>.</p>
+        <p style="margin:0 0 14px">Grazie ancora per il tempo che ci hai dedicato: costruiamo LineUp insieme a chi la userà.</p>
+        <p style="margin:24px 0 0;font-size:14px;color:#6b7280">A presto,<br><strong style="color:#111827">Il team LineUp</strong></p>
+      </div>
+    </div>
+  `;
+  return { subject, text, html };
+}
+
+function lineupMailFrom(): string {
+  const raw = process.env.SMTP_FROM?.trim() || LINEUP_OFFICIAL_EMAIL;
+  if (raw.includes("<")) return raw;
+  return `LineUp <${raw}>`;
+}
+
+async function sendViaSmtp(options: {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+  replyTo?: string;
+}): Promise<boolean> {
+  const host = process.env.SMTP_HOST?.trim();
+  const port = Number(process.env.SMTP_PORT ?? "587");
+  const user = process.env.SMTP_USER?.trim();
+  const pass = process.env.SMTP_PASS?.trim();
+  if (!host || !user || !pass) return false;
+  try {
+    const transporter = getFeedbackMailTransporter(host, port, user, pass);
+    await transporter.sendMail({ from: lineupMailFrom(), ...options });
+    return true;
+  } catch (e) {
+    console.warn("pianifica-demo SMTP send failed:", e);
+    return false;
+  }
 }
 
 function escapeHtml(s: string) {
@@ -97,50 +160,57 @@ function escapeHtml(s: string) {
     .replace(/"/g, "&quot;");
 }
 
-/** Notifica email (opzionale). Il feedback è già salvato su Postgres prima di chiamare questa funzione. */
+/** Notifica admin + ringraziamento utente (opzionale SMTP). Il feedback è già su Postgres. */
 export async function notifyPianificaDemoFeedbackByEmail(
   payload: PianificaDemoFeedbackPayload,
-): Promise<{ delivered: boolean; channel: "smtp" | "log" }> {
-  const { subject, text, html } = buildMailContent(payload);
+): Promise<{
+  delivered: boolean;
+  channel: "smtp" | "log";
+  adminDelivered: boolean;
+  thankYouDelivered: boolean;
+}> {
+  const adminMail = buildMailContent(payload);
+  const thankYouMail = buildThankYouMailContent(payload);
   const recipients = getFeedbackRecipients();
+  const adminDelivered = await sendViaSmtp({
+    to: recipients.join(", "),
+    replyTo: payload.email,
+    subject: adminMail.subject,
+    text: adminMail.text,
+    html: adminMail.html,
+  });
 
-  const host = process.env.SMTP_HOST?.trim();
-  const port = Number(process.env.SMTP_PORT ?? "587");
-  const user = process.env.SMTP_USER?.trim();
-  const pass = process.env.SMTP_PASS?.trim();
-  const from = process.env.SMTP_FROM?.trim() || user;
+  const thankYouDelivered = await sendViaSmtp({
+    to: payload.email,
+    replyTo: LINEUP_OFFICIAL_EMAIL,
+    subject: thankYouMail.subject,
+    text: thankYouMail.text,
+    html: thankYouMail.html,
+  });
 
-  if (host && user && pass && from) {
-    try {
-      const transporter = getFeedbackMailTransporter(host, port, user, pass);
-      await transporter.sendMail({
-        from,
-        to: recipients.join(", "),
-        replyTo: payload.email,
-        subject,
-        text,
-        html,
-      });
-      return { delivered: true, channel: "smtp" };
-    } catch (e) {
-      console.warn("pianifica-demo feedback SMTP failed:", e);
-    }
+  if (adminDelivered || thankYouDelivered) {
+    return {
+      delivered: adminDelivered && thankYouDelivered,
+      channel: "smtp",
+      adminDelivered,
+      thankYouDelivered,
+    };
   }
 
   try {
     await logAiPipelineSummary({
       route: "POST /api/app/pianifica-demo/feedback [no-smtp]",
       lines: [
-        `to: ${recipients.join(", ")}`,
+        `admin to: ${recipients.join(", ")}`,
+        `thank-you to: ${payload.email}`,
         `name: ${payload.name}`,
-        `email: ${payload.email}`,
         `rating: ${payload.rating}/5`,
         `comment: ${payload.comment?.trim() || "(vuoto)"}`,
-        "— Configura SMTP_HOST, SMTP_USER, SMTP_PASS (e opz. SMTP_FROM) per invio email reale.",
+        "— Configura SMTP_* con account lineuplf@gmail.com per invio reale.",
       ],
     });
   } catch (e) {
     console.warn("pianifica-demo feedback log failed:", e);
   }
-  return { delivered: false, channel: "log" };
+  return { delivered: false, channel: "log", adminDelivered: false, thankYouDelivered: false };
 }
