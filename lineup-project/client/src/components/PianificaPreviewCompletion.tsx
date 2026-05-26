@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
-import { CheckCircle2, ChevronDown, Star } from "lucide-react";
+import { CheckCircle2, ChevronDown, Instagram, Star } from "lucide-react";
+import { TikTokIcon } from "@/components/icons/TikTokIcon";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { PianificaPreviewTeasers } from "@/components/PianificaPreviewTeasers";
 import { readStoredDemoProfile, type PreviewProfile } from "@/lib/pianificaDemoProfile";
 import { DEMO_CARD_CLASS, DEMO_CTA_CLASS, DEMO_MODAL_CONTENT } from "@/lib/pianificaDemoLayout";
+import {
+  LINEUP_INSTAGRAM_HANDLE,
+  LINEUP_INSTAGRAM_URL,
+  LINEUP_TIKTOK_HANDLE,
+  LINEUP_TIKTOK_URL,
+} from "@/lib/lineupContact";
 
 export type { PreviewProfile };
 
@@ -135,6 +142,49 @@ export function PianificaPreviewCompletion({
           <p className="mt-3 text-sm leading-relaxed text-gray-900">
             Il tuo contributo ci aiuta a costruire LineUp insieme a chi lo userà.
           </p>
+
+          <div
+            className="mt-6 border-t border-gray-100 pt-6"
+            data-testid="preview-completion-social"
+          >
+            <p className="text-sm font-semibold leading-snug text-gray-900">
+              Un ultimo favore che per noi fa la differenza
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-gray-600">
+              Stiamo crescendo passo dopo passo e ogni follow su TikTok e Instagram ci aiuta a farti
+              vedere anteprime, novità e il dietro le quinte di LineUp. Seguirci è un modo concreto per
+              sostenerci — come il feedback che hai appena lasciato.
+            </p>
+
+            <div className="mt-5 flex justify-center gap-4">
+              <a
+                href={LINEUP_TIKTOK_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="link-lineup-tiktok"
+                className="flex min-h-14 min-w-14 touch-manipulation flex-col items-center justify-center gap-1.5 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-gray-900 transition-colors hover:border-primary/40 hover:bg-primary/5 active:scale-[0.98]"
+                aria-label={`Segui LineUp su TikTok ${LINEUP_TIKTOK_HANDLE}`}
+              >
+                <TikTokIcon size={28} className="text-gray-900" />
+                <span className="text-[11px] font-semibold text-gray-700">TikTok</span>
+              </a>
+              <a
+                href={LINEUP_INSTAGRAM_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="link-lineup-instagram"
+                className="flex min-h-14 min-w-14 touch-manipulation flex-col items-center justify-center gap-1.5 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-gray-900 transition-colors hover:border-primary/40 hover:bg-primary/5 active:scale-[0.98]"
+                aria-label={`Segui LineUp su Instagram ${LINEUP_INSTAGRAM_HANDLE}`}
+              >
+                <Instagram size={28} strokeWidth={2} className="text-gray-900" aria-hidden />
+                <span className="text-[11px] font-semibold text-gray-700">Instagram</span>
+              </a>
+            </div>
+            <p className="mt-3 text-xs text-gray-500">
+              Cerca <span className="font-semibold text-gray-700">{LINEUP_TIKTOK_HANDLE}</span> su entrambi i
+              profili
+            </p>
+          </div>
         </div>
       </div>
     );

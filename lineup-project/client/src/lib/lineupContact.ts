@@ -1,1 +1,7 @@
-export { LINEUP_OFFICIAL_EMAIL } from "@shared/lineupContact";
+export {
+  LINEUP_OFFICIAL_EMAIL,
+  LINEUP_TIKTOK_URL,
+  LINEUP_INSTAGRAM_URL,
+  LINEUP_TIKTOK_HANDLE,
+  LINEUP_INSTAGRAM_HANDLE,
+} from "@shared/lineupContact";
